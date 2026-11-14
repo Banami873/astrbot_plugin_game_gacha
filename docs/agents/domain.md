@@ -16,8 +16,8 @@
 
 ```
 /
-├── GLOSSARY.md          ← 尚未创建，由 /domain-modeling 按需建立
-├── docs/adr/            ← 尚未创建
+├── GLOSSARY.md          ← 抽卡领域词汇，用词唯一权威
+├── docs/adr/            ← 尚未创建，有架构决策要记录时再建
 └── main.py
 ```
 

@@ -24,6 +24,17 @@ cd /e/Githubs/AstrBot
 - **遇到分叉先问**：两条路都说得通时停下问用户，不替他选。
 - 改版本时 `metadata.yaml` 的 `version` 与代码里的版本常量同改。
 
+## 文档地图
+
+| 文件 | 内容 | 权威性 |
+|---|---|---|
+| `.scratch/gacha-simulator/spec.md` | 需求 | **唯一权威**，spec 没写的不做 |
+| `GLOSSARY.md` | 领域词汇与禁用的同义词 | 用词唯一权威 |
+| `docs/vibe-coding.md` | 「需求 → spec → 任务单 → 代码」的流程 | 流程权威 |
+| `docs/reference/arknight-gacha-simulator.md` | 参考插件的拆解（抽卡数学、数据结构、踩过的坑） | 只读底料，**不是需求** |
+
+需求定稿前不要写实现代码。
+
 ## Agent skills
 
 ### Issue tracker
@@ -36,4 +47,4 @@ cd /e/Githubs/AstrBot
 
 ### Domain docs
 
-单上下文：根目录 `GLOSSARY.md` 是词汇的唯一权威（尚未创建）；`docs/adr/` 随需要建立。见 `docs/agents/domain.md`。
+单上下文：根目录 `GLOSSARY.md` 是词汇的唯一权威；`docs/adr/` 随需要建立。见 `docs/agents/domain.md`。
