@@ -28,18 +28,32 @@ cd /e/Githubs/AstrBot
 
 | 文件 | 内容 | 权威性 |
 |---|---|---|
-| `.scratch/gacha-simulator/spec.md` | 需求 | **唯一权威**，spec 没写的不做 |
-| `GLOSSARY.md` | 领域词汇与禁用的同义词 | 用词唯一权威 |
-| `docs/vibe-coding.md` | 「需求 → spec → 任务单 → 代码」的流程 | 流程权威 |
-| `docs/reference/arknight-gacha-simulator.md` | 参考插件的拆解（抽卡数学、数据结构、踩过的坑） | 只读底料，**不是需求** |
+| `docs/features/<feature>/PRD.md` | 产品要什么 | 范围权威，PRD 没写的不做 |
+| `docs/features/<feature>/SPEC.md` | 做成什么样才算对 | 契约权威，含可执行验证命令 |
+| `docs/features/<feature>/issues/` | 一次一个可执行切片 | 执行队列 |
+| `CONTEXT.md` | 领域词汇与禁用的同义词 | 用词唯一权威 |
+| `docs/DEVELOPMENT_WORKFLOW.md` | 开发流程（人读） | 流程权威 |
+| `docs/AI_DOCUMENT_SYSTEM.md` | 文档结构真相源 | 结构权威 |
+| `docs/reference/arknight-gacha-simulator.md` | 参考插件拆解 | 只读底料，**不是需求** |
 
-需求定稿前不要写实现代码。
+需求定稿前不要写实现代码。完整流程见 `docs/DEVELOPMENT_WORKFLOW.md`。
 
-## Agent skills
+## AI-native document system
+
+### Document loading order
+
+开始任务时优先读取：
+
+1. `docs/agents/document-system.md`
+2. `docs/agents/domain.md`
+3. `docs/agents/issue-tracker.md`
+4. `docs/agents/triage-labels.md`
+5. 当前任务相关的 `CONTEXT.md`、`docs/adr/`、`docs/features/<feature>/...`
+6. 未启用 BMad，无需读 `docs/BMAD_INTEGRATION.md`
 
 ### Issue tracker
 
-任务单与 spec 是 `.scratch/` 下的 markdown 文件，不调 `gh`。见 `docs/agents/issue-tracker.md`。
+PRD / Spec / issues 是 `docs/features/<feature>/` 下的 markdown 文件，不调 `gh`。见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 
@@ -47,4 +61,12 @@ cd /e/Githubs/AstrBot
 
 ### Domain docs
 
-单上下文：根目录 `GLOSSARY.md` 是词汇的唯一权威；`docs/adr/` 随需要建立。见 `docs/agents/domain.md`。
+单上下文：根目录 `CONTEXT.md` 是词汇的唯一权威；`docs/adr/` 随需要建立。见 `docs/agents/domain.md`。
+
+### Project document system
+
+PRD → PLAN（可选）→ SPEC → issues 的单链，每份文档只写自己那一层。见 `docs/agents/document-system.md`。
+
+### BMad extension
+
+未启用。执行队列只有 `docs/features/<feature>/issues/`。

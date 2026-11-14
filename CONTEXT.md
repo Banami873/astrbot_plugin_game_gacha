@@ -1,9 +1,9 @@
-# GLOSSARY
+# CONTEXT
 
-本项目的领域词汇。**写代码注释、issue 标题、spec、提交信息时一律照这里用词。**
-同义词列在「别写成」一栏的，不要用。
+项目：AstrBot 插件 `astrbot_plugin_game_gacha` —— 明日方舟 / 崩坏星穹铁道抽卡模拟器。
 
-初稿，由参考实现与社区惯用语推出，随需求确认再修订。
+**本文件是领域语言的唯一权威。** 写代码注释、issue 标题、PRD/SPEC、提交信息时一律照这里用词；
+「别写成」一栏的同义词不要用。词表是初稿，随需求确认修订，修订走 `/grill-with-docs`。
 
 ## 抽卡机制
 
@@ -15,7 +15,7 @@
 | 权重 | weight | 概率的整数表示，上限 10000，1 权重 = 0.01% | 概率值、rate |
 | 轮盘 | roulette / wheel | 按权重累积区间随机落点的抽选方式 | 抽奖池 |
 | 溢出裁剪 | weight clipping | 总权重超 10000 时从低星往上削减，保证高星优先 | 归一化 |
-| 水位 | pity counter | 连续未出某星级的天数/抽数。六星水位满 99 抽必出 | 保底计数、计数器 |
+| 水位 | pity counter | 连续未出某星级的抽数。六星水位满 99 抽必出 | 保底计数、计数器 |
 | 软保底 | soft pity | 水位过半后每抽概率递增（方舟第 51 抽起 +2%） | 概率提升 |
 | 硬保底 | hard pity | 水位上限，必出（方舟 99 抽） | 大保底 |
 | 水位继承 | counter inherit | 换池后水位是否延续。官方按池型规则不同 | 计数器共享 |
@@ -52,4 +52,13 @@
 | 引擎 | engine | 纯逻辑的抽卡概率计算，不碰数据库、不碰渲染 |
 | 渲染 | render | 把抽卡结果画成图片 |
 | 快照 | snapshot | 随插件发布的内置卡池数据副本 |
-| 任务单 | ticket | `.scratch/<功能>/issues/NN-*.md` 下的单条改动 |
+| 功能目录 | feature | `docs/features/<feature-slug>/`，一个功能一个目录 |
+| 任务单 | issue | `docs/features/<feature>/issues/NN-*.md` 下的单条改动 |
+| 垂直切片 | vertical slice | 一条窄但端到端打通的改动路径，不是一个图层 |
+
+## 已确认的项目事实（不是需求）
+
+- 先做《明日方舟》，星穹铁道留后
+- 技术形态参照 AstrBot 插件惯例；运行时数据落 `data/plugin_data/astrbot_plugin_game_gacha/`
+- 参考实现：`data/plugins/astrbot_plugin_arknight_gacha_simulator/`，
+  拆解见 `docs/reference/arknight-gacha-simulator.md`
