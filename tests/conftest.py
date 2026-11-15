@@ -124,6 +124,12 @@ def banners_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def limited_mod() -> ModuleType:
+    """限定寻访的系列、解限期与 5 倍名单。"""
+    return package_module("games.arknights.limited")
+
+
+@pytest.fixture(scope="session")
 def banner_data_mod() -> ModuleType:
     """PRTS 页面的解析与对齐。05 起这份逻辑在 `games/arknights/data.py`。"""
     return package_module("games.arknights.data")

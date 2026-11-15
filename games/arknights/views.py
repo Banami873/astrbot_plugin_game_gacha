@@ -85,6 +85,7 @@ def render_pool_list(
     wanted: str | None = None,
     known_categories: Sequence[str] = CATEGORY_ORDER,
     up_text: Mapping[str, str] | None = None,
+    boost_text: Mapping[str, str] | None = None,
 ) -> str:
     """把当前可抽的卡池渲染成一段文本。
 
@@ -93,10 +94,14 @@ def render_pool_list(
     而不是悄悄显示全部——静默会让用户以为筛选生效了。
     `up_text` 是池 id → 「UP 6★ A、B」；缺键表示这个池没拿到名单，要明说，否则玩家会
     以为 UP 概率没生效却说不清为什么。
+    `boost_text` 是池 id → 「往期 5 倍 A、B、C」：限定池剩余 30% 里加权的那三名往期限定。
+    只对有限定加权的池出现，所以和 `up_text` 分开传而不是拼成一行——这两条信息各自
+    独立，任何一条缺失都不该影响另一条显示。
     """
     grouped = snapshot.grouped(now)
     header = ["[明日方舟 · 当前卡池]", f"数据：{snapshot.fetched_text()} 快照", DIVIDER]
     up_text = up_text or {}
+    boost_text = boost_text or {}
 
     if wanted and wanted != "全部":
         if wanted not in grouped:
@@ -120,6 +125,9 @@ def render_pool_list(
             lines.append(f"  {start} → {end} · {tail}")
             listing = up_text.get(getattr(pool, "pool_id", ""), "")
             lines.append(f"  {listing}" if listing else "  UP 名单未获取（按均分概率）")
+            boosted = boost_text.get(getattr(pool, "pool_id", ""), "")
+            if boosted:
+                lines.append(f"  {boosted}")
         blocks.append("\n".join(lines))
     return "\n".join(header) + "\n" + "\n\n".join(blocks)
 

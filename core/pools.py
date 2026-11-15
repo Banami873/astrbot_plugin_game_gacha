@@ -278,6 +278,17 @@ class Pool:
         """给人看的名字：官方名可用就用，是占位串就退回池 id。"""
         return self.name or self.pool_id
 
+    @property
+    def limited_char_id(self) -> str:
+        """限定池声明的当期限定干员。
+
+        来自 `limitParam.limitedCharId`，是官方自己写的「这一期的限定是谁」——比按池名
+        猜可靠。非限定池、或官方没写这个字段时返回空串。
+        """
+        if not isinstance(self.limit_param, Mapping):
+            return ""
+        return str(self.limit_param.get("limitedCharId") or "")
+
     def is_active(self, now: int) -> bool:
         """开池时刻含、结束时刻不含——官方表里两个池首尾相接是常态。"""
         return self.open_time <= now < self.end_time

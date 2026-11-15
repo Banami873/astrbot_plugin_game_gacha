@@ -27,6 +27,7 @@ from .core import pools as pool_module
 from .core.store import PullCommit, Store
 from .games.arknights import banners as banner_module
 from .games.arknights import engine as ark_engine
+from .games.arknights import limited as limited_module
 from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.views import (
     render_adjust,
@@ -79,6 +80,7 @@ class GameGachaPlugin(Star):
         self.pity_groups: pity_module.PityGroups = pity_module.PityGroups()
         self.up_rules = pool_module.UpShareRules({})
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
+        self.limited: limited_module.LimitedIndex = limited_module.LimitedIndex()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
         self._roster_error = ""
@@ -118,10 +120,13 @@ class GameGachaPlugin(Star):
             logger.error(f"[{PLUGIN_NAME}] {self._load_error}")
         else:
             self.snapshot = self.banners.apply(self.snapshot)
+            # 限定池的 6★ 范围（同系列 + 已解限）由官方骨架自己就能推出来，不依赖 PRTS。
+            self.limited = limited_module.build_index(self.snapshot.pools)
             logger.info(
                 f"[{PLUGIN_NAME}] 已装载 {len(self.snapshot.pools)} 个卡池，"
                 f"快照时间 {self.snapshot.fetched_text()}，"
-                f"名单 {len(self.banners)} 条（{self.banners.fetched_text() or '时间未知'}）"
+                f"名单 {len(self.banners)} 条（{self.banners.fetched_text() or '时间未知'}），"
+                f"限定干员 {len(self.limited)} 名"
             )
             unmapped = self.pity_groups.unmapped_rule_types(
                 pool.rule_type for pool in self.snapshot.pools
@@ -207,6 +212,7 @@ class GameGachaPlugin(Star):
             wanted=wanted,
             known_categories=pool_module.CATEGORY_ORDER,
             up_text=self._up_text_map(),
+            boost_text=self._boost_text_map(),
         )
         yield event.plain_result(text + notice)
 
@@ -379,6 +385,7 @@ class GameGachaPlugin(Star):
                 pool_pulls=state.pool_pulls,
                 first10_hit=state.first10_hit,
                 up=self._up_targets(pool),
+                scope=self._scope(pool),
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
@@ -406,22 +413,39 @@ class GameGachaPlugin(Star):
         return PullOutcome(batch=batch, commit=commit)
 
     def _up_targets(self, pool) -> UpTargets:
-        """本池的 UP 名单与份额。缺名单时返回份额 0，等价于「全池均分」。
+        """本池的 UP 名单、份额与往期加权（R-11）。
 
         名单独自缺失不该让池不可抽（R-14 降级链第 4 条）：少一次 UP 加成，玩家看到的
-        只是「这个人怎么老歪」，而不可用会让整个池消失。
+        只是「这个人怎么老歪」，而不可用会让整个池消失。所以名单缺失时只把份额置 0，
+        限定范围仍照常生效——范围是从官方骨架推的，不依赖 PRTS。
         """
         share = self.up_rules.for_pool(pool)
         banner = self.banners.get(pool.pool_id)
+        scope = self._scope(pool)
+        boost = scope.boosted if scope else ()
         if banner is None or not banner.has_up():
-            return UpTargets(six_share=0.0, five_share=0.0)
+            return UpTargets(six_share=0.0, five_share=0.0, boost=boost)
         return UpTargets(
             six=banner.up6,
             five=banner.up5,
             four=banner.up4,
             six_share=share.six,
             five_share=share.five,
+            boost=boost,
+            boost_factor=limited_module.BOOST_FACTOR,
         )
+
+    def _scope(self, pool) -> limited_module.PoolScope | None:
+        """限定池的 6★ 范围与 5 倍名单；其他池型返回 None。
+
+        限定寻访与**同系列、已解限**的限定干员共享池子，其余限定干员根本不出现。
+        不筛就会让 2021 年的「年」从庆典池里冒出来，而这在游戏里不可能发生。
+        """
+        if pool.rule_type != limited_module.LIMITED_RULE_TYPE:
+            return None
+        banner = self.banners.get(pool.pool_id)
+        up = banner.up6 if banner is not None else ()
+        return self.limited.scope_for(pool, up_ids=up)
 
     def _up_text_map(self) -> dict[str, str]:
         """池 id → 「UP 6★ A、B · 5★ C」，给 `/卡池查询` 用。"""
@@ -437,6 +461,22 @@ class GameGachaPlugin(Star):
                 parts.append(f"UP {star}★ {names}")
             if parts:
                 result[pool_id] = " · ".join(parts)
+        return result
+
+    def _boost_text_map(self) -> dict[str, str]:
+        """池 id → 「往期 5 倍 A、B、C」，给 `/卡池查询` 的限定池加一行。"""
+        if self.roster is None or not len(self.limited):
+            return {}
+        pools = {pool.pool_id: pool for pool in self.snapshot.pools}
+        result: dict[str, str] = {}
+        for pool_id, banner in self.banners.by_pool.items():
+            pool = pools.get(pool_id)
+            if pool is None or pool.rule_type != limited_module.LIMITED_RULE_TYPE:
+                continue
+            scope = self.limited.scope_for(pool, up_ids=banner.up6)
+            if scope.boosted:
+                names = banner_module.names_for_display(scope.boosted, self.roster.name_of)
+                result[pool_id] = f"往期 5 倍 {names}"
         return result
 
     def _lock_for(self, uid: str, platform: str) -> asyncio.Lock:

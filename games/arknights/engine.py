@@ -6,8 +6,8 @@
 水位**按组**存（R-04），组键由 `core/pity.py` 从 `resources/pity_groups.json` 翻译，
 本模块不判断「这是不是限定池」——它只接收调用方算好的 `group_key`。
 
-本期（issue 04）已接：水位分组、新池前 10 抽必出 5★。UP 名额与权重（R-05~R-11）、
-选调（06）、井与契约（07/08）仍未接。
+已接：水位分组、新池前 10 抽必出 5★、UP 名额与份额（R-11）、限定池的 6★ 范围与
+5 倍权重（R-11 剩余 30% 那部分）。选调（06）、井与契约（07/08）、联动（09）未接。
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import Collection, Mapping, Sequence
 
 from ...core import engine as core_engine
 from ...core.characters import Character, Roster
+from .limited import PoolScope, filter_members
 
 # R-01 基础概率：6★ 2%、5★ 8%、4★ 50%、3★ 40%。
 BASE_RATES: dict[int, float] = {6: 0.02, 5: 0.08, 4: 0.50, 3: 0.40}
@@ -86,9 +87,12 @@ def _force_five_star(star: int, table: Mapping[int, float], rng: core_engine.Ran
 class UpTargets:
     """本池的 UP 名单与份额（R-05~R-11 的「星级内怎么分」）。
 
-    `six_share=0.7` 表示 6★ 里 70% 落在 `six` 这几个人身上，剩下 30% 由其他 6★ 按等权
-    分配；`1.0` 表示这个星级的池内人选就只有名单上这些（联合行动、卫戍、甄选）。
+    `six_share=0.7` 表示 6★ 里 70% 落在 `six` 这几个人身上，剩下 30% 由其他 6★ 分配；
+    `1.0` 表示这个星级的池内人选就只有名单上这些（联合行动、卫戍、甄选）。
     名单为空或份额为 0 时完全按等概率——这就是「UP 名单未获取」的运行方式。
+
+    `boost` 是剩余份额里额外加权的人（限定池的「同类最近三名限定」），权重为
+    `boost_factor` 倍，其余人仍是 1 倍。这一步只作用于 6★：5★ 没有往期加权这回事。
     """
 
     six: tuple[str, ...] = ()
@@ -96,6 +100,8 @@ class UpTargets:
     four: tuple[str, ...] = ()
     six_share: float = 0.0
     five_share: float = 0.0
+    boost: tuple[str, ...] = ()
+    boost_factor: float = 1.0
 
     def ids_of(self, star: int) -> tuple[str, ...]:
         if star >= 6:
@@ -115,33 +121,75 @@ class UpTargets:
         # 而 4★ 的权重差异对体验影响极小，本期按等概率。
         return 0.0
 
+    def boost_of(self, star: int) -> tuple[str, ...]:
+        """星级内的加权名单。只有 6★ 有往期权重提升。"""
+        return self.boost if star >= 6 else ()
+
+
+def member_weights(
+    members: Sequence[Character],
+    up_ids: Sequence[str],
+    share: float,
+    *,
+    boost_ids: Sequence[str] = (),
+    boost_factor: float = 1.0,
+) -> list[float]:
+    """星级内每个人的权重：UP 分走 `share`，其余人分走 `1-share` 并可按倍数加权。
+
+    单独拆出来是为了能精确断言「5 倍」——靠抽样只能在 ±15% 的噪声里猜，而这里
+    `权重(加权者) / 权重(其他人)` 必须精确等于 `boost_factor`。
+
+    保证：返回与 `members` 等长、非负、总和为 1；`up_ids` 与本池候选不交叉时退回全 1。
+    """
+    up_wanted = set(up_ids)
+    up = [m for m in members if m.char_id in up_wanted]
+    if not up or share <= 0 or len(up) == len(members):
+        # 没有可用名单、或名单等于全池：等权。「名单等于全池」时 share=1 也没意义，
+        # 因为剩下的份额无人可给，等权正是官方那种「池内只有名单上这些人」的形态。
+        return [1.0] * len(members)
+    if share >= 1.0:
+        # 剩余份额无人可给：名单内等分，名单外为 0。
+        each = 1.0 / len(up)
+        return [each if m.char_id in up_wanted else 0.0 for m in members]
+    boosted = set(boost_ids)
+    factor = boost_factor if boosted else 1.0
+    rest = [m for m in members if m.char_id not in up_wanted]
+    rest_raw = [factor if m.char_id in boosted else 1.0 for m in rest]
+    total_rest = sum(rest_raw)
+    up_weight = share / len(up)
+    weight_of = {m.char_id: up_weight for m in up}
+    for member, raw in zip(rest, rest_raw):
+        weight_of[member.char_id] = (1.0 - share) * raw / total_rest
+    return [weight_of[m.char_id] for m in members]
+
 
 def _choose_member(
     members: Sequence[Character],
     up_ids: Sequence[str],
     share: float,
     rng: core_engine.RandomLike,
+    *,
+    boost_ids: Sequence[str] = (),
+    boost_factor: float = 1.0,
 ) -> Character:
-    """星级内选人：UP 按份额分走概率，其余人按等权分剩下的。
+    """星级内按权重选一个人。
 
     保证：返回 `members` 里的一位；名单与本池候选不交叉时自动退回等概率，不会因为
     UP 名单是别的池的（数据串了）就抽不出人。
+
+    权重规则见 `member_weights`。限定池的「同类最近三名限定 5 倍权重」就走那条——
+    官方原文说的是「获得的 6★ 不是当期出率提升干员的场合」，正好等价于「剩余 30% 里加权」。
     """
-    if not up_ids or share <= 0:
+    weights = member_weights(
+        members,
+        up_ids,
+        share,
+        boost_ids=boost_ids,
+        boost_factor=boost_factor,
+    )
+    if all(weight == weights[0] for weight in weights):
+        # 等权时走更快的那条（也保证同一随机种子下与旧行为完全一致）。
         return core_engine.pick_member(members, rng)
-    wanted = set(up_ids)
-    up = [member for member in members if member.char_id in wanted]
-    if not up:
-        return core_engine.pick_member(members, rng)
-    if share >= 1.0 or len(up) == len(members):
-        # 池内该星级只有名单上这些人：等于在名单内等分。
-        return core_engine.pick_member(up, rng)
-    rest = [member for member in members if member.char_id not in wanted]
-    up_weight = share / len(up)
-    rest_weight = (1.0 - share) / len(rest)
-    weights = [
-        up_weight if member.char_id in wanted else rest_weight for member in members
-    ]
     return core_engine.pick_member_weighted(members, weights, rng)
 
 
@@ -151,6 +199,7 @@ def candidates(
     star: int,
     *,
     channels: Collection[str],
+    scope: PoolScope | None = None,
 ) -> tuple[Character, ...]:
     """某一星级在本池的候选。
 
@@ -159,8 +208,18 @@ def candidates(
 
     `channels` 不是可选优化而是正确性的一部分：不滤基础池就等于把标准、中坚、联动
     三类人混进同一个池，联动干员会从标准池里冒出来，标准干员也会从联动池里冒出来。
+
+    `scope` 进一步收窄「限定」基础池：限定寻访只与**同系列、已解限**的限定干员共享池子，
+    不筛的话 2021 年的「年」会从庆典池里冒出来。非限定池传 None。它只作用于 6★——
+    与 `UpTargets.boost_of` 同一条边界：往期限定的范围与加权都只存在于 6★。
     """
     members = roster.of_rarity(star, channels=channels)
+    scoped = filter_members(members, scope if star >= 6 else None)
+    if not scoped and members:
+        # 范围把这一档筛空了（限定数据缺失、系列判不出来）：退回「不筛」。
+        # 多放进几个人只影响手感，筛空会让整池抽不出 6★——与 R-14 降级链同一个取舍。
+        scoped = members
+    members = scoped
     if not pool.char_ids:
         return members
     listed = set(pool.char_ids)
@@ -179,6 +238,7 @@ def draw_batch(
     pool_pulls: int = 0,
     first10_hit: bool = False,
     up: UpTargets | None = None,
+    scope: PoolScope | None = None,
 ) -> Batch:
     """连抽 `times` 次，返回结果与抽完之后要写回存档的计数。
 
@@ -194,6 +254,9 @@ def draw_batch(
 
     失败：某个星级在本基础池一个人都没有时抛 `ValueError`——那说明干员快照缺了整档，
     抽下去只会得到空结果，此时宁可让指令报错也不要静默发一张空白。
+
+    `scope` 是限定池的 6★ 范围（同系列 + 已解限），由 `limited.py` 算好传进来；
+    其他池型传 None。它只收窄「限定」基础池，标准/中坚/联动的人不受影响。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
@@ -218,11 +281,16 @@ def draw_batch(
         # 否则一个前 N 抽没记账的旧存档会在之后每一抽都白送 5★。
         if not hit and guarantee and pulls + 1 == guarantee:
             star = _force_five_star(star, table, rng)
-        pool_chars = candidates(roster, pool, star, channels=channels)
+        pool_chars = candidates(roster, pool, star, channels=channels, scope=scope)
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
         chosen = _choose_member(
-            pool_chars, targets.ids_of(star), targets.share_of(star), rng
+            pool_chars,
+            targets.ids_of(star),
+            targets.share_of(star),
+            rng,
+            boost_ids=targets.boost_of(star),
+            boost_factor=targets.boost_factor,
         )
         drafts.append(Draft(char_id=chosen.char_id, name=chosen.name, star=star))
         if star >= FIRST10_MIN_STAR:

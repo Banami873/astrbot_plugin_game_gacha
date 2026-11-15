@@ -283,6 +283,9 @@ class TestPullCommands:
         instance.up_rules = pools_pkg.load_up_share(
             PLUGIN_DIR / "resources" / "pool_rules.json"
         )
+        # 限定索引同理：测试池都是常驻/限时池，`_scope` 会直接返回 None，
+        # 但字段必须存在——少了它，哪天用例换成限定池就会变成 AttributeError。
+        instance.limited = pkg("games.arknights.limited").LimitedIndex()
         instance._locks = {}
         instance._load_error = ""
         instance._roster_error = ""
