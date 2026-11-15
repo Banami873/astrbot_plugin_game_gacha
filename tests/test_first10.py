@@ -208,6 +208,93 @@ class TestFirstTenGuarantee:
         assert late.drafts[0].star == 5
 
 
+class TestOnlyTheFirstTenPullIsProtected:
+    """保底是「每个池一次」，不是「每个十连一次」。
+
+    用户原话：「五星保底只在每个池子前十抽有效，即仅有第一个十连必定出五星，
+    每个卡池只保证出一个五星，除首次外没有保底。」这组用例就是钉这句话——
+    写成「每批十连都兜底」不会报错，抽起来还挺像官方，但概率会整体偏高。
+    """
+
+    def test_second_ten_pull_of_the_same_pool_can_be_all_three_star(
+        self, ark_engine_mod, real_roster, pool
+    ):
+        first = ark_engine_mod.draw_batch(
+            real_roster,
+            pool,
+            counter=0,
+            times=10,
+            rng=Always(0.99),
+            channels=STANDARD,
+            pool_pulls=0,
+            first10_hit=False,
+        )
+        second = ark_engine_mod.draw_batch(
+            real_roster,
+            pool,
+            counter=first.six_counter,
+            times=10,
+            rng=Always(0.99),
+            channels=STANDARD,
+            pool_pulls=first.pool_pulls,
+            first10_hit=first.first10_hit,
+        )
+        assert [d.star for d in first.drafts] == [3] * 9 + [5]
+        assert [d.star for d in second.drafts] == [3] * 10
+        assert second.first10_hit is True
+        assert second.pool_pulls == 20
+
+    def test_a_pool_forces_exactly_one_five_star_in_three_ten_pulls(
+        self, ark_engine_mod, real_roster, pool
+    ):
+        """整池 30 抽、每抽都按最差概率：兜底只应出现一次。"""
+        pulls, hit, counter = 0, False, 0
+        batches = []
+        for _ in range(3):
+            batch = ark_engine_mod.draw_batch(
+                real_roster,
+                pool,
+                counter=counter,
+                times=10,
+                rng=Always(0.99),
+                channels=STANDARD,
+                pool_pulls=pulls,
+                first10_hit=hit,
+            )
+            batches.append(batch)
+            pulls, hit, counter = batch.pool_pulls, batch.first10_hit, batch.six_counter
+        forced = [d for b in batches for d in b.drafts if d.star >= 5]
+        assert len(forced) == 1
+        assert forced[0].star == 5
+        assert pulls == 30
+
+    def test_guarantee_survives_a_split_batch(self, ark_engine_mod, real_roster, pool):
+        """先抽 5 抽再抽 5 抽，保底照样落在第 10 抽——「前 10 抽」不按批次算。"""
+        head = ark_engine_mod.draw_batch(
+            real_roster,
+            pool,
+            counter=0,
+            times=5,
+            rng=Always(0.99),
+            channels=STANDARD,
+            pool_pulls=0,
+            first10_hit=False,
+        )
+        tail = ark_engine_mod.draw_batch(
+            real_roster,
+            pool,
+            counter=head.six_counter,
+            times=5,
+            rng=Always(0.99),
+            channels=STANDARD,
+            pool_pulls=head.pool_pulls,
+            first10_hit=head.first10_hit,
+        )
+        assert [d.star for d in head.drafts] == [3] * 5
+        assert [d.star for d in tail.drafts] == [3] * 4 + [5]
+        assert tail.first10_hit is True
+
+
 class TestPoolPullCounter:
     def test_counter_advances_by_batch_size(self, ark_engine_mod, real_roster, pool):
         batch = ark_engine_mod.draw_batch(
