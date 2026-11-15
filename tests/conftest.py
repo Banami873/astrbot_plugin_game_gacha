@@ -41,6 +41,19 @@ def store_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def economy_mod() -> ModuleType:
+    return load_module("gacha_under_test_economy", PLUGIN_DIR / "core" / "economy.py")
+
+
+@pytest.fixture()
+def store(store_mod, tmp_path):
+    """一个建好表、指向临时文件的 Store。每个用例一份干净的库。"""
+    instance = store_mod.Store(tmp_path / "gacha.db")
+    instance.ensure_schema()
+    return instance
+
+
+@pytest.fixture(scope="session")
 def views_mod() -> ModuleType:
     return load_module(
         "gacha_under_test_views", PLUGIN_DIR / "games" / "arknights" / "views.py"

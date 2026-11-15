@@ -47,7 +47,6 @@ class TestCategory:
             "SPECIAL": "限时",
             "ATTAIN": "限时",
             "GACHAWITHSPECIFIED6": "限时",
-            "BACKFLOW": "限时",
             "CLASSIC": "中坚",
             "CLASSIC_DOUBLE": "中坚",
             "CLASSIC_ATTAIN": "中坚",
@@ -75,6 +74,39 @@ class TestCategory:
         broken = tmp_path / "broken.json"
         broken.write_text("{不是 JSON", encoding="utf-8")
         assert pools_mod.load_category_map(broken) == pools_mod.FALLBACK_CATEGORY_MAP
+
+
+class TestUnimplemented:
+    """不实现的池型必须在解析阶段就消失，不能只是「不显示」。"""
+
+    def test_backflow_is_dropped_by_default(self, pools_mod):
+        records = [
+            _pool(gachaPoolId="RETURN_71_0_1", gachaRuleType="BACKFLOW", endTime=NOW + 10**9),
+            _pool(gachaPoolId="NORMAL_1", gachaRuleType="NORMAL"),
+        ]
+        pools = pools_mod.parse_pools({"pools": records}, pools_mod.FALLBACK_CATEGORY_MAP)
+        assert [p.pool_id for p in pools] == ["NORMAL_1"]
+
+    def test_empty_skip_set_keeps_everything(self, pools_mod):
+        """测试与历史池查询可以显式要求「不过滤」。"""
+        records = [_pool(gachaPoolId="R", gachaRuleType="BACKFLOW")]
+        pools = pools_mod.parse_pools(
+            {"pools": records}, pools_mod.FALLBACK_CATEGORY_MAP, frozenset()
+        )
+        assert len(pools) == 1
+
+    def test_rules_file_lists_backflow(self, pools_mod, plugin_dir):
+        skipped = pools_mod.load_unimplemented_types(plugin_dir / "resources" / "pool_rules.json")
+        assert "BACKFLOW" in skipped
+
+    def test_missing_file_falls_back_to_default(self, pools_mod, tmp_path):
+        skipped = pools_mod.load_unimplemented_types(tmp_path / "不存在.json")
+        assert skipped == pools_mod.DEFAULT_UNIMPLEMENTED
+
+    def test_broken_file_falls_back_to_default(self, pools_mod, tmp_path):
+        broken = tmp_path / "broken.json"
+        broken.write_text('{"unimplemented_rule_types": "BACKFLOW"}', encoding="utf-8")
+        assert pools_mod.load_unimplemented_types(broken) == pools_mod.DEFAULT_UNIMPLEMENTED
 
 
 class TestActive:

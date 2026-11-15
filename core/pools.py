@@ -29,10 +29,16 @@ PLACEHOLDER_NAMES: frozenset[str] = frozenset({"适合多种场合的强力干�
 FALLBACK_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
     "限定": ("LIMITED",),
     "常驻": ("NORMAL",),
-    "限时": ("SINGLE", "DOUBLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6", "BACKFLOW"),
+    "限时": ("SINGLE", "DOUBLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6"),
     "中坚": ("CLASSIC", "CLASSIC_DOUBLE", "CLASSIC_ATTAIN", "FESCLASSIC"),
     "联动": ("LINKAGE",),
 }
+
+# 本期不实现的池型，解析时整条丢弃——它们不是「暂时没人抽」，而是根本不在玩法里。
+# `BACKFLOW` 是归航寻访：只对回归玩家开放，官方给的 endTime 是 2030 年的占位值，
+# 按时间判活动会得到一个永远开着、抽不出东西的假池。新人寻访同属此类（官方表里
+# 没有对应 gachaRuleType，故不在名单内）。
+DEFAULT_UNIMPLEMENTED: frozenset[str] = frozenset({"BACKFLOW"})
 
 
 def load_category_map(rules_path: Path | str) -> dict[str, tuple[str, ...]]:
@@ -55,6 +61,23 @@ def load_category_map(rules_path: Path | str) -> dict[str, tuple[str, ...]]:
         return parsed or dict(FALLBACK_CATEGORY_MAP)
     except (OSError, ValueError, KeyError, TypeError):
         return dict(FALLBACK_CATEGORY_MAP)
+
+
+def load_unimplemented_types(rules_path: Path | str) -> frozenset[str]:
+    """读出「本期不实现的 gachaRuleType」名单。
+
+    保证：返回一个集合，可能为空。
+    失败：文件缺失、JSON 损坏或该段缺失/不是字符串数组时退回 `DEFAULT_UNIMPLEMENTED`
+    ——漏排除归航寻访会让它在列表里挂一个「剩 1262 天」的假池，比多排除几个更难看。
+    """
+    try:
+        raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
+        listed = raw["unimplemented_rule_types"]
+        if not isinstance(listed, list):
+            raise TypeError("unimplemented_rule_types 不是数组")
+        return frozenset(str(t) for t in listed)
+    except (OSError, ValueError, KeyError, TypeError):
+        return DEFAULT_UNIMPLEMENTED
 
 
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:
@@ -101,8 +124,9 @@ class Pool:
     def remaining_text(self, now: int) -> str:
         """剩余时间，形如「3 天 5 小时」。已结束时返回「已结束」，不出现负数。
 
-        超过一年只说「长期开放（约 N 年）」：归航寻访这类池的官方 endTime 直接给到
-        2030 年，逐日报天数（1262 天）没有信息量，反而像是数据错了。
+        超过一年只说「长期开放（约 N 年）」——这是防御分支：官方偶发把 endTime 写到
+        好几年后（归航寻访就是 2030 年，现已按「不实现」排除），逐日报天数（1262 天）
+        没有信息量，反而像是数据错了。
         """
         left = self.end_time - now
         if left <= 0:
@@ -120,8 +144,8 @@ class Pool:
     def local_window(self) -> tuple[str, str]:
         """起止时间按 UTC+8 渲染，与游戏内公告的写法一致。
 
-        同年只写月日；跨年补上年份——归航寻访这类池的结束时间在几年后，只写 `05-01`
-        会让人以为本周就要关了。
+        同年只写月日；跨年补上年份——结束时间在几年后的池只写 `05-01` 会让人以为
+        本周就要关了。
         """
         start = datetime.fromtimestamp(self.open_time, CST)
         end = datetime.fromtimestamp(self.end_time, CST)
@@ -201,28 +225,37 @@ def _parse_pool(raw: Mapping[str, Any], category_map: Mapping[str, Sequence[str]
 
 
 def parse_pools(
-    payload: Mapping[str, Any], category_map: Mapping[str, Sequence[str]]
+    payload: Mapping[str, Any],
+    category_map: Mapping[str, Sequence[str]],
+    unimplemented: frozenset[str] | None = None,
 ) -> list[Pool]:
-    """从快照正文解析出池列表，跳过无法解析的记录。
+    """从快照正文解析出池列表，跳过无法解析的记录与本期不实现的池型。
 
-    保证：返回的池都已归好类；单条记录缺 `gachaPoolId` / `openTime` / `endTime` 时
-    只丢这一条并继续——官方表偶发脏数据，不该让整张表不可用。
+    保证：返回的池都已归好类，且不含 `unimplemented` 里的类型（默认排除归航寻访）。
+    单条记录缺 `gachaPoolId` / `openTime` / `endTime` 时只丢这一条并继续——官方表偶发
+    脏数据，不该让整张表不可用。
     """
+    skip = DEFAULT_UNIMPLEMENTED if unimplemented is None else unimplemented
     pools: list[Pool] = []
     for raw in payload.get("pools") or ():
         try:
-            pools.append(_parse_pool(raw, category_map))
+            pool = _parse_pool(raw, category_map)
         except (KeyError, TypeError, ValueError):
             continue
+        if pool.rule_type in skip:
+            continue
+        pools.append(pool)
     return pools
 
 
 def load_snapshot(
-    snapshot_path: Path | str, category_map: Mapping[str, Sequence[str]]
+    snapshot_path: Path | str,
+    category_map: Mapping[str, Sequence[str]],
+    unimplemented: frozenset[str] | None = None,
 ) -> Snapshot:
     """读快照文件并解析。
 
-    保证：成功时返回的 Snapshot 至少含 0 个池，不会因为空表抛异常。
+    保证：成功时返回的 Snapshot 至少含 0 个池，不会因为空表抛异常；不实现的池型已被滤掉。
     失败：文件不存在或不是合法 JSON 时抛 `FileNotFoundError` / `ValueError`，由调用方
     决定是提示用户还是中断——这里不吞异常，因为「悄悄返回空表」会让用户以为真的没有池。
     """
@@ -236,7 +269,7 @@ def load_snapshot(
         except ValueError:
             fetched_at = None
     return Snapshot(
-        pools=tuple(parse_pools(raw, category_map)),
+        pools=tuple(parse_pools(raw, category_map, unimplemented)),
         fetched_at=fetched_at,
         source=str(raw.get("source") or ""),
     )

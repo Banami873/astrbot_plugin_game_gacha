@@ -31,6 +31,46 @@ class SnapshotLike(Protocol):
     def fetched_text(self) -> str: ...
 
 
+class SigninLike(Protocol):
+    already: bool
+    tickets: int
+    gained: int
+
+
+class AdjustLike(Protocol):
+    applied: int
+    tickets: int
+
+
+def render_newbie_notice(bonus: int) -> str:
+    """首次建档时附在回复末尾的横幅。"""
+    return f"[新人礼] 首次使用，已发放 {bonus} 抽。"
+
+
+def render_signin(result: SigninLike) -> str:
+    """签到结果。
+
+    重复签到不是错误，所以不复述「失败」二字——用户只是忘了自己早上领过。
+    """
+    if result.already:
+        return f"今天已经领过了，现在有 {result.tickets} 抽。"
+    return f"签到成功：+{result.gained} 抽，现在有 {result.tickets} 抽。"
+
+
+def render_adjust(result: AdjustLike, label: str, requested: int) -> str:
+    """管理员改次数的回报。
+
+    `applied` 与请求值不同时必须说清楚，否则管理员会以为扣掉的抽数凭空消失了。
+    """
+    if result.applied == 0:
+        tail = "" if requested == 0 else "（余额已经是 0，没有再扣）"
+        return f"{label}的抽数没有变化{tail}，现在有 {result.tickets} 抽。"
+    text = f"{label}的抽数 {result.applied:+d}，现在有 {result.tickets} 抽。"
+    if result.applied != requested:
+        text += f"\n（请求 {requested:+d}，余额不能为负，实际 {result.applied:+d}）"
+    return text
+
+
 def render_pool_list(
     snapshot: SnapshotLike,
     now: int,
