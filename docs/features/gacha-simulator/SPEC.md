@@ -122,9 +122,10 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 **R-07 限定池 300 井**：本期累计 300 抽时，**额外赠送**当期限定 6★（每期限一次）。
 该次赠送不产契约、不推进也不重置水位（与「又抽到一个」不同）。计数仅绑定本池，结束清零。
 
-**R-08 寻访数据契约**：限定池每抽 +1，十连 +10。池结束（兑换所关闭）时按 **1 张 = 6 张
-寻访参数模型** 折算为永久余额；参数模型本期**只记录与展示，不做交换所**。
-配置 `contract_expire_mode` 可切 `clear`（直接清零），默认 `convert`。
+**R-08 寻访数据契约**：限定池每抽 +1，十连 +10。池结束（兑换所关闭）时**剩余契约直接作废**，
+不折算为寻访参数模型——**这是本项目对官方的刻意简化**（官方按 1:6 折算成永久参数模型，
+但参数模型交换所不在本期范围，留着余额只会变成永远无法使用的数字）。
+结果页在池剩余 ≤3 天时提示「契约将于 X 失效」。
 
 **R-09 契约兑换三档**（仅限进行中的限定池）
 
@@ -227,7 +228,6 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 | `pool_state` | `uid`, `pool_id`, `pulls`, `first10_hit`，PK(`uid`,`pool_id`) | 池内累计抽数与「前 10 抽保底是否已用」 |
 | `pool_select` | `uid`, `pool_id`, `up_miss_counter`, `select150_used`, `select300_used`, `target6_locked` | `up_miss_counter` 供 R-06；`target6_locked` 供 R-05 第二名 |
 | `limited_state` | `uid`, `pool_id`, `contracts`, `well_claimed`, `linkage_counter`, `up5_miss_counter` | 限定/联动专有计数 |
-| `params` | `uid`, `amount` | 寻访参数模型余额（只增不减，本期无交换所） |
 | `meta` | `key`, `value` | 数据版本（官方表 ETag、PRTS 快照时间） |
 
 **数据文件**（随包，`resources/snapshot/`）
@@ -286,7 +286,6 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 | `data_refresh_hours` | int | 6 | 官方表检查间隔 |
 | `prts_refresh_hours` | int | 24 | 卡池一览抓取间隔 |
 | `allow_network` | bool | true | 关掉后只用快照 |
-| `contract_expire_mode` | string | `convert` | `convert`=折算参数模型，`clear`=清零 |
 
 ### Validation Rules
 
@@ -312,11 +311,11 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 | `.venv/Scripts/python.exe -m pytest ... -q -k pity` | 第 99 抽必出；出 6★ 后计数归零；标准组跨池保持、切限定组归零 | 查 `pity_groups.json` 的分组键 |
 | `.venv/Scripts/python.exe -m pytest ... -q -k select` | 150 抽后下一 6★ 为 UP 之一；300 抽后为另一名；限时「连续 150」在提前抽到时清零且不标记生效 | 查 R-05/R-06 的计数口径 |
 | `.venv/Scripts/python.exe -m pytest ... -q -k well` | 第 300 抽赠送限定干员且不推进水位；重复触发被拒 | 查 R-07 的 `well_claimed` |
-| `.venv/Scripts/python.exe -m pytest ... -q -k contract` | 每抽 +1；兑换扣减正确；池结束后按 1:6 折算 | 查 R-08 的结算时机 |
+| `.venv/Scripts/python.exe -m pytest ... -q -k contract` | 每抽 +1；兑换扣减正确；池结束后剩余契约归零且兑换入口拒绝 | 查 R-08 的结算时机 |
 | `.venv/Scripts/python.exe -m pytest ... -q -k pool_select` | 前缀多义时报错并列出候选；纯数字不命中；无参数按「限定优先、否则最晚结束」 | 查 R-12 |
 | `.venv/Scripts/python.exe -m pytest ... -q -k isolation` | 两用户抽数、水位、潜能互不影响 | 查 SQL 是否漏 `uid` 条件 |
 | `.venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/build_data.py --offline` | 退出码 0，重写 `resources/snapshot/*.json`；`banners.json` 池数 > 0 且每个池 `up6` 非空 | 检查快照是否被截断 |
-| `.venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/selfcheck.py` | 打印指令数 = 8、8 张表存在、快照可解析；退出码 0 | 表缺失看 `store.schema()` 是否漏建 |
+| `.venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/selfcheck.py` | 打印指令数 = 8、7 张表存在、快照可解析；退出码 0 | 表缺失看 `store.schema()` 是否漏建 |
 
 `tests/conftest.py` 负责把插件目录加入 `sys.path`，并提供临时 SQLite 与精简池夹具，测试不触网。
 
@@ -347,19 +346,23 @@ PRD 里的两个视觉缺陷**没有可验证基准**（用户选择「验收时
 
 ## Open Questions
 
-1. **数据源决策已更正**，需回写确认：PRD 原定「官方 JSON 为唯一自动源、不碰 PRTS」基于我
-   的错误判断（我当时只看了老池的字段）。实测官方表近期池名是占位串、详情为空，UP 名单必须
-   另取。本 Spec 取 PRTS「卡池一览」（结构化 HTML，已在另一插件跑通）。若你宁可**不做 UP 加成**
-   也不要引入 PRTS 依赖，可退化为「全池均分」，我改 R-14 与 R-11 即可。
-2. **「卫戍」是哪类池**：官方 13 个 `gachaRuleType` 里没有这个类型，怀疑是某个池的具体名字。
+### 已确认（2026-11-15）
+
+- **数据源**：PRD 原定「官方 JSON 为唯一自动源、不碰 PRTS」基于我的错误判断（当时只看了老池
+  的字段）。实测官方表近期池名是占位串、详情为空，UP 名单必须另取。**用户已确认改为引入
+  PRTS「卡池一览」**，即 R-14 的双源方案。
+- **契约到期**：官方是折算成参数模型（1:6，永久），PRD 原写「清零」是基于我说错的前提。
+  **用户确认仍然清零**：不做参数模型、不留余额，见 R-08。这是刻意简化，不是实现对齐。
+
+### 仍待确认
+
+1. **「卫戍」是哪类池**：官方 13 个 `gachaRuleType` 里没有这个类型，怀疑是某个池的具体名字。
    在明确之前，它按名称前缀匹配处理，不单独建类。
-3. **`DOUBLE`（联合行动）有无 150 定向选调**：PRTS 只写了常驻选调与限时单 UP 定向选调；联合
+2. **`DOUBLE`（联合行动）有无 150 定向选调**：PRTS 只写了常驻选调与限时单 UP 定向选调；联合
    行动是「4 名 6★ 有且仅有」的全池，本 Spec 按「无选调、4 名均分」处理。若实机有保底，需
    补一条规则。
-4. **契约到期**：官方是折算成参数模型（1:6，永久），PRD 原写「清零」——那是基于我说错的
-   前提。本 Spec 默认折算但只记录余额、不做参数模型交换所，并留 `contract_expire_mode=clear`
-   开关。要真清零还是真折算，你定。
-5. **200 档的系列判定精度**：系列（春节/庆典/夏季）由限定池开池月份推断（1–2 月春节、8 月
+3. **200 档的系列判定精度**：系列（春节/庆典/夏季）由限定池开池月份推断（1–2 月春节、8 月
    夏季、其余庆典），若有错判会让个别干员的 200 档提前或延后一期。需要更高精度就得引入
    公告文本解析。
-6. **`/契约兑换` 是第 7 条指令**，PRD 功能清单没列。它必须有，否则 R-09 的兑换无法触发。
+4. **`/契约兑换` 是第 8 条指令**，PRD 功能清单原未列（已补）。它必须有，否则 R-09 的兑换
+   无法触发。
