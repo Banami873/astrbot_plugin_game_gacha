@@ -115,7 +115,7 @@ def ark_engine_mod() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def real_roster(characters_mod):
-    """仓库里那份角色快照。抽卡用例需要一个真实规模的字典，再造一份假的没意义。"""
+    """仓库里那份干员快照。抽卡用例需要一个真实规模的字典，再造一份假的没意义。"""
     return characters_mod.load_roster(PLUGIN_DIR / "resources" / "snapshot" / "characters.json")
 
 

@@ -30,7 +30,7 @@ PITY_GROUP_FALLBACK = "default"
 
 @dataclass(frozen=True)
 class Draft:
-    """一次抽取的结果。名字在这里定下来，渲染层就不用再去查角色字典。"""
+    """一次抽取的结果。名字在这里定下来，渲染层就不用再去查干员字典。"""
 
     char_id: str
     name: str
@@ -99,13 +99,13 @@ def draw_batch(
     """连抽 `times` 次，返回结果与抽完之后的水位。
 
     保证：返回的 `drafts` 恰好 `times` 条；水位按每次结果推进（出 6★ 归零，否则 +1）。
-    失败：某个星级一个人都没有时抛 `ValueError`——那说明角色快照缺了整档，抽下去
+    失败：某个星级一个人都没有时抛 `ValueError`——那说明干员快照缺了整档，抽下去
     只会得到空结果，此时宁可让指令报错也不要静默发一张空白。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
     if not len(roster):
-        raise ValueError("角色数据为空，无法抽取")
+        raise ValueError("干员数据为空，无法抽取")
 
     allowed = allow_limited(pool, limited_types)
     current = max(0, counter)
@@ -120,7 +120,7 @@ def draw_batch(
         star = core_engine.pick_star(table, rng)
         pool_chars = candidates(roster, pool, star, allow_limited_chars=allowed)
         if not pool_chars:
-            raise ValueError(f"角色数据里没有 {star}★ 干员，请重新生成快照")
+            raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
         chosen = core_engine.pick_member(pool_chars, rng)
         drafts.append(Draft(char_id=chosen.char_id, name=chosen.name, star=star))
         current = core_engine.advance(star, current)

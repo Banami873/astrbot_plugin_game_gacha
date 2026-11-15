@@ -1,9 +1,9 @@
-"""从官方游戏数据仓库拉卡池表与角色表，裁剪成随包快照。
+"""从官方游戏数据仓库拉卡池表与干员表，裁剪成随包快照。
 
 卡池快照只保留骨架字段：池 id、池型、起止、保底与井参数、名单池的 charId。池名与
 UP 名单不在这里——官方表近期池名是占位串、详情为空，那半边必须另找来源（见 SPEC R-14）。
 
-角色快照是抽卡结果的落点：id、名字、星级、是否限定。限定标记由卡池表的
+干员快照是抽卡结果的落点：id、名字、星级、是否限定。限定标记由卡池表的
 `limitParam.limitedCharId` 反推——那是官方自己声明的限定干员名单，比按名字猜可靠。
 
 用法（在 AstrBot 根目录执行）：
@@ -145,7 +145,7 @@ def trim(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# ---- 角色快照 ------------------------------------------------------------
+# ---- 干员快照 ------------------------------------------------------------
 
 # 官方表把星级写成 TIER_N，且用 profession 区分干员与召唤物/装置。
 _RARITY_BY_TIER: dict[str, int] = {
@@ -187,10 +187,10 @@ def _raw_characters(payload: dict[str, Any]) -> list[dict[str, Any]]:
 def trim_characters(
     payload: dict[str, Any], limited_ids: list[str] | tuple[str, ...] = ()
 ) -> dict[str, Any]:
-    """裁剪成角色快照。
+    """裁剪成干员快照。
 
-    保证：只留寻访能出的角色（3–6 星、非召唤物、可获取），每条都带 id / name /
-    rarity；限定角色额外带 `limited: true`。输出的列表按星级降序、id 升序，
+    保证：只留寻访能出的干员（3–6 星、非召唤物、可获取），每条都带 id / name /
+    rarity；限定干员额外带 `limited: true`。输出的列表按星级降序、id 升序，
     同一份输入永远得到同一份输出。
     补齐：`limited` 取「卡池表推出的限定名单」与「输入里已标的限定」的并集，
     于是 `--offline` 回读写回的快照不会把限定标记洗掉。
@@ -237,7 +237,7 @@ def summarize_characters(snapshot: dict[str, Any]) -> str:
     for character in snapshot.get("characters") or ():
         counts[character["rarity"]] = counts.get(character["rarity"], 0) + 1
     limited = sum(1 for c in snapshot.get("characters") or () if c.get("limited"))
-    lines = [f"角色总数 {len(snapshot.get('characters') or ())}（限定 {limited}）"]
+    lines = [f"干员总数 {len(snapshot.get('characters') or ())}（限定 {limited}）"]
     for rarity in sorted(counts, reverse=True):
         lines.append(f"  {rarity} 星 {counts[rarity]:>4}")
     if snapshot.get("skipped"):
@@ -278,10 +278,10 @@ def main(
     """执行一次快照生成。
 
     `snapshot_path` / `char_path` 供测试注入临时文件；默认写回仓库里的
-    `resources/snapshot/`。只注入 `snapshot_path` 时，角色快照落在它旁边，
+    `resources/snapshot/`。只注入 `snapshot_path` 时，干员快照落在它旁边，
     这样测试不会顺手改写仓库里的真文件。
     """
-    parser = argparse.ArgumentParser(description="生成卡池与角色快照")
+    parser = argparse.ArgumentParser(description="生成卡池与干员快照")
     parser.add_argument(
         "--offline",
         action="store_true",
@@ -289,7 +289,7 @@ def main(
     )
     args = parser.parse_args(argv)
     target = snapshot_path or SNAPSHOT_PATH
-    # 只注入 snapshot_path 时（测试），角色快照跟着落在它旁边，免得顺手改写仓库里的真文件。
+    # 只注入 snapshot_path 时（测试），干员快照跟着落在它旁边，免得顺手改写仓库里的真文件。
     char_target = char_path or (
         CHAR_SNAPSHOT_PATH if snapshot_path is None else target.parent / "characters.json"
     )
@@ -307,7 +307,7 @@ def main(
             char_payload: dict[str, Any] | None = read_snapshot(char_target)
         except (FileNotFoundError, json.JSONDecodeError) as exc:
             char_payload = None
-            print(f"角色快照不可用，跳过角色重建：{exc}", file=sys.stderr)
+            print(f"干员快照不可用，跳过干员重建：{exc}", file=sys.stderr)
     else:
         try:
             payload = fetch()
@@ -319,7 +319,7 @@ def main(
             char_payload = fetch(CHAR_SOURCE_URL)
         except RuntimeError as exc:
             char_payload = None
-            print(f"角色表下载失败：{exc}\n现有角色快照未改动。", file=sys.stderr)
+            print(f"干员表下载失败：{exc}\n现有干员快照未改动。", file=sys.stderr)
 
     snapshot = trim(payload)
     if not snapshot["pools"]:
@@ -330,12 +330,12 @@ def main(
     print(f"已写入 {target}")
 
     if char_payload is None:
-        print("角色快照未更新。")
+        print("干员快照未更新。")
         return 0
     chars = trim_characters(char_payload, limited_char_ids(snapshot["pools"]))
     if not chars["characters"]:
-        # 空角色表会让抽卡指令全部报「数据未就绪」，比保留旧文件更糟。
-        print("裁剪后一个角色都没有，拒绝覆盖角色快照。", file=sys.stderr)
+        # 空干员表会让抽卡指令全部报「数据未就绪」，比保留旧文件更糟。
+        print("裁剪后一个干员都没有，拒绝覆盖干员快照。", file=sys.stderr)
         return 1
     write_snapshot(chars, char_target)
     print(summarize_characters(chars))

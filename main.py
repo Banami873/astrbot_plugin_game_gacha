@@ -102,14 +102,14 @@ class GameGachaPlugin(Star):
                 f"快照时间 {self.snapshot.fetched_text()}"
             )
 
-        # 角色字典与卡池快照分开装载：缺了角色表只是不能抽卡，查询仍然可用。
+        # 干员字典与卡池快照分开装载：缺了干员表只是不能抽卡，查询仍然可用。
         try:
             self.roster = char_module.load_roster(CHAR_SNAPSHOT_PATH)
         except FileNotFoundError:
-            self._roster_error = f"角色数据不存在：{CHAR_SNAPSHOT_PATH.name}"
+            self._roster_error = f"干员数据不存在：{CHAR_SNAPSHOT_PATH.name}"
             logger.error(f"[{PLUGIN_NAME}] {self._roster_error}")
         except ValueError as exc:
-            self._roster_error = f"角色数据解析失败：{exc}"
+            self._roster_error = f"干员数据解析失败：{exc}"
             logger.error(f"[{PLUGIN_NAME}] {self._roster_error}")
         else:
             logger.info(
@@ -359,7 +359,7 @@ class GameGachaPlugin(Star):
         return locks.setdefault((uid, platform), asyncio.Lock())
 
     def _not_ready_text(self) -> str:
-        """数据没就绪时说什么。区分「卡池没加载」与「角色表没加载」，便于对症处理。"""
+        """数据没就绪时说什么。区分「卡池没加载」与「干员表没加载」，便于对症处理。"""
         if self.snapshot is None:
             reason = self._load_error or "未知原因"
             return (
@@ -369,7 +369,7 @@ class GameGachaPlugin(Star):
             )
         reason = self._roster_error or "未知原因"
         return (
-            f"角色数据未就绪：{reason}\n"
+            f"干员数据未就绪：{reason}\n"
             "请管理员在 AstrBot 根目录执行：\n"
             ".venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/build_data.py"
         )
