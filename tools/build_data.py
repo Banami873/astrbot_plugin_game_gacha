@@ -1,4 +1,4 @@
-"""从官方游戏数据仓库拉卡池表与干员表，再补上 PRTS 的寻访渠道，裁剪成随包快照。
+"""从官方游戏数据仓库拉卡池表与干员表，再补上 PRTS 的基础池，裁剪成随包快照。
 
 卡池快照只保留骨架字段：池 id、池型、起止、保底与井参数、名单池的 charId。池名与
 UP 名单不在这里——官方表近期池名是占位串、详情为空，那半边必须另找来源（见 SPEC R-14）。
@@ -86,7 +86,7 @@ def fetch(url: str = SOURCE_URL, timeout: int = 90) -> dict[str, Any]:
     return payload
 
 
-# ---- PRTS 寻访渠道 -------------------------------------------------------
+# ---- PRTS 基础池 -------------------------------------------------------
 
 # 官方 `character_table.json` 里只有一个自由文本的 `itemObtainApproach`，它是「主要获
 # 取途径」，不是「能不能抽」：
@@ -111,7 +111,7 @@ PRTS_HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }
 
-# PRTS 的获取方式 → 本项目的渠道名。只有这四种算「能通过寻访获得」，其余（公开招募、
+# PRTS 的获取方式 → 本项目的基础池取值。只有这四种算「能通过寻访获得」，其余（公开招募、
 # 活动获得、主线剧情、凭证交易所、信用交易所、集成战略…）都不进抽卡池。
 CHANNEL_BY_METHOD: dict[str, str] = {
     "标准寻访": "standard",
@@ -128,11 +128,11 @@ PRTS_MIN_CHANNELS = 100
 
 
 def parse_prts_channels(page: str) -> dict[str, list[str]]:
-    """从 PRTS 干员一览的 HTML 里取出 `{char_id: [渠道...]}`。
+    """从 PRTS 干员一览的 HTML 里取出 `{char_id: [基础池...]}`。
 
     每个干员渲染成一个带 `data-*` 属性的 div，获取方式在 `data-obtain-method` 里，
     多个之间用逗号分隔；id 里的下划线被写成 `&#95;`，要反转义。
-    没有寻访渠道的干员不会出现在结果里——它们本来就不该被抽到。
+    没有基础池的干员不会出现在结果里——它们本来就不该被抽到。
     """
     found: dict[str, list[str]] = {}
     for attrs in _DIV_TAG_RE.findall(page):
@@ -150,10 +150,10 @@ def parse_prts_channels(page: str) -> dict[str, list[str]]:
 
 
 def fetch_prts_channels(timeout: int = 60) -> dict[str, list[str]]:
-    """下载 PRTS 干员一览并解析出渠道表。
+    """下载 PRTS 干员一览并解析出基础池数据。
 
     失败：网络异常、页面不是 UTF-8、或解析结果少得离谱时抛 `RuntimeError`。最后一种
-    最要紧——一份残缺的渠道表会让大半个干员字典被当成「不可寻访」删掉，宁可整趟失败。
+    最要紧——一份残缺的基础池数据会让大半个干员字典被当成「不可寻访」删掉，宁可整趟失败。
     """
     request = urllib.request.Request(PRTS_ROSTER_URL, headers=PRTS_HEADERS)
     try:
@@ -174,7 +174,7 @@ def fetch_prts_channels(timeout: int = 60) -> dict[str, list[str]]:
 
 
 def channels_from_snapshot(payload: dict[str, Any]) -> dict[str, list[str]]:
-    """从已产出的干员快照里读回渠道标记，供 `--offline` 重建用。"""
+    """从已产出的干员快照里读回基础池标记，供 `--offline` 重建用。"""
     found: dict[str, list[str]] = {}
     for raw in _raw_characters(payload):
         char_id = str(raw.get("id") or "")
@@ -292,11 +292,11 @@ def trim_characters(
 ) -> dict[str, Any]:
     """裁剪成干员快照。
 
-    保证：只留寻访能出的干员（3–6 星、非召唤物、可获取、且至少有一种寻访渠道），每条
+    保证：只留寻访能出的干员（3–6 星、非召唤物、可获取、且至少有一种基础池），每条
     都带 id / name / rarity / channels；限定干员额外带 `limited: true`。输出的列表按
     星级降序、id 升序，同一份输入永远得到同一份输出。
 
-    `channels` 是权威渠道表（来自 PRTS）；为 None 时不做渠道过滤，只用于诊断——正式
+    `channels` 是权威基础池数据（来自 PRTS）；为 None 时不做基础池过滤，只用于诊断——正式
     产出一律要求它非空，因为缺了它就会把活动赠送和商店干员一起放回池子里。
 
     补齐：`limited` 取「卡池表推出的限定名单」与「输入里已标的限定」的并集，于是
@@ -350,7 +350,7 @@ def trim_characters(
 
 
 def summarize_characters(snapshot: dict[str, Any]) -> str:
-    """统计各星级人数与渠道分布，方便肉眼核对本次拉取是否合理。"""
+    """统计各星级人数与基础池分布，方便肉眼核对本次拉取是否合理。"""
     rows = snapshot.get("characters") or ()
     counts: dict[int, int] = {}
     channel_counts: dict[str, int] = {}
@@ -368,9 +368,9 @@ def summarize_characters(snapshot: dict[str, Any]) -> str:
             f"{name} {channel_counts.get(name, 0)}"
             for name in ("standard", "classic", "limited", "linkage")
         )
-        lines.append(f"  渠道：{parts}")
+        lines.append(f"  基础池：{parts}")
     if snapshot.get("excluded_no_channel"):
-        lines.append(f"排除无寻访渠道的干员 {snapshot['excluded_no_channel']} 名")
+        lines.append(f"排除无基础池的干员 {snapshot['excluded_no_channel']} 名")
     if snapshot.get("skipped"):
         lines.append(f"跳过无法解析的记录 {snapshot['skipped']} 条")
     return "\n".join(lines)
@@ -439,7 +439,7 @@ def main(
         except (FileNotFoundError, json.JSONDecodeError) as exc:
             char_payload = None
             print(f"干员快照不可用，跳过干员重建：{exc}", file=sys.stderr)
-        # 离线时渠道表只能来自旧快照本身：这样 --offline 走的是与联网完全相同的裁剪
+        # 离线时基础池数据只能来自旧快照本身：这样 --offline 走的是与联网完全相同的裁剪
         # 路径，才谈得上验证幂等。
         channels = channels_from_snapshot(char_payload) if char_payload else {}
     else:
@@ -457,7 +457,7 @@ def main(
         try:
             channels = fetch_prts_channels()
         except RuntimeError as exc:
-            # 渠道表抓不到就不产出干员快照：退化成「无渠道过滤」会把活动赠送和商店
+            # 基础池数据抓不到就不产出干员快照：退化成「无基础池过滤」会把活动赠送和商店
             # 干员重新放回池里，比沿用旧字典糟糕得多。
             char_payload = None
             print(f"{exc}\n现有干员快照未改动。", file=sys.stderr)
@@ -474,7 +474,7 @@ def main(
         print("干员快照未更新。")
         return 0
     if not channels:
-        print("缺少寻访渠道数据，拒绝覆盖干员快照。", file=sys.stderr)
+        print("缺少基础池数据，拒绝覆盖干员快照。", file=sys.stderr)
         return 1
     chars = trim_characters(
         char_payload, limited_char_ids(snapshot["pools"]), channels

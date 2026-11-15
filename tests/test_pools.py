@@ -410,7 +410,7 @@ class TestChoosePool:
 
 
 class TestChannelRules:
-    """R-04/R-05 的底座：一个池能抽出哪几类寻访渠道的干员。
+    """R-04/R-05 的底座：一个池能抽出哪几类基础池的干员。
 
     联调时踩过的坑：标准池从「全部干员」里抽，联动干员就会出现在标准池里；
     联动池只给 linkage，抽到 3★ 时无人可抽。两头都用测试钉住。
@@ -477,7 +477,7 @@ class TestChannelRules:
         assert missing == ("联动",)
 
     def test_shipped_rules_cover_every_category(self, pools_mod, plugin_dir):
-        """随包的 pool_rules.json 必须给每个类别都配了渠道，否则启动会告警。"""
+        """随包的 pool_rules.json 必须给每个类别都配了基础池，否则启动会告警。"""
         rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
         categories = pools_mod.load_category_map(plugin_dir / "resources" / "pool_rules.json")
         assert rules.categories_missing(categories) == ()

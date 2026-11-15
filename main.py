@@ -93,7 +93,7 @@ class GameGachaPlugin(Star):
         if missing:
             # 漏配不会崩，但会静默按标准寻访抽——抽出来的池子看着正常，其实是错的。
             logger.warning(
-                f"[{PLUGIN_NAME}] 类别 {missing} 没有配寻访渠道，将按标准寻访处理"
+                f"[{PLUGIN_NAME}] 类别 {missing} 没有配基础池，将按标准寻访处理"
             )
         try:
             self.snapshot = pool_module.load_snapshot(

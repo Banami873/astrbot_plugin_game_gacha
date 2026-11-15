@@ -146,7 +146,7 @@ class TestRealSnapshotMatchesScript:
         assert any(p.get("charIdList") for p in committed["pools"]), "名单池必须带着 charIdList"
 
 
-# ---- PRTS 寻访渠道 -------------------------------------------------------
+# ---- PRTS 基础池 -------------------------------------------------------
 
 
 _PRTS_PAGE = """
@@ -246,7 +246,7 @@ class TestTrimCharacters:
         assert out["channel_source"] == build_data_mod.PRTS_ROSTER_URL
 
     def test_without_channels_it_does_not_filter(self, build_data_mod):
-        # 诊断模式：不传渠道表就不过滤，但 source 留空，提醒这不是正常产物。
+        # 诊断模式：不传基础池数据就不过滤，但 source 留空，提醒这不是正常产物。
         payload = dict(
             [
                 _official_char("char_a", "能抽", "TIER_6"),

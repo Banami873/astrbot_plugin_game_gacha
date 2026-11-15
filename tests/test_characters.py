@@ -1,7 +1,7 @@
 """干员字典的解析与查询。
 
 字典本身是 `tools/build_data.py` 的产物，这里的重点是「查询口径」：星级怎么筛、
-寻访渠道怎么交集、缺名字时显示什么。抽卡结果的「抽到了谁」全靠这一层。
+基础池怎么交集、缺名字时显示什么。抽卡结果的「抽到了谁」全靠这一层。
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ class TestRoster:
 
     def test_unknown_channel_names_are_dropped(self, characters_mod):
         roster = characters_mod.parse_roster(
-            {"characters": [_raw("char_x", "怪渠道", 6, channels=("standard", "bogus"))]}
+            {"characters": [_raw("char_x", "怪基础池", 6, channels=("standard", "bogus"))]}
         )
         assert roster.get("char_x").channels == frozenset({"standard"})
 
@@ -132,13 +132,13 @@ class TestRealSnapshot:
         limited = [c for c in real_roster.characters if c.limited]
         assert limited, "限定标记丢了，标准池就会出限定干员"
         assert all(c.rarity == 6 for c in limited)
-        # 限定只在限定渠道里出现：标准池的 6★ 一个限定都不能有。
+        # 限定只在限定基础池里出现：标准池的 6★ 一个限定都不能有。
         standard_six = real_roster.of_rarity(6, channels=("standard",))
         assert standard_six
         assert not [c for c in standard_six if c.limited]
 
     def test_every_character_has_a_channel(self, real_roster):
-        # 没有渠道的干员不该进字典：字典的裁剪依据就是「至少有一种寻访渠道」。
+        # 没有基础池的干员不该进字典：字典的裁剪依据就是「至少有一种基础池」。
         assert all(c.channels for c in real_roster.characters)
 
     def test_channel_counts_match_prts(self, real_roster):
@@ -170,7 +170,7 @@ class TestRealSnapshot:
             if character is None:
                 continue
             assert character.channels == frozenset({"linkage"}), (
-                f"{linkage} 只该出现在联动池，实际渠道 {sorted(character.channels)}"
+                f"{linkage} 只该出现在联动池，实际基础池 {sorted(character.channels)}"
             )
 
     def test_every_character_has_a_name(self, real_roster):

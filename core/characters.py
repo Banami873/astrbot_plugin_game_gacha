@@ -1,4 +1,4 @@
-"""可抽取干员的字典：id、名字、星级、寻访渠道。
+"""可抽取干员的字典：id、名字、星级、基础池。
 
 抽卡内核只认「星级」和「候选 id 列表」，不知道自己抽到的人叫什么——名字来自这份
 字典。字典随包（`resources/snapshot/characters.json`），由 `tools/build_data.py`
@@ -8,7 +8,7 @@
 「某个池能出哪些人」的字段（除了名单池）。本期按「同星级等概率」抽取，等 UP 权重
 接进来（issue 05）时，这里仍然只负责回答「这个星级有哪些人」。
 
-「渠道」是这里唯一需要当心的概念：一个干员可以同时在多个寻访类型里出现（标准与中坚
+「基础池」是这里唯一需要当心的概念：一个干员可以同时在多个基础池里出现（标准与中坚
 重叠 62 人），而限定、联动互不重叠。抽卡时按池的类型取交集，标准池里就抽不到联动干员。
 """
 
@@ -23,7 +23,7 @@ from typing import Any, Collection, Mapping, Sequence
 MIN_RARITY = 3
 MAX_RARITY = 6
 
-# 四种寻访渠道。名字与 `tools/build_data.py` 里的 `CHANNEL_BY_METHOD` 一一对应，
+# 四种基础池。名字与 `tools/build_data.py` 里的 `CHANNEL_BY_METHOD` 一一对应，
 # 也是 `resources/pool_rules.json` 中 `channels_by_category` 使用的键。
 CHANNEL_STANDARD = "standard"
 CHANNEL_LIMITED = "limited"
@@ -39,8 +39,8 @@ ALL_CHANNELS: frozenset[str] = frozenset(
 class Character:
     """一个可抽取的干员。
 
-    `channels` 是该干员能出现的寻访渠道集合；`limited` 是「限定干员」的语义标记
-    （由卡池表的 `limitParam` 反推，与渠道里的 `limited` 互为印证）。
+    `channels` 是该干员能出现的基础池集合；`limited` 是「限定干员」的语义标记
+    （由卡池表的 `limitParam` 反推，与基础池里的 `limited` 互为印证）。
     """
 
     char_id: str
@@ -77,7 +77,7 @@ class Roster:
     ) -> tuple[Character, ...]:
         """取某一星级的干员，按 id 排序保证同种子下结果可复现。
 
-        `channels` 非空时只留渠道有交集的干员：标准池传 `("standard",)`、限定池传
+        `channels` 非空时只留基础池有交集的干员：标准池传 `("standard",)`、限定池传
         `("limited", "standard")`。「这个池能出哪些人」因此由数据决定，而不是靠每个
         调用方记得把联动与中坚滤掉——漏一次就会让联动干员从标准池里冒出来。
         """

@@ -15,8 +15,8 @@ from test_isolation import FakeEvent, run
 
 NOW_END = 4102444800  # 2100-01-01，测试池永不过期
 
-# 池能抽哪些渠道，正式代码里由 `pool_rules.json` 的 channels_by_category 决定；
-# 引擎层的用例只关心「按给定渠道抽」这一件事，所以直接给常量。
+# 池能抽哪些基础池，正式代码里由 `pool_rules.json` 的 channels_by_category 决定；
+# 引擎层的用例只关心「按给定基础池抽」这一件事，所以直接给常量。
 STANDARD = ("standard",)
 LIMITED_CHANNELS = ("limited", "standard")
 
@@ -118,7 +118,7 @@ class TestArkEngine:
             for d in batch.drafts
             if not (real_roster.get(d.char_id).channels & set(STANDARD))
         ]
-        assert not crossed, f"标准池抽到了非标准渠道干员：{crossed[:5]}"
+        assert not crossed, f"标准池抽到了非标准基础池干员：{crossed[:5]}"
 
     def test_limited_pool_can_give_limited_operators(
         self, ark_engine_mod, real_roster, pools_pkg
@@ -162,7 +162,7 @@ class TestArkEngine:
             )
 
     def test_empty_channel_is_rejected(self, ark_engine_mod, real_roster, pool):
-        """渠道里一个人都没有时宁可报错，也不能退回全量去串池。"""
+        """基础池里一个人都没有时宁可报错，也不能退回全量去串池。"""
         with pytest.raises(ValueError):
             ark_engine_mod.draw_batch(
                 real_roster, pool, counter=0, times=1,
