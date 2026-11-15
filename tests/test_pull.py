@@ -277,6 +277,12 @@ class TestPullCommands:
         instance.pity_groups = pity_mod.load_pity_groups(
             PLUGIN_DIR / "resources" / "pity_groups.json"
         )
+        # 名单与 UP 份额：测试池没有 banner，等价于「UP 名单未获取」的运行方式，
+        # 抽卡结果仍要能出来，只是少了 UP 加成（R-14 降级链第 4 条）。
+        instance.banners = pkg("games.arknights.banners").BannerBook({})
+        instance.up_rules = pools_pkg.load_up_share(
+            PLUGIN_DIR / "resources" / "pool_rules.json"
+        )
         instance._locks = {}
         instance._load_error = ""
         instance._roster_error = ""

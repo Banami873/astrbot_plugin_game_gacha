@@ -119,6 +119,25 @@ def ark_engine_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def banners_mod() -> ModuleType:
+    return package_module("games.arknights.banners")
+
+
+@pytest.fixture(scope="session")
+def banner_data_mod() -> ModuleType:
+    """PRTS 页面的解析与对齐。05 起这份逻辑在 `games/arknights/data.py`。"""
+    return package_module("games.arknights.data")
+
+
+@pytest.fixture(scope="session")
+def real_banners(banners_mod):
+    """仓库里那份名单快照（池名与 UP 干员）。"""
+    return banners_mod.load_banners(
+        PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
+    )
+
+
+@pytest.fixture(scope="session")
 def real_roster(characters_mod):
     """仓库里那份干员快照。抽卡用例需要一个真实规模的字典，再造一份假的没意义。"""
     return characters_mod.load_roster(PLUGIN_DIR / "resources" / "snapshot" / "characters.json")

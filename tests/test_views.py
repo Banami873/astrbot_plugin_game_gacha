@@ -47,7 +47,7 @@ def test_lists_pools_grouped_by_category(pools_mod, views_mod):
         pools_mod,
         [
             _record("L", "LIMITED", -DAY, 2 * DAY, name="将雪投火"),
-            _record("N", "NORMAL", -DAY, DAY),
+            _record("N", "DOUBLE", -DAY, DAY),
             _record("C", "CLASSIC", -DAY, 3 * DAY),
         ],
     )
@@ -87,7 +87,7 @@ def test_category_filter_keeps_only_requested(pools_mod, views_mod):
         pools_mod,
         [
             _record("L", "LIMITED", -DAY, DAY),
-            _record("N", "NORMAL", -DAY, DAY),
+            _record("N", "DOUBLE", -DAY, DAY),
         ],
     )
     text = views_mod.render_pool_list(snapshot, NOW, wanted="常驻")
@@ -97,7 +97,7 @@ def test_category_filter_keeps_only_requested(pools_mod, views_mod):
 
 def test_unknown_category_says_so_and_hints_available(pools_mod, views_mod):
     """拼错类别不能静默显示全部，否则用户以为筛选生效了。"""
-    snapshot = _snapshot(pools_mod, [_record("N", "NORMAL", -DAY, DAY)])
+    snapshot = _snapshot(pools_mod, [_record("N", "DOUBLE", -DAY, DAY)])
     text = views_mod.render_pool_list(snapshot, NOW, wanted="限定")
     assert "没有「限定」类别的进行中卡池" in text
     assert "当前有：常驻" in text
@@ -110,17 +110,19 @@ def test_no_active_pools(pools_mod, views_mod):
 
 
 def test_roster_status_shown(pools_mod, views_mod):
-    """名单池显示人数，非名单池明确说「名单未接入」，不留空白。"""
+    """有名单的行显示 UP，没有名单的池明说「未获取」，不留空白。"""
     snapshot = _snapshot(
         pools_mod,
         [
-            _record("SPEC", "GACHAWITHSPECIFIED6", -DAY, DAY, char_ids=["char_1", "char_2"]),
-            _record("N", "NORMAL", -DAY, DAY),
+            _record("SPEC", "GACHAWITHSPECIFIED6", -DAY, DAY),
+            _record("N", "DOUBLE", -DAY, DAY),
         ],
     )
-    text = views_mod.render_pool_list(snapshot, NOW)
-    assert "名单 2 名" in text
-    assert "UP 名单未接入" in text
+    text = views_mod.render_pool_list(
+        snapshot, NOW, up_text={"SPEC": "UP 6★ 烛煌、真言 · 5★ 明椒"}
+    )
+    assert "UP 6★ 烛煌、真言" in text
+    assert "UP 名单未获取（按均分概率）" in text
 
 
 def test_placeholder_name_shows_pool_id(pools_mod, views_mod):

@@ -25,8 +25,9 @@ from .core import economy
 from .core import pity as pity_module
 from .core import pools as pool_module
 from .core.store import PullCommit, Store
+from .games.arknights import banners as banner_module
 from .games.arknights import engine as ark_engine
-from .games.arknights.engine import Batch
+from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.views import (
     render_adjust,
     render_newbie_notice,
@@ -42,6 +43,7 @@ PLUGIN_VERSION = "0.1.0"
 PLUGIN_DIR = Path(__file__).resolve().parent
 SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
 CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
+BANNER_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
 RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
 PITY_RULES_PATH = PLUGIN_DIR / "resources" / "pity_groups.json"
 
@@ -75,6 +77,8 @@ class GameGachaPlugin(Star):
             dict(pool_module.DEFAULT_CHANNEL_BY_RULE_TYPE),
         )
         self.pity_groups: pity_module.PityGroups = pity_module.PityGroups()
+        self.up_rules = pool_module.UpShareRules({})
+        self.banners: banner_module.BannerBook = banner_module.BannerBook({})
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
         self._roster_error = ""
@@ -99,6 +103,9 @@ class GameGachaPlugin(Star):
                 f"[{PLUGIN_NAME}] 类别 {missing} 没有配基础池，将按标准寻访处理"
             )
         self.pity_groups = pity_module.load_pity_groups(PITY_RULES_PATH)
+        self.up_rules = pool_module.load_up_share(RULES_PATH)
+        # 名单先装、再套到卡池上：池名与类别都以 PRTS 为准（R-14），没名单的池保持原样。
+        self.banners = banner_module.load_banners(BANNER_SNAPSHOT_PATH)
         try:
             self.snapshot = pool_module.load_snapshot(
                 SNAPSHOT_PATH, self.category_map, self.unimplemented
@@ -110,9 +117,11 @@ class GameGachaPlugin(Star):
             self._load_error = f"卡池快照解析失败：{exc}"
             logger.error(f"[{PLUGIN_NAME}] {self._load_error}")
         else:
+            self.snapshot = self.banners.apply(self.snapshot)
             logger.info(
                 f"[{PLUGIN_NAME}] 已装载 {len(self.snapshot.pools)} 个卡池，"
-                f"快照时间 {self.snapshot.fetched_text()}"
+                f"快照时间 {self.snapshot.fetched_text()}，"
+                f"名单 {len(self.banners)} 条（{self.banners.fetched_text() or '时间未知'}）"
             )
             unmapped = self.pity_groups.unmapped_rule_types(
                 pool.rule_type for pool in self.snapshot.pools
@@ -197,6 +206,7 @@ class GameGachaPlugin(Star):
             pool_module.timestamp_of(),
             wanted=wanted,
             known_categories=pool_module.CATEGORY_ORDER,
+            up_text=self._up_text_map(),
         )
         yield event.plain_result(text + notice)
 
@@ -320,6 +330,7 @@ class GameGachaPlugin(Star):
             tickets=outcome.commit.tickets,
             six_counter=outcome.batch.six_counter,
             hard_pity=ark_engine.HARD_PITY,
+            up_missing=self.banners.get(pool.pool_id) is None,
         )
         yield event.plain_result(text + notice)
 
@@ -367,6 +378,7 @@ class GameGachaPlugin(Star):
                 channels=self.channel_rules.for_pool(pool),
                 pool_pulls=state.pool_pulls,
                 first10_hit=state.first10_hit,
+                up=self._up_targets(pool),
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
@@ -392,6 +404,40 @@ class GameGachaPlugin(Star):
             # 读余额与提交之间余额被改掉了：按提交时点的真实余额回报，不重算结果。
             return PullOutcome(error=f"需要 {times} 抽，你还有 {commit.tickets} 抽。")
         return PullOutcome(batch=batch, commit=commit)
+
+    def _up_targets(self, pool) -> UpTargets:
+        """本池的 UP 名单与份额。缺名单时返回份额 0，等价于「全池均分」。
+
+        名单独自缺失不该让池不可抽（R-14 降级链第 4 条）：少一次 UP 加成，玩家看到的
+        只是「这个人怎么老歪」，而不可用会让整个池消失。
+        """
+        share = self.up_rules.for_pool(pool)
+        banner = self.banners.get(pool.pool_id)
+        if banner is None or not banner.has_up():
+            return UpTargets(six_share=0.0, five_share=0.0)
+        return UpTargets(
+            six=banner.up6,
+            five=banner.up5,
+            four=banner.up4,
+            six_share=share.six,
+            five_share=share.five,
+        )
+
+    def _up_text_map(self) -> dict[str, str]:
+        """池 id → 「UP 6★ A、B · 5★ C」，给 `/卡池查询` 用。"""
+        if self.roster is None:
+            return {}
+        result: dict[str, str] = {}
+        for pool_id, banner in self.banners.by_pool.items():
+            parts: list[str] = []
+            for star, ids in (("6", banner.up6), ("5", banner.up5), ("4", banner.up4)):
+                if not ids:
+                    continue
+                names = banner_module.names_for_display(ids, self.roster.name_of)
+                parts.append(f"UP {star}★ {names}")
+            if parts:
+                result[pool_id] = " · ".join(parts)
+        return result
 
     def _lock_for(self, uid: str, platform: str) -> asyncio.Lock:
         """同一用户的一把锁（R-13）。

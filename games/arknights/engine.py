@@ -82,6 +82,69 @@ def _force_five_star(star: int, table: Mapping[int, float], rng: core_engine.Ran
     return 6 if rng.random() < table.get(6, 0.0) else 5
 
 
+@dataclass(frozen=True)
+class UpTargets:
+    """本池的 UP 名单与份额（R-05~R-11 的「星级内怎么分」）。
+
+    `six_share=0.7` 表示 6★ 里 70% 落在 `six` 这几个人身上，剩下 30% 由其他 6★ 按等权
+    分配；`1.0` 表示这个星级的池内人选就只有名单上这些（联合行动、卫戍、甄选）。
+    名单为空或份额为 0 时完全按等概率——这就是「UP 名单未获取」的运行方式。
+    """
+
+    six: tuple[str, ...] = ()
+    five: tuple[str, ...] = ()
+    four: tuple[str, ...] = ()
+    six_share: float = 0.0
+    five_share: float = 0.0
+
+    def ids_of(self, star: int) -> tuple[str, ...]:
+        if star >= 6:
+            return self.six
+        if star == 5:
+            return self.five
+        if star == 4:
+            return self.four
+        return ()
+
+    def share_of(self, star: int) -> float:
+        if star >= 6:
+            return self.six_share
+        if star == 5:
+            return self.five_share
+        # 4★ 及以下不做 UP 加成：PRTS 只给「5★&4★」一列，区分二者要靠星级表，
+        # 而 4★ 的权重差异对体验影响极小，本期按等概率。
+        return 0.0
+
+
+def _choose_member(
+    members: Sequence[Character],
+    up_ids: Sequence[str],
+    share: float,
+    rng: core_engine.RandomLike,
+) -> Character:
+    """星级内选人：UP 按份额分走概率，其余人按等权分剩下的。
+
+    保证：返回 `members` 里的一位；名单与本池候选不交叉时自动退回等概率，不会因为
+    UP 名单是别的池的（数据串了）就抽不出人。
+    """
+    if not up_ids or share <= 0:
+        return core_engine.pick_member(members, rng)
+    wanted = set(up_ids)
+    up = [member for member in members if member.char_id in wanted]
+    if not up:
+        return core_engine.pick_member(members, rng)
+    if share >= 1.0 or len(up) == len(members):
+        # 池内该星级只有名单上这些人：等于在名单内等分。
+        return core_engine.pick_member(up, rng)
+    rest = [member for member in members if member.char_id not in wanted]
+    up_weight = share / len(up)
+    rest_weight = (1.0 - share) / len(rest)
+    weights = [
+        up_weight if member.char_id in wanted else rest_weight for member in members
+    ]
+    return core_engine.pick_member_weighted(members, weights, rng)
+
+
 def candidates(
     roster: Roster,
     pool,
@@ -115,6 +178,7 @@ def draw_batch(
     channels: Collection[str],
     pool_pulls: int = 0,
     first10_hit: bool = False,
+    up: UpTargets | None = None,
 ) -> Batch:
     """连抽 `times` 次，返回结果与抽完之后要写回存档的计数。
 
@@ -137,6 +201,7 @@ def draw_batch(
         raise ValueError("干员数据为空，无法抽取")
 
     guarantee = guarantee_count_of(pool)
+    targets = up or UpTargets()
     current = max(0, counter)
     pulls = max(0, pool_pulls)
     hit = first10_hit
@@ -156,7 +221,9 @@ def draw_batch(
         pool_chars = candidates(roster, pool, star, channels=channels)
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
-        chosen = core_engine.pick_member(pool_chars, rng)
+        chosen = _choose_member(
+            pool_chars, targets.ids_of(star), targets.share_of(star), rng
+        )
         drafts.append(Draft(char_id=chosen.char_id, name=chosen.name, star=star))
         if star >= FIRST10_MIN_STAR:
             hit = True

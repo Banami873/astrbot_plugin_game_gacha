@@ -41,9 +41,10 @@ class TestCategory:
         mapping = pools_mod.FALLBACK_CATEGORY_MAP
         expected = {
             "LIMITED": "限定",
-            "NORMAL": "常驻",
+            # 官方命名反直觉：DOUBLE 是常驻标准寻访，NORMAL 是联合行动（见 pool_rules.json）。
+            "DOUBLE": "常驻",
+            "NORMAL": "限时",
             "SINGLE": "限时",
-            "DOUBLE": "限时",
             "SPECIAL": "限时",
             "ATTAIN": "限时",
             "GACHAWITHSPECIFIED6": "限时",
@@ -207,7 +208,7 @@ class TestGrouped:
         """读者按固定次序找池，不能按字典序。"""
         records = [
             _pool(gachaPoolId="E", gachaRuleType="WEIRD", endTime=NOW + 3 * DAY),
-            _pool(gachaPoolId="B", gachaRuleType="NORMAL", endTime=NOW + DAY),
+            _pool(gachaPoolId="B", gachaRuleType="DOUBLE", endTime=NOW + DAY),
             _pool(gachaPoolId="A", gachaRuleType="LIMITED", endTime=NOW + 2 * DAY),
         ]
         snapshot = _snapshot(pools_mod, records)
@@ -360,7 +361,7 @@ class TestChoosePool:
         snapshot = _snapshot(
             pools_mod,
             [
-                _pool(gachaPoolId="N", gachaRuleType="NORMAL", gachaPoolName="常驻轮换"),
+                _pool(gachaPoolId="N", gachaRuleType="DOUBLE", gachaPoolName="常驻轮换"),
                 _pool(gachaPoolId="S", gachaRuleType="SINGLE", gachaPoolName="海渊之下的回声"),
             ],
         )

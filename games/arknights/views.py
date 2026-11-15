@@ -84,15 +84,19 @@ def render_pool_list(
     now: int,
     wanted: str | None = None,
     known_categories: Sequence[str] = CATEGORY_ORDER,
+    up_text: Mapping[str, str] | None = None,
 ) -> str:
     """把当前可抽的卡池渲染成一段文本。
 
     保证：返回的文本一定以标题与快照时间开头；已结束的池不会出现，剩余时间不会是负数。
     `wanted` 是类别名时只显示该类；类别下没有进行中的池时明确说明并列出当前有池的类别，
     而不是悄悄显示全部——静默会让用户以为筛选生效了。
+    `up_text` 是池 id → 「UP 6★ A、B」；缺键表示这个池没拿到名单，要明说，否则玩家会
+    以为 UP 概率没生效却说不清为什么。
     """
     grouped = snapshot.grouped(now)
     header = ["[明日方舟 · 当前卡池]", f"数据：{snapshot.fetched_text()} 快照", DIVIDER]
+    up_text = up_text or {}
 
     if wanted and wanted != "全部":
         if wanted not in grouped:
@@ -114,11 +118,8 @@ def render_pool_list(
             tail = remaining if remaining.startswith("长期开放") else f"剩 {remaining}"
             lines.append(f"· {pool.display_name}")
             lines.append(f"  {start} → {end} · {tail}")
-            char_ids = getattr(pool, "char_ids", ())
-            if char_ids:
-                lines.append(f"  名单 {len(char_ids)} 名（UP 概率分配未接入）")
-            else:
-                lines.append("  UP 名单未接入")
+            listing = up_text.get(getattr(pool, "pool_id", ""), "")
+            lines.append(f"  {listing}" if listing else "  UP 名单未获取（按均分概率）")
         blocks.append("\n".join(lines))
     return "\n".join(header) + "\n" + "\n\n".join(blocks)
 
@@ -154,11 +155,14 @@ def render_pulls(
     tickets: int,
     six_counter: int | None = None,
     hard_pity: int = 99,
+    up_missing: bool = False,
 ) -> str:
     """一次（或一次十连）的结果。
 
     `counts` 是这批干员在库里的累计获得次数，用来算潜能；缺键时按「本次刚获得」处理。
     保证：星级按实际结果升序展示（低星在前，与游戏列表一致），末尾一定带余额。
+    `up_missing` 为真时补一句「UP 名单未获取」：这一批是按均分概率出的，与公告不一致，
+    不说明的话玩家会以为插件算错了概率。
     """
     title = TITLE_TEN if len(drafts) > 1 else TITLE_SINGLE
     lines = [f"{title}{pool_name}", DIVIDER]
@@ -178,6 +182,8 @@ def render_pulls(
     if six_counter is not None:
         tail += f" · 距 6★ 硬保底还有 {max(1, hard_pity - six_counter)} 抽"
     lines.append(tail)
+    if up_missing:
+        lines.append("（UP 名单未获取，本批按同星级均分概率）")
     return "\n".join(lines)
 
 

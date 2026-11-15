@@ -33,6 +33,8 @@ CST = timezone(timedelta(hours=8))
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
 CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
+BANNER_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
+RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
 
 SOURCE_BASE = (
     "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/"
@@ -171,6 +173,29 @@ def fetch_prts_channels(timeout: int = 60) -> dict[str, list[str]]:
             f"PRTS 只解析出 {len(channels)} 名干员，疑似被拦截或页面结构变化"
         )
     return channels
+
+
+def fetch_prts_banners(timeout: int = 60) -> str:
+    """下载 PRTS「卡池一览」原始 HTML。
+
+    失败：网络异常、页面不是 UTF-8、或解析出的池记录少得离谱时抛 `RuntimeError`。
+    抓不到时调用方保留旧名单——半张表会让大半池显示「UP 名单未获取」，比旧数据更糟。
+    """
+    _pools_module, banner_module = _plugin_modules()
+    request = urllib.request.Request(banner_module.PRTS_URL, headers=PRTS_HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"PRTS 卡池一览下载失败：{exc}") from exc
+    try:
+        page = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"PRTS 卡池一览不是 UTF-8：{exc}") from exc
+    rows = banner_module.parse_banners(page)
+    if len(rows) < banner_module.MIN_BANNERS:
+        raise RuntimeError(f"PRTS 只解析出 {len(rows)} 条卡池记录，疑似被拦截或页面结构变化")
+    return page
 
 
 def channels_from_snapshot(payload: dict[str, Any]) -> dict[str, list[str]]:
@@ -376,6 +401,74 @@ def summarize_characters(snapshot: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ---- PRTS 卡池名单 -----------------------------------------------------
+
+# 抓取与解析在 `games/arknights/data.py` 里，插件运行时按文件路径加载它读快照。
+# 这里按包路径导入同一份实现，避免「工具里的解析」和「插件里的解析」各写一套。
+BANNER_PARSER_MODULE = "games.arknights.data"
+
+
+def _plugin_modules() -> tuple[Any, Any]:
+    """导入插件里的 `core.pools` 与名单解析模块。
+
+    工具脚本不在包内运行，得先把插件目录塞进 `sys.path`。导入放在函数里而不是模块顶层：
+    测试加载本文件时不该顺带把插件包也拉起来。
+    """
+    if str(PLUGIN_DIR) not in sys.path:
+        sys.path.insert(0, str(PLUGIN_DIR))
+    import importlib
+
+    pools_module = importlib.import_module("core.pools")
+    banner_module = importlib.import_module(BANNER_PARSER_MODULE)
+    return pools_module, banner_module
+
+
+def build_banners(
+    pools_payload: Mapping[str, Any],
+    chars_snapshot: Mapping[str, Any],
+    html: str,
+    rules_path: Path = RULES_PATH,
+) -> dict[str, Any]:
+    """把 PRTS 页面与官方骨架对齐，产出名单快照。
+
+    保证：返回的 `banners` 里每条都带 `pool_id` / `name` / `up6`；对不上的行计入
+    `skipped` 而不是硬塞给某个池。名字查不到 id 的干员记进 `unknown_names`，方便发现
+    字典漏人（比如新干员还没进基础池）。
+    """
+    pools_module, banner_module = _plugin_modules()
+    category_map = pools_module.load_category_map(rules_path)
+    pools = pools_module.parse_pools(pools_payload, category_map)
+    rows = banner_module.parse_banners(html)
+    alignment = banner_module.align_banners(rows, pools)
+
+    name_to_id = {
+        str(c["name"]): str(c["id"]) for c in chars_snapshot.get("characters") or ()
+    }
+    rarity_of = {str(c["name"]): int(c["rarity"]) for c in chars_snapshot.get("characters") or ()}
+    snapshot = banner_module.build_banner_snapshot(
+        alignment, name_to_id, rarity_of, source=banner_module.PRTS_URL
+    )
+    snapshot["parsed_rows"] = len(rows)
+    return snapshot
+
+
+def summarize_banners(snapshot: dict[str, Any]) -> str:
+    """打印名单覆盖率，方便判断这次抓取值不值得落盘。"""
+    banners = snapshot.get("banners") or ()
+    named = sum(1 for b in banners if len(b.get("name") or "") > 1)
+    with_up6 = sum(1 for b in banners if b.get("up6"))
+    lines = [
+        f"名单条数 {len(banners)}（解析 {snapshot.get('parsed_rows', '?')} 行）",
+        f"  有 6★ 名单 {with_up6} 条 · 有池名 {named} 条",
+    ]
+    unknown = snapshot.get("unknown_names") or ()
+    if unknown:
+        lines.append(f"  字典里查不到的干员 {len(unknown)} 名：{'、'.join(unknown[:8])}")
+    if snapshot.get("skipped"):
+        lines.append(f"  未对齐的行 {snapshot['skipped']} 条（保留「UP 名单未获取」）")
+    return "\n".join(lines)
+
+
 def write_snapshot(snapshot: dict[str, Any], path: Path = SNAPSHOT_PATH) -> None:
     """写快照。先写临时文件再替换，避免中途失败留下半个 JSON。"""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -405,24 +498,33 @@ def main(
     argv: list[str] | None = None,
     snapshot_path: Path | None = None,
     char_path: Path | None = None,
+    banner_path: Path | None = None,
 ) -> int:
     """执行一次快照生成。
 
-    `snapshot_path` / `char_path` 供测试注入临时文件；默认写回仓库里的
-    `resources/snapshot/`。只注入 `snapshot_path` 时，干员快照落在它旁边，
+    `snapshot_path` / `char_path` / `banner_path` 供测试注入临时文件；默认写回仓库里的
+    `resources/snapshot/`。只注入 `snapshot_path` 时，另外两份跟着落在它旁边，
     这样测试不会顺手改写仓库里的真文件。
     """
-    parser = argparse.ArgumentParser(description="生成卡池与干员快照")
+    parser = argparse.ArgumentParser(description="生成卡池、干员与卡池名单快照")
     parser.add_argument(
         "--offline",
         action="store_true",
         help="不触网，只回读现有快照并重新规范化",
     )
+    parser.add_argument(
+        "--no-banners",
+        action="store_true",
+        help="跳过 PRTS 卡池名单（池名与 UP 干员），只更新官方骨架与干员字典",
+    )
     args = parser.parse_args(argv)
     target = snapshot_path or SNAPSHOT_PATH
-    # 只注入 snapshot_path 时（测试），干员快照跟着落在它旁边，免得顺手改写仓库里的真文件。
+    # 只注入 snapshot_path 时（测试），另外两份跟着落在它旁边，免得顺手改写仓库里的真文件。
     char_target = char_path or (
         CHAR_SNAPSHOT_PATH if snapshot_path is None else target.parent / "characters.json"
+    )
+    banner_target = banner_path or (
+        BANNER_SNAPSHOT_PATH if snapshot_path is None else target.parent / "banners.json"
     )
 
     if args.offline:
@@ -486,6 +588,22 @@ def main(
     write_snapshot(chars, char_target)
     print(summarize_characters(chars))
     print(f"已写入 {char_target}")
+
+    if args.offline or args.no_banners:
+        print("卡池名单未更新。")
+        return 0
+    try:
+        banners_html = fetch_prts_banners()
+    except RuntimeError as exc:
+        print(f"{exc}\n现有名单快照未改动。", file=sys.stderr)
+        return 0
+    banners = build_banners(snapshot, chars, banners_html)
+    if not banners["banners"]:
+        print("一条名单都没对齐，拒绝覆盖名单快照。", file=sys.stderr)
+        return 1
+    write_snapshot(banners, banner_target)
+    print(summarize_banners(banners))
+    print(f"已写入 {banner_target}")
     return 0
 
 

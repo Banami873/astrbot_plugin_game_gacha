@@ -26,10 +26,14 @@ PLACEHOLDER_NAMES: frozenset[str] = frozenset({"适合多种场合的强力干�
 
 # 与 resources/pool_rules.json 的 categories 段同构；配置文件缺失或损坏时用它兜底，
 # 免得整个插件因为一个 JSON 读不出来就查不到池。
+#
+# 注意 `DOUBLE` 与 `NORMAL` 的位置是反直觉的：官方 DOUBLE 是常驻标准寻访（双 6★ UP，
+# 两周一轮），NORMAL 是联合行动（池内 6★ 只有名单上那 4 名）。依据是 PRTS 卡池一览里
+# 23 期常驻标准与 6 期联合行动的时间对齐——每一期都能对上，没有例外。
 FALLBACK_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
     "限定": ("LIMITED",),
-    "常驻": ("NORMAL",),
-    "限时": ("SINGLE", "DOUBLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6"),
+    "常驻": ("DOUBLE",),
+    "限时": ("NORMAL", "SINGLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6"),
     "中坚": ("CLASSIC", "CLASSIC_DOUBLE", "CLASSIC_ATTAIN", "FESCLASSIC"),
     "联动": ("LINKAGE",),
 }
@@ -167,6 +171,70 @@ def load_channel_map(rules_path: Path | str) -> ChannelRules:
         )
     except (OSError, ValueError, TypeError):
         return ChannelRules(dict(DEFAULT_CHANNEL_MAP), dict(DEFAULT_CHANNEL_BY_RULE_TYPE))
+
+
+@dataclass(frozen=True)
+class UpShare:
+    """UP 干员占该星级总出率的比例。1.0 = 该星级只出名单内的人。"""
+
+    six: float = 0.5
+    five: float = 0.5
+
+    def of(self, star: int) -> float:
+        if star >= 6:
+            return self.six
+        if star == 5:
+            return self.five
+        return 0.0
+
+
+@dataclass(frozen=True)
+class UpShareRules:
+    """池型 → UP 份额。默认 0.5：两名 UP 各占该星级的四分之一。"""
+
+    by_rule_type: Mapping[str, UpShare]
+    default: UpShare = UpShare()
+
+    def for_pool(self, pool: "Pool") -> UpShare:
+        return self.by_rule_type.get(pool.rule_type, self.default)
+
+
+def _parse_share(raw: Any) -> UpShare | None:
+    """把 `{"6": 0.5, "5": 0.5}` 读成 UpShare。数值越界时夹到 [0, 1]。"""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        six = float(raw.get("6", 0.5))
+        five = float(raw.get("5", 0.5))
+    except (TypeError, ValueError):
+        return None
+    return UpShare(min(1.0, max(0.0, six)), min(1.0, max(0.0, five)))
+
+
+def load_up_share(rules_path: Path | str) -> UpShareRules:
+    """读出「池型 → UP 份额」。
+
+    保证：任何池型都有份额可查（未登记的走 default）。
+    失败：文件缺失或该段损坏时整体退回默认值——UP 加成本来就是锦上添花，
+    读不出来最多让概率回到均分，不能让抽卡指令不可用。
+    """
+    default = UpShare()
+    try:
+        raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return UpShareRules({}, default)
+    if not isinstance(raw, dict):
+        return UpShareRules({}, default)
+
+    fallback = _parse_share(raw.get("default_up_share")) or UpShare()
+    table = raw.get("up_share_by_rule_type")
+    by_rule_type: dict[str, UpShare] = {}
+    if isinstance(table, dict):
+        for rule_type, value in table.items():
+            share = _parse_share(value)
+            if share is not None:
+                by_rule_type[str(rule_type)] = share
+    return UpShareRules(by_rule_type, fallback)
 
 
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:

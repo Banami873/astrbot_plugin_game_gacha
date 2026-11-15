@@ -1,9 +1,9 @@
 {
-  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用；同一个 gachaRuleType 只能出现在一个类别里。unimplemented_rule_types 里的池型在解析时整条丢弃，不进列表也不能抽。channels_by_category / channels_by_rule_type 决定一个池能抽出哪几类基础池的干员（取值见 core/characters.py），rule_type 的个别覆盖优先于类别默认值；限定池同时给 limited 与 standard，因为限定池的非 UP 六星会歪到标准池干员，而中坚与联动永远互不串池。up6_share / up5_share 等概率参数由 issue 05 追加。",
+  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用。注意官方命名与直觉相反：DOUBLE 是常驻标准寻访（双 6★ UP，每两周 04:00 轮换），NORMAL 是联合行动（16:00 开、池内 6★ 只有名单上那 4 名）——依据是 PRTS 卡池一览里 23 期常驻标准与 6 期联合行动的时间对齐，见 games/arknights/data.py。unimplemented_rule_types 里的池型在解析时整条丢弃。channels_by_category / channels_by_rule_type 决定一个池能抽出哪几类基础池的干员（取值见 core/characters.py），rule_type 的个别覆盖优先于类别默认值。up_share_by_rule_type 是「UP 占该星级总出率的比例」：1.0 表示该星级只出名单内的人（联合行动、卫戍、甄选、跨年欢庆），0.5 表示两名 UP 各占四分之一。",
   "categories": {
     "限定": ["LIMITED"],
-    "常驻": ["NORMAL"],
-    "限时": ["SINGLE", "DOUBLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6"],
+    "常驻": ["DOUBLE"],
+    "限时": ["NORMAL", "SINGLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6"],
     "中坚": ["CLASSIC", "CLASSIC_DOUBLE", "CLASSIC_ATTAIN", "FESCLASSIC"],
     "联动": ["LINKAGE"]
   },
@@ -17,5 +17,20 @@
   },
   "channels_by_rule_type": {
     "FESCLASSIC": ["classic", "limited"]
-  }
+  },
+  "up_share_by_rule_type": {
+    "DOUBLE": {"6": 0.5, "5": 0.5},
+    "CLASSIC": {"6": 0.5, "5": 0.5},
+    "CLASSIC_DOUBLE": {"6": 0.5, "5": 0.5},
+    "SINGLE": {"6": 0.5, "5": 0.5},
+    "LIMITED": {"6": 0.7, "5": 0.5},
+    "LINKAGE": {"6": 0.5, "5": 0.5},
+    "NORMAL": {"6": 1.0, "5": 1.0},
+    "SPECIAL": {"6": 1.0, "5": 0.5},
+    "ATTAIN": {"6": 1.0, "5": 0.0},
+    "CLASSIC_ATTAIN": {"6": 1.0, "5": 0.0},
+    "FESCLASSIC": {"6": 1.0, "5": 0.5},
+    "GACHAWITHSPECIFIED6": {"6": 1.0, "5": 0.5}
+  },
+  "default_up_share": {"6": 0.5, "5": 0.5}
 }

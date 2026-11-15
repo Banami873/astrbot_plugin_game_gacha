@@ -125,6 +125,30 @@ def pick_member(members: Sequence[T], rng: RandomLike) -> T:
     return members[rng.randrange(len(members))]
 
 
+def pick_member_weighted(
+    members: Sequence[T], weights_: Sequence[float], rng: RandomLike
+) -> T:
+    """按权重在候选里取一个，用于「UP 占多数、其余按比例分剩下的概率」。
+
+    保证：返回 `members` 里的一项；权重全为 0 或与候选数不等时退回等概率——配置写错
+    只该让 UP 加成失效，不该让抽卡直接失败。
+    """
+    if not members:
+        raise ValueError("候选为空")
+    if len(weights_) != len(members) or sum(w for w in weights_ if w > 0) <= 0:
+        return pick_member(members, rng)
+    total = sum(w for w in weights_ if w > 0)
+    roll = rng.random() * total
+    acc = 0.0
+    for member, weight in zip(members, weights_):
+        if weight <= 0:
+            continue
+        acc += weight
+        if roll < acc:
+            return member
+    return members[-1]
+
+
 def distance_to_hard_pity(
     counter: int, *, hard_pity: int = 99
 ) -> int:
