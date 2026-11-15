@@ -15,6 +15,11 @@ from test_isolation import FakeEvent, run
 
 NOW_END = 4102444800  # 2100-01-01，测试池永不过期
 
+# 池能抽哪些渠道，正式代码里由 `pool_rules.json` 的 channels_by_category 决定；
+# 引擎层的用例只关心「按给定渠道抽」这一件事，所以直接给常量。
+STANDARD = ("standard",)
+LIMITED_CHANNELS = ("limited", "standard")
+
 
 def _pool(pools_pkg, **kwargs):
     base = dict(
@@ -60,7 +65,8 @@ def pool(pools_pkg):
 class TestArkEngine:
     def test_batch_has_exactly_requested_count(self, ark_engine_mod, real_roster, pool):
         batch = ark_engine_mod.draw_batch(
-            real_roster, pool, counter=0, times=10, rng=random.Random(1)
+            real_roster, pool, counter=0, times=10, rng=random.Random(1),
+            channels=STANDARD,
         )
         assert len(batch.drafts) == 10
         assert all(3 <= d.star <= 6 for d in batch.drafts)
@@ -69,10 +75,12 @@ class TestArkEngine:
     def test_six_star_resets_counter(self, ark_engine_mod, real_roster, pool):
         # 0.0 落在 6★ 区间；0.99 落在 3★ 区间
         six = ark_engine_mod.draw_batch(
-            real_roster, pool, counter=40, times=1, rng=Always(0.0)
+            real_roster, pool, counter=40, times=1, rng=Always(0.0),
+            channels=STANDARD,
         )
         three = ark_engine_mod.draw_batch(
-            real_roster, pool, counter=40, times=1, rng=Always(0.99)
+            real_roster, pool, counter=40, times=1, rng=Always(0.99),
+            channels=STANDARD,
         )
         assert six.drafts[0].star == 6
         assert six.six_counter == 0
@@ -80,7 +88,7 @@ class TestArkEngine:
         assert three.six_counter == 41
 
     def test_standard_pool_never_gives_limited_operators(
-        self, ark_engine_mod, real_roster, pool, pools_pkg
+        self, ark_engine_mod, real_roster, pool
     ):
         batch = ark_engine_mod.draw_batch(
             real_roster,
@@ -88,10 +96,29 @@ class TestArkEngine:
             counter=0,
             times=5000,
             rng=random.Random(11),
-            limited_types=pools_pkg.DEFAULT_LIMITED_ROSTER_TYPES,
+            channels=STANDARD,
         )
         pulled = {d.char_id for d in batch.drafts}
         assert not [cid for cid in pulled if real_roster.get(cid).limited]
+
+    def test_standard_pool_never_gives_linkage_or_classic_operators(
+        self, ark_engine_mod, real_roster, pool
+    ):
+        """串池的正面防护：标准池抽 5000 次，一个联动/中坚干员都不能出现。"""
+        batch = ark_engine_mod.draw_batch(
+            real_roster,
+            pool,
+            counter=0,
+            times=5000,
+            rng=random.Random(17),
+            channels=STANDARD,
+        )
+        crossed = [
+            (d.name, sorted(real_roster.get(d.char_id).channels))
+            for d in batch.drafts
+            if not (real_roster.get(d.char_id).channels & set(STANDARD))
+        ]
+        assert not crossed, f"标准池抽到了非标准渠道干员：{crossed[:5]}"
 
     def test_limited_pool_can_give_limited_operators(
         self, ark_engine_mod, real_roster, pools_pkg
@@ -105,13 +132,13 @@ class TestArkEngine:
             counter=0,
             times=5000,
             rng=random.Random(12),
-            limited_types=pools_pkg.DEFAULT_LIMITED_ROSTER_TYPES,
+            channels=LIMITED_CHANNELS,
         )
         pulled = {d.char_id for d in batch.drafts}
         assert [cid for cid in pulled if real_roster.get(cid).limited]
 
     def test_named_pool_restricts_six_star_to_its_list(self, ark_engine_mod, real_roster, pools_pkg):
-        roster = real_roster.of_rarity(6)
+        roster = real_roster.of_rarity(6, channels=STANDARD)
         claimed = {c.char_id for c in roster[:3]}
         named = _pool(
             pools_pkg,
@@ -121,7 +148,8 @@ class TestArkEngine:
             char_ids=tuple(sorted(claimed)),
         )
         batch = ark_engine_mod.draw_batch(
-            real_roster, named, counter=0, times=3000, rng=random.Random(13)
+            real_roster, named, counter=0, times=3000, rng=random.Random(13),
+            channels=STANDARD,
         )
         six = {d.char_id for d in batch.drafts if d.star == 6}
         assert six and six <= claimed
@@ -129,12 +157,22 @@ class TestArkEngine:
     def test_empty_roster_is_rejected(self, ark_engine_mod, characters_mod, pool):
         with pytest.raises(ValueError):
             ark_engine_mod.draw_batch(
-                characters_mod.Roster(), pool, counter=0, times=1, rng=random.Random(1)
+                characters_mod.Roster(), pool, counter=0, times=1,
+                rng=random.Random(1), channels=STANDARD,
+            )
+
+    def test_empty_channel_is_rejected(self, ark_engine_mod, real_roster, pool):
+        """渠道里一个人都没有时宁可报错，也不能退回全量去串池。"""
+        with pytest.raises(ValueError):
+            ark_engine_mod.draw_batch(
+                real_roster, pool, counter=0, times=1,
+                rng=random.Random(1), channels=("bogus",),
             )
 
     def test_star_counts_match_drafts(self, ark_engine_mod, real_roster, pool):
         batch = ark_engine_mod.draw_batch(
-            real_roster, pool, counter=0, times=10, rng=random.Random(2)
+            real_roster, pool, counter=0, times=10, rng=random.Random(2),
+            channels=STANDARD,
         )
         assert sum(batch.star_counts().values()) == 10
 
@@ -228,7 +266,10 @@ class TestPullCommands:
         instance.roster = real_roster
         instance.category_map = pools_pkg.FALLBACK_CATEGORY_MAP
         instance.unimplemented = frozenset()
-        instance.limited_types = pools_pkg.DEFAULT_LIMITED_ROSTER_TYPES
+        instance.channel_rules = pools_pkg.ChannelRules(
+            dict(pools_pkg.DEFAULT_CHANNEL_MAP),
+            dict(pools_pkg.DEFAULT_CHANNEL_BY_RULE_TYPE),
+        )
         instance._locks = {}
         instance._load_error = ""
         instance._roster_error = ""

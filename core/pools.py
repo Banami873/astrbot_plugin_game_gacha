@@ -40,11 +40,26 @@ FALLBACK_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
 # 没有对应 gachaRuleType，故不在名单内）。
 DEFAULT_UNIMPLEMENTED: frozenset[str] = frozenset({"BACKFLOW"})
 
-# 能出限定干员的池型。标准/中坚寻访里没有限定干员，限定与联动池才有；
-# 跨年欢庆（FESCLASSIC）本身就是限定干员的复刻池。
-DEFAULT_LIMITED_ROSTER_TYPES: frozenset[str] = frozenset(
-    {"LIMITED", "LINKAGE", "FESCLASSIC"}
-)
+# 一个池能抽出哪几类寻访渠道的干员。渠道名与 `core/characters.py` 的常量一致。
+# 限定池与联动池都同时给 standard：两类池都只是「6★ 换成限定/联动」，低星与歪出来的
+# 六星仍来自标准池——联动干员里没有一个 3★ 或 4★，只给 linkage 会让抽到 3★ 时无人
+# 可抽。中坚池是独立生态，与标准、联动都不互通，这正是串池问题的源头。
+DEFAULT_CHANNEL_MAP: dict[str, tuple[str, ...]] = {
+    "限定": ("limited", "standard"),
+    "常驻": ("standard",),
+    "限时": ("standard",),
+    "中坚": ("classic",),
+    "联动": ("linkage", "standard"),
+}
+
+# 个别池型要覆盖类别默认值。跨年欢庆（FESCLASSIC）归在中坚类里，但它是限定干员的
+# 复刻池，所以中坚之外还要能出限定。
+DEFAULT_CHANNEL_BY_RULE_TYPE: dict[str, tuple[str, ...]] = {
+    "FESCLASSIC": ("classic", "limited"),
+}
+
+# 类别的渠道映射缺失时的兜底。标准寻访覆盖面最广，新池型猜成标准比猜成中坚或联动安全。
+FALLBACK_CHANNELS: tuple[str, ...] = ("standard",)
 
 # 抽卡指令里「没指定池」时的取值理由，文案层据此决定说什么。
 CHOICE_OK = ""
@@ -94,22 +109,60 @@ def load_unimplemented_types(rules_path: Path | str) -> frozenset[str]:
         return DEFAULT_UNIMPLEMENTED
 
 
-def load_limited_roster_types(rules_path: Path | str) -> frozenset[str]:
-    """读出「能出限定干员的池型」名单。
+@dataclass(frozen=True)
+class ChannelRules:
+    """池 → 能出的寻访渠道。规则装配一次，之后每次抽卡只是查表。"""
 
-    保证：返回一个集合，非空。
-    失败：文件缺失、JSON 损坏或该段缺失/不是非空数组时退回
-    `DEFAULT_LIMITED_ROSTER_TYPES`——漏了这条只会让标准池偶尔蹦出限定干员，
-    不影响抽卡本身，不值得让插件起不来。
+    by_category: Mapping[str, tuple[str, ...]]
+    by_rule_type: Mapping[str, tuple[str, ...]]
+
+    def for_pool(self, pool: Pool) -> frozenset[str]:
+        """这个池能抽出哪几类渠道的干员。
+
+        池型的个别覆盖优先于类别默认值；两者都没有时退回标准寻访——宁可让一个没
+        登记的新池型按最常见的方式抽，也不要让它一个人都抽不出来。
+        """
+        specific = self.by_rule_type.get(pool.rule_type)
+        if specific:
+            return frozenset(specific)
+        return frozenset(self.by_category.get(pool.category, FALLBACK_CHANNELS))
+
+    def categories_missing(self, category_map: Mapping[str, Sequence[str]]) -> tuple[str, ...]:
+        """哪些类别没有配渠道。启动自检用：漏配不会崩，但会静默按兜底抽。"""
+        return tuple(
+            name for name in category_map if name not in self.by_category
+        )
+
+
+def load_channel_map(rules_path: Path | str) -> ChannelRules:
+    """读出「池 → 寻访渠道」的两段映射。
+
+    保证：返回的规则总能回答「这个池能出什么」，最差也会退回 `DEFAULT_CHANNEL_MAP`。
+    失败：文件缺失、JSON 损坏或两段都读不出时整体退回默认值——渠道配错的后果是抽出
+    不该出现的干员（可见、可修），而让插件起不来是用户完全没法用的状态。
     """
+
+    def _section(raw: Mapping[str, Any], key: str, fallback: Mapping[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+        value = raw.get(key)
+        if not isinstance(value, dict):
+            return dict(fallback)
+        parsed = {
+            str(name): tuple(str(channel) for channel in channels)
+            for name, channels in value.items()
+            if isinstance(channels, list) and channels
+        }
+        return parsed or dict(fallback)
+
     try:
         raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
-        listed = raw["limited_roster_rule_types"]
-        if not isinstance(listed, list) or not listed:
-            raise TypeError("limited_roster_rule_types 不是非空数组")
-        return frozenset(str(t) for t in listed)
-    except (OSError, ValueError, KeyError, TypeError):
-        return DEFAULT_LIMITED_ROSTER_TYPES
+        if not isinstance(raw, dict):
+            raise TypeError("规则文件顶层不是对象")
+        return ChannelRules(
+            _section(raw, "channels_by_category", DEFAULT_CHANNEL_MAP),
+            _section(raw, "channels_by_rule_type", DEFAULT_CHANNEL_BY_RULE_TYPE),
+        )
+    except (OSError, ValueError, TypeError):
+        return ChannelRules(dict(DEFAULT_CHANNEL_MAP), dict(DEFAULT_CHANNEL_BY_RULE_TYPE))
 
 
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:

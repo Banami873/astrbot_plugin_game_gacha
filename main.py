@@ -68,7 +68,10 @@ class GameGachaPlugin(Star):
             pool_module.FALLBACK_CATEGORY_MAP
         )
         self.unimplemented: frozenset[str] = pool_module.DEFAULT_UNIMPLEMENTED
-        self.limited_types: frozenset[str] = pool_module.DEFAULT_LIMITED_ROSTER_TYPES
+        self.channel_rules: pool_module.ChannelRules = pool_module.ChannelRules(
+            dict(pool_module.DEFAULT_CHANNEL_MAP),
+            dict(pool_module.DEFAULT_CHANNEL_BY_RULE_TYPE),
+        )
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
         self._roster_error = ""
@@ -85,7 +88,13 @@ class GameGachaPlugin(Star):
 
         self.category_map = pool_module.load_category_map(RULES_PATH)
         self.unimplemented = pool_module.load_unimplemented_types(RULES_PATH)
-        self.limited_types = pool_module.load_limited_roster_types(RULES_PATH)
+        self.channel_rules = pool_module.load_channel_map(RULES_PATH)
+        missing = self.channel_rules.categories_missing(self.category_map)
+        if missing:
+            # 漏配不会崩，但会静默按标准寻访抽——抽出来的池子看着正常，其实是错的。
+            logger.warning(
+                f"[{PLUGIN_NAME}] 类别 {missing} 没有配寻访渠道，将按标准寻访处理"
+            )
         try:
             self.snapshot = pool_module.load_snapshot(
                 SNAPSHOT_PATH, self.category_map, self.unimplemented
@@ -320,7 +329,7 @@ class GameGachaPlugin(Star):
                 counter=state.six_counter,
                 times=times,
                 rng=random.Random(),
-                limited_types=self.limited_types,
+                channels=self.channel_rules.for_pool(pool),
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")

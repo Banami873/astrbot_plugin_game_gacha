@@ -407,3 +407,77 @@ class TestChoosePool:
         snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="N", gachaRuleType="NORMAL")])
         choice = pools_mod.choose_pool(snapshot, NOW, ["联动"])
         assert choice.reason == pools_mod.CHOICE_NO_CATEGORY
+
+
+class TestChannelRules:
+    """R-04/R-05 的底座：一个池能抽出哪几类寻访渠道的干员。
+
+    联调时踩过的坑：标准池从「全部干员」里抽，联动干员就会出现在标准池里；
+    联动池只给 linkage，抽到 3★ 时无人可抽。两头都用测试钉住。
+    """
+
+    def _pool(self, pools_mod, *, rule_type="NORMAL", category="常驻"):
+        return pools_mod.Pool(
+            pool_id="P",
+            rule_type=rule_type,
+            open_time=0,
+            end_time=NOW + DAY,
+            category=category,
+            name="测试池",
+        )
+
+    def test_standard_family_only_gives_standard(self, pools_mod, plugin_dir):
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        for category in ("常驻", "限时"):
+            pool = self._pool(pools_mod, category=category)
+            assert rules.for_pool(pool) == frozenset({"standard"})
+
+    def test_limited_pool_includes_standard_for_off_banner(self, pools_mod, plugin_dir):
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        pool = self._pool(pools_mod, rule_type="LIMITED", category="限定")
+        assert rules.for_pool(pool) == frozenset({"limited", "standard"})
+
+    def test_linkage_pool_includes_standard_for_low_stars(self, pools_mod, plugin_dir):
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        pool = self._pool(pools_mod, rule_type="LINKAGE", category="联动")
+        assert rules.for_pool(pool) == frozenset({"linkage", "standard"})
+
+    def test_classic_pool_is_isolated(self, pools_mod, plugin_dir):
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        pool = self._pool(pools_mod, rule_type="CLASSIC", category="中坚")
+        assert rules.for_pool(pool) == frozenset({"classic"})
+
+    def test_rule_type_override_beats_category(self, pools_mod, plugin_dir):
+        # 跨年欢庆归在中坚类，但它是限定复刻池，要额外能出限定干员。
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        pool = self._pool(pools_mod, rule_type="FESCLASSIC", category="中坚")
+        assert rules.for_pool(pool) == frozenset({"classic", "limited"})
+
+    def test_unknown_category_falls_back_to_standard(self, pools_mod, plugin_dir):
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        pool = self._pool(pools_mod, rule_type="WHATEVER", category="其他")
+        assert rules.for_pool(pool) == frozenset({"standard"})
+
+    def test_missing_file_still_answers(self, pools_mod, tmp_path):
+        rules = pools_mod.load_channel_map(tmp_path / "没有.json")
+        pool = self._pool(pools_mod, rule_type="LIMITED", category="限定")
+        assert rules.for_pool(pool) == frozenset({"limited", "standard"})
+
+    def test_corrupt_file_still_answers(self, pools_mod, tmp_path):
+        path = tmp_path / "rules.json"
+        path.write_text("{ 不是 json", encoding="utf-8")
+        rules = pools_mod.load_channel_map(path)
+        assert rules.for_pool(self._pool(pools_mod)) == frozenset({"standard"})
+
+    def test_reports_categories_without_channels(self, pools_mod):
+        rules = pools_mod.ChannelRules(by_category={"常驻": ("standard",)}, by_rule_type={})
+        missing = rules.categories_missing(
+            {"常驻": ("NORMAL",), "联动": ("LINKAGE",)}
+        )
+        assert missing == ("联动",)
+
+    def test_shipped_rules_cover_every_category(self, pools_mod, plugin_dir):
+        """随包的 pool_rules.json 必须给每个类别都配了渠道，否则启动会告警。"""
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        categories = pools_mod.load_category_map(plugin_dir / "resources" / "pool_rules.json")
+        assert rules.categories_missing(categories) == ()

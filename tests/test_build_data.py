@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 
 def _official_pool(**kwargs):
     base = {
@@ -142,3 +144,137 @@ class TestRealSnapshotMatchesScript:
         rebuilt = build_data_mod.trim(committed)
         assert committed["pools"] == rebuilt["pools"]
         assert any(p.get("charIdList") for p in committed["pools"]), "名单池必须带着 charIdList"
+
+
+# ---- PRTS 寻访渠道 -------------------------------------------------------
+
+
+_PRTS_PAGE = """
+<div data-zh="标准那位" data-char-id="char&#95;1&#95;std" data-obtain-method="标准寻访, 中坚寻访">x</div>
+<div data-zh="联动那位" data-char-id="char&#95;2&#95;link" data-obtain-method="联动寻访">x</div>
+<div data-zh="限定那位" data-char-id="char&#95;3&#95;ltd" data-obtain-method="限定寻访">x</div>
+<div data-zh="商店那位" data-char-id="char&#95;4&#95;shop" data-obtain-method="凭证交易所(采购)">x</div>
+<div data-zh="赠送那位" data-char-id="char&#95;5&#95;gift" data-obtain-method="活动获得">x</div>
+<div data-id="TOKEN" data-obtain-method="标准寻访">x</div>
+"""
+
+
+class TestParsePrtsChannels:
+    def test_maps_methods_to_channels(self, build_data_mod):
+        found = build_data_mod.parse_prts_channels(_PRTS_PAGE)
+        assert found["char_1_std"] == ["classic", "standard"]
+        assert found["char_2_link"] == ["linkage"]
+        assert found["char_3_ltd"] == ["limited"]
+
+    def test_drops_characters_without_a_search_channel(self, build_data_mod):
+        found = build_data_mod.parse_prts_channels(_PRTS_PAGE)
+        assert "char_4_shop" not in found, "凭证交易所的干员不能进寻访池"
+        assert "char_5_gift" not in found, "活动赠送的干员不能进寻访池"
+
+    def test_ignores_divs_without_a_char_id(self, build_data_mod):
+        found = build_data_mod.parse_prts_channels(_PRTS_PAGE)
+        assert set(found) == {"char_1_std", "char_2_link", "char_3_ltd"}
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class TestFetchPrtsChannels:
+    def test_rejects_a_suspiciously_small_result(self, build_data_mod, monkeypatch):
+        # 被 WAF 拦下时页面里一个干员都没有：这里必须报错，否则整份字典会被清空。
+        monkeypatch.setattr(
+            build_data_mod.urllib.request,
+            "urlopen",
+            lambda *a, **k: _FakeResponse(b"<html><body>403</body></html>"),
+        )
+        with pytest.raises(RuntimeError):
+            build_data_mod.fetch_prts_channels()
+
+    def test_returns_channels_on_a_full_page(self, build_data_mod, monkeypatch):
+        rows = "".join(
+            f'<div data-char-id="char&#95;{i}&#95;x" data-obtain-method="标准寻访">x</div>'
+            for i in range(build_data_mod.PRTS_MIN_CHANNELS + 10)
+        )
+        monkeypatch.setattr(
+            build_data_mod.urllib.request,
+            "urlopen",
+            lambda *a, **k: _FakeResponse(rows.encode("utf-8")),
+        )
+        found = build_data_mod.fetch_prts_channels()
+        assert len(found) > build_data_mod.PRTS_MIN_CHANNELS - 1
+
+
+# ---- 干员裁剪 ------------------------------------------------------------
+
+
+def _official_char(char_id, name, rarity, **extra):
+    row = {"name": name, "rarity": rarity, "profession": "WARRIOR"}
+    row.update(extra)
+    return char_id, row
+
+
+class TestTrimCharacters:
+    def test_keeps_only_characters_with_a_search_channel(self, build_data_mod):
+        payload = dict(
+            [
+                _official_char("char_a", "能抽", "TIER_6"),
+                _official_char("char_b", "商店", "TIER_5"),
+            ]
+        )
+        out = build_data_mod.trim_characters(
+            payload, [], {"char_a": ["standard"]}
+        )
+        assert [c["id"] for c in out["characters"]] == ["char_a"]
+        assert out["characters"][0]["channels"] == ["standard"]
+        assert out["excluded_no_channel"] == 1
+
+    def test_records_the_channel_source(self, build_data_mod):
+        out = build_data_mod.trim_characters(
+            dict([_official_char("char_a", "能抽", "TIER_6")]), [], {"char_a": ["standard"]}
+        )
+        assert out["channel_source"] == build_data_mod.PRTS_ROSTER_URL
+
+    def test_without_channels_it_does_not_filter(self, build_data_mod):
+        # 诊断模式：不传渠道表就不过滤，但 source 留空，提醒这不是正常产物。
+        payload = dict(
+            [
+                _official_char("char_a", "能抽", "TIER_6"),
+                _official_char("char_b", "商店", "TIER_5"),
+            ]
+        )
+        out = build_data_mod.trim_characters(payload)
+        assert len(out["characters"]) == 2
+        assert out["channel_source"] == ""
+        assert "channels" not in out["characters"][0]
+
+    def test_limited_flag_survives_with_channels(self, build_data_mod):
+        payload = dict([_official_char("char_w", "W", "TIER_6")])
+        out = build_data_mod.trim_characters(
+            payload, ["char_w"], {"char_w": ["limited"]}
+        )
+        assert out["characters"][0]["limited"] is True
+
+    def test_offline_roundtrip_keeps_channels(self, build_data_mod, tmp_path):
+        payload = dict(
+            [
+                _official_char("char_a", "能抽", "TIER_6"),
+                _official_char("char_b", "商店", "TIER_5"),
+            ]
+        )
+        first = build_data_mod.trim_characters(payload, [], {"char_a": ["standard"]})
+        again = build_data_mod.trim_characters(
+            first, [], build_data_mod.channels_from_snapshot(first)
+        )
+        assert again["characters"] == first["characters"]
+        assert again["excluded_no_channel"] == 0

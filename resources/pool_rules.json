@@ -1,5 +1,5 @@
 {
-  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用；同一个 gachaRuleType 只能出现在一个类别里。unimplemented_rule_types 里的池型在解析时整条丢弃，不进列表也不能抽。limited_roster_rule_types 是可以出限定干员的池型：标准/中坚/限时的池里没有限定干员，写在这里而不是代码里。up6_share / up5_share 等概率参数由 issue 05 追加。",
+  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用；同一个 gachaRuleType 只能出现在一个类别里。unimplemented_rule_types 里的池型在解析时整条丢弃，不进列表也不能抽。channels_by_category / channels_by_rule_type 决定一个池能抽出哪几类寻访渠道的干员（渠道名见 core/characters.py），rule_type 的个别覆盖优先于类别默认值；限定池同时给 limited 与 standard，因为限定池的非 UP 六星会歪到标准池干员，而中坚与联动永远互不串池。up6_share / up5_share 等概率参数由 issue 05 追加。",
   "categories": {
     "限定": ["LIMITED"],
     "常驻": ["NORMAL"],
@@ -8,5 +8,14 @@
     "联动": ["LINKAGE"]
   },
   "unimplemented_rule_types": ["BACKFLOW"],
-  "limited_roster_rule_types": ["LIMITED", "LINKAGE", "FESCLASSIC"]
+  "channels_by_category": {
+    "限定": ["limited", "standard"],
+    "常驻": ["standard"],
+    "限时": ["standard"],
+    "中坚": ["classic"],
+    "联动": ["linkage", "standard"]
+  },
+  "channels_by_rule_type": {
+    "FESCLASSIC": ["classic", "limited"]
+  }
 }

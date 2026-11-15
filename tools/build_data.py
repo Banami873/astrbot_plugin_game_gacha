@@ -1,10 +1,11 @@
-"""从官方游戏数据仓库拉卡池表与干员表，裁剪成随包快照。
+"""从官方游戏数据仓库拉卡池表与干员表，再补上 PRTS 的寻访渠道，裁剪成随包快照。
 
 卡池快照只保留骨架字段：池 id、池型、起止、保底与井参数、名单池的 charId。池名与
 UP 名单不在这里——官方表近期池名是占位串、详情为空，那半边必须另找来源（见 SPEC R-14）。
 
-干员快照是抽卡结果的落点：id、名字、星级、是否限定。限定标记由卡池表的
-`limitParam.limitedCharId` 反推——那是官方自己声明的限定干员名单，比按名字猜可靠。
+干员快照是抽卡结果的落点：id、名字、星级、是否限定、能出现在哪类寻访里。限定标记由
+卡池表的 `limitParam.limitedCharId` 反推——那是官方自己声明的限定干员名单，比按名字猜
+可靠；「哪类寻访」来自 PRTS 的干员一览，理由见下面的 `PRTS_ROSTER_URL`。
 
 用法（在 AstrBot 根目录执行）：
 
@@ -17,13 +18,15 @@ UP 名单不在这里——官方表近期池名是占位串、详情为空，�
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 CST = timezone(timedelta(hours=8))
 
@@ -81,6 +84,104 @@ def fetch(url: str = SOURCE_URL, timeout: int = 90) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise RuntimeError("响应顶层不是对象，可能被重定向到了别的页面")
     return payload
+
+
+# ---- PRTS 寻访渠道 -------------------------------------------------------
+
+# 官方 `character_table.json` 里只有一个自由文本的 `itemObtainApproach`，它是「主要获
+# 取途径」，不是「能不能抽」：
+#   - 写着「凭证交易所(采购)」的 14 人（微风、伊桑…）确实不在任何寻访池里；
+#   - 写着「活动获得」的 73 人也不会出现在寻访里；
+#   - 但 `isNotObtainable` 只排除彻底拿不到的干员，把这 103 人全放过来了。
+# 只看这个字段就会让阿米娅（主线剧情）、暴行（周年奖励）、清流（限时礼包）被抽出来。
+#
+# PRTS 的干员一览给每人标了全部获取方式（同一人可以既在标准池又在中坚池），与游戏内
+# 按「寻访类型」筛选一一对应。页面是服务端渲染的，带上完整浏览器头直接 GET 就能拿到，
+# 不必解析 JS。实测口径：标准 156 / 中坚 178 / 限定 27 / 联动 19，标准与中坚重叠 62 人，
+# 可寻访合计 318 人。
+PRTS_ROSTER_URL = "https://prts.wiki/w/%E5%B9%B2%E5%91%98%E4%B8%80%E8%A7%88"
+
+# PRTS 挂着 WAF：只带 UA 会 403，得像个浏览器一样把语言与 Sec-Fetch-* 都带上。
+PRTS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
+
+# PRTS 的获取方式 → 本项目的渠道名。只有这四种算「能通过寻访获得」，其余（公开招募、
+# 活动获得、主线剧情、凭证交易所、信用交易所、集成战略…）都不进抽卡池。
+CHANNEL_BY_METHOD: dict[str, str] = {
+    "标准寻访": "standard",
+    "限定寻访": "limited",
+    "中坚寻访": "classic",
+    "联动寻访": "linkage",
+}
+
+_DIV_TAG_RE = re.compile(r"<div ([^>]*?)>")
+_DATA_ATTR_RE = re.compile(r'data-([a-z\-]+)="([^"]*)"')
+
+# 解析出的干员数低于这个值时判定为「页面变了或被拦了」。正常是 300+。
+PRTS_MIN_CHANNELS = 100
+
+
+def parse_prts_channels(page: str) -> dict[str, list[str]]:
+    """从 PRTS 干员一览的 HTML 里取出 `{char_id: [渠道...]}`。
+
+    每个干员渲染成一个带 `data-*` 属性的 div，获取方式在 `data-obtain-method` 里，
+    多个之间用逗号分隔；id 里的下划线被写成 `&#95;`，要反转义。
+    没有寻访渠道的干员不会出现在结果里——它们本来就不该被抽到。
+    """
+    found: dict[str, list[str]] = {}
+    for attrs in _DIV_TAG_RE.findall(page):
+        fields = dict(_DATA_ATTR_RE.findall(attrs))
+        char_id = html.unescape(fields.get("char-id", ""))
+        if not char_id.startswith("char_"):
+            continue
+        methods = {part.strip() for part in fields.get("obtain-method", "").split(",")}
+        channels = sorted(
+            {CHANNEL_BY_METHOD[m] for m in methods if m in CHANNEL_BY_METHOD}
+        )
+        if channels:
+            found[char_id] = channels
+    return found
+
+
+def fetch_prts_channels(timeout: int = 60) -> dict[str, list[str]]:
+    """下载 PRTS 干员一览并解析出渠道表。
+
+    失败：网络异常、页面不是 UTF-8、或解析结果少得离谱时抛 `RuntimeError`。最后一种
+    最要紧——一份残缺的渠道表会让大半个干员字典被当成「不可寻访」删掉，宁可整趟失败。
+    """
+    request = urllib.request.Request(PRTS_ROSTER_URL, headers=PRTS_HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"PRTS 干员一览下载失败：{exc}") from exc
+    try:
+        page = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"PRTS 页面不是 UTF-8：{exc}") from exc
+    channels = parse_prts_channels(page)
+    if len(channels) < PRTS_MIN_CHANNELS:
+        raise RuntimeError(
+            f"PRTS 只解析出 {len(channels)} 名干员，疑似被拦截或页面结构变化"
+        )
+    return channels
+
+
+def channels_from_snapshot(payload: dict[str, Any]) -> dict[str, list[str]]:
+    """从已产出的干员快照里读回渠道标记，供 `--offline` 重建用。"""
+    found: dict[str, list[str]] = {}
+    for raw in _raw_characters(payload):
+        char_id = str(raw.get("id") or "")
+        marked = raw.get("channels")
+        if char_id and isinstance(marked, list) and marked:
+            found[char_id] = [str(channel) for channel in marked]
+    return found
 
 
 def read_snapshot(path: Path = SNAPSHOT_PATH) -> dict[str, Any]:
@@ -185,19 +286,26 @@ def _raw_characters(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def trim_characters(
-    payload: dict[str, Any], limited_ids: list[str] | tuple[str, ...] = ()
+    payload: dict[str, Any],
+    limited_ids: list[str] | tuple[str, ...] = (),
+    channels: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, Any]:
     """裁剪成干员快照。
 
-    保证：只留寻访能出的干员（3–6 星、非召唤物、可获取），每条都带 id / name /
-    rarity；限定干员额外带 `limited: true`。输出的列表按星级降序、id 升序，
-    同一份输入永远得到同一份输出。
-    补齐：`limited` 取「卡池表推出的限定名单」与「输入里已标的限定」的并集，
-    于是 `--offline` 回读写回的快照不会把限定标记洗掉。
+    保证：只留寻访能出的干员（3–6 星、非召唤物、可获取、且至少有一种寻访渠道），每条
+    都带 id / name / rarity / channels；限定干员额外带 `limited: true`。输出的列表按
+    星级降序、id 升序，同一份输入永远得到同一份输出。
+
+    `channels` 是权威渠道表（来自 PRTS）；为 None 时不做渠道过滤，只用于诊断——正式
+    产出一律要求它非空，因为缺了它就会把活动赠送和商店干员一起放回池子里。
+
+    补齐：`limited` 取「卡池表推出的限定名单」与「输入里已标的限定」的并集，于是
+    `--offline` 回读写回的快照不会把限定标记洗掉。
     """
     limited = set(limited_ids)
     characters: list[dict[str, Any]] = []
     skipped = 0
+    excluded = 0
     for raw in _raw_characters(payload):
         try:
             char_id = str(raw["id"])
@@ -219,27 +327,50 @@ def trim_characters(
         if raw.get("isNotObtainable"):
             continue
         item: dict[str, Any] = {"id": char_id, "name": name, "rarity": rarity}
+        if channels is not None:
+            marked = channels.get(char_id)
+            if not marked:
+                # 活动赠送、主线剧情、凭证/信用交易所、肉鸽奖励之类：任何一个寻访池
+                # 都出不了他们，进字典就等于让玩家抽到抽不到的人。
+                excluded += 1
+                continue
+            item["channels"] = sorted(marked)
         if char_id in limited or raw.get("limited"):
             item["limited"] = True
         characters.append(item)
     characters.sort(key=lambda c: (-c["rarity"], c["id"]))
     return {
         "source": CHAR_SOURCE_URL,
+        "channel_source": PRTS_ROSTER_URL if channels is not None else "",
         "fetched_at": datetime.now(CST).isoformat(timespec="seconds"),
         "skipped": skipped,
+        "excluded_no_channel": excluded,
         "characters": characters,
     }
 
 
 def summarize_characters(snapshot: dict[str, Any]) -> str:
-    """统计各星级人数，方便肉眼核对本次拉取是否合理。"""
+    """统计各星级人数与渠道分布，方便肉眼核对本次拉取是否合理。"""
+    rows = snapshot.get("characters") or ()
     counts: dict[int, int] = {}
-    for character in snapshot.get("characters") or ():
+    channel_counts: dict[str, int] = {}
+    for character in rows:
         counts[character["rarity"]] = counts.get(character["rarity"], 0) + 1
-    limited = sum(1 for c in snapshot.get("characters") or () if c.get("limited"))
-    lines = [f"干员总数 {len(snapshot.get('characters') or ())}（限定 {limited}）"]
+        for channel in character.get("channels") or ():
+            channel_counts[channel] = channel_counts.get(channel, 0) + 1
+    limited = sum(1 for c in rows if c.get("limited"))
+    lines = [f"干员总数 {len(rows)}（限定 {limited}）"]
     for rarity in sorted(counts, reverse=True):
         lines.append(f"  {rarity} 星 {counts[rarity]:>4}")
+    if channel_counts:
+        # 一个人可以同时在标准池与中坚池，故分项之和大于总数。
+        parts = " / ".join(
+            f"{name} {channel_counts.get(name, 0)}"
+            for name in ("standard", "classic", "limited", "linkage")
+        )
+        lines.append(f"  渠道：{parts}")
+    if snapshot.get("excluded_no_channel"):
+        lines.append(f"排除无寻访渠道的干员 {snapshot['excluded_no_channel']} 名")
     if snapshot.get("skipped"):
         lines.append(f"跳过无法解析的记录 {snapshot['skipped']} 条")
     return "\n".join(lines)
@@ -308,6 +439,9 @@ def main(
         except (FileNotFoundError, json.JSONDecodeError) as exc:
             char_payload = None
             print(f"干员快照不可用，跳过干员重建：{exc}", file=sys.stderr)
+        # 离线时渠道表只能来自旧快照本身：这样 --offline 走的是与联网完全相同的裁剪
+        # 路径，才谈得上验证幂等。
+        channels = channels_from_snapshot(char_payload) if char_payload else {}
     else:
         try:
             payload = fetch()
@@ -320,6 +454,13 @@ def main(
         except RuntimeError as exc:
             char_payload = None
             print(f"干员表下载失败：{exc}\n现有干员快照未改动。", file=sys.stderr)
+        try:
+            channels = fetch_prts_channels()
+        except RuntimeError as exc:
+            # 渠道表抓不到就不产出干员快照：退化成「无渠道过滤」会把活动赠送和商店
+            # 干员重新放回池里，比沿用旧字典糟糕得多。
+            char_payload = None
+            print(f"{exc}\n现有干员快照未改动。", file=sys.stderr)
 
     snapshot = trim(payload)
     if not snapshot["pools"]:
@@ -332,7 +473,12 @@ def main(
     if char_payload is None:
         print("干员快照未更新。")
         return 0
-    chars = trim_characters(char_payload, limited_char_ids(snapshot["pools"]))
+    if not channels:
+        print("缺少寻访渠道数据，拒绝覆盖干员快照。", file=sys.stderr)
+        return 1
+    chars = trim_characters(
+        char_payload, limited_char_ids(snapshot["pools"]), channels
+    )
     if not chars["characters"]:
         # 空干员表会让抽卡指令全部报「数据未就绪」，比保留旧文件更糟。
         print("裁剪后一个干员都没有，拒绝覆盖干员快照。", file=sys.stderr)

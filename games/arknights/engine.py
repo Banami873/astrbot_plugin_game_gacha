@@ -57,29 +57,22 @@ def pity_group_of(pool) -> str:
     return PITY_GROUP_FALLBACK
 
 
-def allow_limited(pool, limited_types: Collection[str]) -> bool:
-    """这个池能不能出限定干员。名单来自 `pool_rules.json`，不写死在代码里。
-
-    已知缺口：联动干员（罗小黑、灰烬、艾拉…）在官方表里和普通干员没有可区分的字段
-    （`itemObtainApproach` 都是「招募寻访」或「活动获得」），本期仍会出现在非联动池里。
-    issue 05 接入 PRTS 的 UP 名单后，可用「只在联动池出现过」反推排除。
-    """
-    return pool.rule_type in limited_types
-
-
 def candidates(
     roster: Roster,
     pool,
     star: int,
     *,
-    allow_limited_chars: bool,
+    channels: Collection[str],
 ) -> tuple[Character, ...]:
     """某一星级在本池的候选。
 
     名单池（`char_ids` 非空，如卫戍寻访的 10 名 6★）只在这些人之内抽；名单里没有
-    该星级的人时退回全量——池子只限定了 6★，5★ 及以下仍按常规出。
+    该星级的人时退回「本渠道全量」——池子只限定了 6★，5★ 及以下仍按常规出。
+
+    `channels` 不是可选优化而是正确性的一部分：不滤渠道就等于把标准、中坚、联动
+    三类人混进同一个池，联动干员会从标准池里冒出来，标准干员也会从联动池里冒出来。
     """
-    members = roster.of_rarity(star, allow_limited=allow_limited_chars)
+    members = roster.of_rarity(star, channels=channels)
     if not pool.char_ids:
         return members
     listed = set(pool.char_ids)
@@ -94,20 +87,19 @@ def draw_batch(
     counter: int,
     times: int,
     rng: core_engine.RandomLike,
-    limited_types: Collection[str] = (),
+    channels: Collection[str],
 ) -> Batch:
     """连抽 `times` 次，返回结果与抽完之后的水位。
 
     保证：返回的 `drafts` 恰好 `times` 条；水位按每次结果推进（出 6★ 归零，否则 +1）。
-    失败：某个星级一个人都没有时抛 `ValueError`——那说明干员快照缺了整档，抽下去
-    只会得到空结果，此时宁可让指令报错也不要静默发一张空白。
+    失败：某个星级在本渠道一个人都没有时抛 `ValueError`——那说明干员快照缺了整档，
+    抽下去只会得到空结果，此时宁可让指令报错也不要静默发一张空白。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
     if not len(roster):
         raise ValueError("干员数据为空，无法抽取")
 
-    allowed = allow_limited(pool, limited_types)
     current = max(0, counter)
     drafts: list[Draft] = []
     for _ in range(times):
@@ -118,7 +110,7 @@ def draw_batch(
             soft_start=SOFT_PITY_START,
         )
         star = core_engine.pick_star(table, rng)
-        pool_chars = candidates(roster, pool, star, allow_limited_chars=allowed)
+        pool_chars = candidates(roster, pool, star, channels=channels)
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
         chosen = core_engine.pick_member(pool_chars, rng)
