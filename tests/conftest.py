@@ -109,6 +109,11 @@ def characters_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def pity_mod() -> ModuleType:
+    return package_module("core.pity")
+
+
+@pytest.fixture(scope="session")
 def ark_engine_mod() -> ModuleType:
     return package_module("games.arknights.engine")
 

@@ -1,0 +1,20 @@
+{
+  "_comment": "水位（连续未出 6★ 的次数）按什么分组。shared 是「多个池共用一组」：组名固定，跨池继承、永不清零；per_pool 是「每个池一组」：组键写成 <前缀>:<池id>，池结束后该行被惰性清理。default 是没登记的池型落到哪一组——宁可让它按最常见的标准寻访算，也不要让它单独成组（那样用户每见到一个新池型就白丢一次水位）。依据见 SPEC R-04，改动前先核对 PRTS 原文。",
+  "shared": {
+    "NORMAL": "standard",
+    "SINGLE": "standard",
+    "DOUBLE": "standard",
+    "SPECIAL": "standard",
+    "ATTAIN": "standard",
+    "GACHAWITHSPECIFIED6": "standard",
+    "CLASSIC": "classic",
+    "CLASSIC_DOUBLE": "classic",
+    "CLASSIC_ATTAIN": "classic"
+  },
+  "per_pool": {
+    "LIMITED": "limited",
+    "LINKAGE": "linkage",
+    "FESCLASSIC": "fes"
+  },
+  "default": "standard"
+}

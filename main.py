@@ -22,6 +22,7 @@ from astrbot.api.star import Context, Star, StarTools
 
 from .core import characters as char_module
 from .core import economy
+from .core import pity as pity_module
 from .core import pools as pool_module
 from .core.store import PullCommit, Store
 from .games.arknights import engine as ark_engine
@@ -42,6 +43,7 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
 CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
 RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
+PITY_RULES_PATH = PLUGIN_DIR / "resources" / "pity_groups.json"
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,7 @@ class GameGachaPlugin(Star):
             dict(pool_module.DEFAULT_CHANNEL_MAP),
             dict(pool_module.DEFAULT_CHANNEL_BY_RULE_TYPE),
         )
+        self.pity_groups: pity_module.PityGroups = pity_module.PityGroups()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
         self._roster_error = ""
@@ -95,6 +98,7 @@ class GameGachaPlugin(Star):
             logger.warning(
                 f"[{PLUGIN_NAME}] 类别 {missing} 没有配基础池，将按标准寻访处理"
             )
+        self.pity_groups = pity_module.load_pity_groups(PITY_RULES_PATH)
         try:
             self.snapshot = pool_module.load_snapshot(
                 SNAPSHOT_PATH, self.category_map, self.unimplemented
@@ -110,6 +114,15 @@ class GameGachaPlugin(Star):
                 f"[{PLUGIN_NAME}] 已装载 {len(self.snapshot.pools)} 个卡池，"
                 f"快照时间 {self.snapshot.fetched_text()}"
             )
+            unmapped = self.pity_groups.unmapped_rule_types(
+                pool.rule_type for pool in self.snapshot.pools
+            )
+            if unmapped:
+                # 未登记的池型会落到共享组：不会崩，但「限定池结束清零」这类规则对它失效。
+                logger.warning(
+                    f"[{PLUGIN_NAME}] 池型 {unmapped} 没配水位分组，"
+                    f"将并入默认组 {self.pity_groups.default_key}"
+                )
 
         # 干员字典与卡池快照分开装载：缺了干员表只是不能抽卡，查询仍然可用。
         try:
@@ -289,10 +302,11 @@ class GameGachaPlugin(Star):
 
         pool = choice.pool
         uid, platform = self._identity(event)
-        group_key = ark_engine.pity_group_of(pool)
+        group_key = self.pity_groups.group_key_of(pool)
         # 锁里只做读库、算结果、写库三件同步事，不发消息：把 yield 留在锁里会让一次
         # 网络发送期间一直占着这个用户的锁。
         async with self._lock_for(uid, platform):
+            self._purge_expired_pity(uid, platform, now)
             outcome = self._draw_and_commit(uid, platform, pool, times, group_key)
         if outcome.error:
             yield event.plain_result(outcome.error)
@@ -308,6 +322,27 @@ class GameGachaPlugin(Star):
             hard_pity=ark_engine.HARD_PITY,
         )
         yield event.plain_result(text + notice)
+
+    def _purge_expired_pity(self, uid: str, platform: str, now: int) -> None:
+        """抽卡前清掉这个用户手上已结束的限定/联动/跨年水位组。
+
+        惰性结算：不做定时任务，用户下次抽卡时顺手清。清理失败的后果只是多留几行
+        过期的水位（键里带着池 id，新池读不到），不该因此挡住这次抽卡——所以只告警。
+        """
+        try:
+            dirt = pity_module.purge_expired(
+                self.store,
+                uid=uid,
+                platform=platform,
+                groups=self.pity_groups,
+                snapshot=self.snapshot,
+                now=now,
+            )
+        except sqlite3.Error as exc:
+            logger.warning(f"[{PLUGIN_NAME}] 清理过期水位失败：{exc}")
+            return
+        if dirt:
+            logger.info(f"[{PLUGIN_NAME}] 已清理过期水位组：{dirt}")
 
     def _draw_and_commit(
         self, uid: str, platform: str, pool, times: int, group_key: str
@@ -330,6 +365,8 @@ class GameGachaPlugin(Star):
                 times=times,
                 rng=random.Random(),
                 channels=self.channel_rules.for_pool(pool),
+                pool_pulls=state.pool_pulls,
+                first10_hit=state.first10_hit,
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
@@ -345,6 +382,7 @@ class GameGachaPlugin(Star):
                 six_counter=batch.six_counter,
                 char_ids=ark_engine.draft_ids(batch),
                 when=economy.now_iso(),
+                first10_hit=batch.first10_hit,
             )
         except (sqlite3.Error, ValueError) as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡入账失败：{exc}")

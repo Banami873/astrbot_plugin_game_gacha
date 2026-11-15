@@ -1,16 +1,19 @@
-"""《明日方舟》的抽卡语义：基础概率、软保底、星级内选人。
+"""《明日方舟》的抽卡语义：基础概率、软保底、星级内选人、新池前 N 抽保底。
 
 `core/engine.py` 只管纯数学（算权重、抽一档、推计数），不知道 2/8/50/40 是什么；
 方舟的那一组数字、以及「哪个星级里有哪些人能抽」在这里组装。
 
-本期（issue 03）只做到「同星级等概率」：UP 名额与权重（R-05~R-11）、水位分组（R-04）、
-新池前 10 抽保底（R-03）都还没接进来，各自的 issue 会在本模块里加分支。
+水位**按组**存（R-04），组键由 `core/pity.py` 从 `resources/pity_groups.json` 翻译，
+本模块不判断「这是不是限定池」——它只接收调用方算好的 `group_key`。
+
+本期（issue 04）已接：水位分组、新池前 10 抽必出 5★。UP 名额与权重（R-05~R-11）、
+选调（06）、井与契约（07/08）仍未接。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Collection, Sequence
+from typing import Collection, Mapping, Sequence
 
 from ...core import engine as core_engine
 from ...core.characters import Character, Roster
@@ -23,9 +26,9 @@ SOFT_PITY_START = 50
 SOFT_PITY_STEP = 0.02
 HARD_PITY = 99
 
-# 水位分组键的占位值。R-04 的分组规则（标准跨池继承、限定池内清零…）由 issue 04
-# 落到 `resources/pity_groups.json`，届时本函数改成读配置，其余代码不用动。
-PITY_GROUP_FALLBACK = "default"
+# R-03：前 N 抽内必出 5★ 以上。N 取官方字段 `guarantee5Count`（459 池全是 10），
+# 这里只是「保底算几星」的下限——低于它就是没达成。
+FIRST10_MIN_STAR = 5
 
 
 @dataclass(frozen=True)
@@ -39,10 +42,17 @@ class Draft:
 
 @dataclass(frozen=True)
 class Batch:
-    """一批抽取的结果与抽完之后的水位。"""
+    """一批抽取的结果，以及抽完之后要写回存档的三个计数。
+
+    `pool_pulls` 是**本池**累计抽数（含本批），与水位不同：水位按池类分组跨池继承，
+    池内抽数只属于这一个池，用来判断前 N 抽保底还剩几次机会。
+    `first10_hit` 表示本池的 5★ 保底已经达成——出过一次 5★ 以上就置真，之后不再强制。
+    """
 
     drafts: tuple[Draft, ...]
     six_counter: int
+    pool_pulls: int = 0
+    first10_hit: bool = False
 
     def star_counts(self) -> dict[int, int]:
         """按星级统计本批各出了几个，给文案用。"""
@@ -52,9 +62,24 @@ class Batch:
         return counts
 
 
-def pity_group_of(pool) -> str:
-    """这个池的水位归哪一组。issue 03 阶段全池共用一组。"""
-    return PITY_GROUP_FALLBACK
+def guarantee_count_of(pool) -> int:
+    """本池「前 N 抽必出 5★」的 N；官方关掉这项时返回 0（不保底）。
+
+    N 来自官方字段 `guarantee5Count`，不是写死的 10：官方若将来把新池改成 20 抽，
+    改数据即可，不用动代码。
+    """
+    return pool.guarantee5_count if pool.guarantee5_avail else 0
+
+
+def _force_five_star(star: int, table: Mapping[int, float], rng: core_engine.RandomLike) -> int:
+    """把一次不足 5★ 的结果抬到 5★ 以上（R-03）。
+
+    规则原文是「先按 6★ 概率判定，未中则落 5★」——所以这里再摇一次，用当前水位下的
+    6★ 权重做门槛。这一抽本来就能出 6★ 时直接放过，不再消耗随机数。
+    """
+    if star >= FIRST10_MIN_STAR:
+        return star
+    return 6 if rng.random() < table.get(6, 0.0) else 5
 
 
 def candidates(
@@ -88,10 +113,18 @@ def draw_batch(
     times: int,
     rng: core_engine.RandomLike,
     channels: Collection[str],
+    pool_pulls: int = 0,
+    first10_hit: bool = False,
 ) -> Batch:
-    """连抽 `times` 次，返回结果与抽完之后的水位。
+    """连抽 `times` 次，返回结果与抽完之后要写回存档的计数。
 
-    保证：返回的 `drafts` 恰好 `times` 条；水位按每次结果推进（出 6★ 归零，否则 +1）。
+    保证：返回的 `drafts` 恰好 `times` 条；水位按每次结果推进（出 6★ 归零，否则 +1）；
+    本池前 N 抽内必有一条 5★ 以上（`first10_hit` 已为真或官方关掉保底时不再强制）。
+
+    前 N 抽保底只看**池内第几抽**，与水位无关：`pool_pulls` 是抽之前已经抽了几次，
+    于是「第 N 抽」正好是 `pool_pulls + 1 == N` 那一次。前 N 抽已经出过 5★ 以上时
+    不会再来一次——`first10_hit` 一旦为真，本池就再没有保底。
+
     失败：某个星级在本基础池一个人都没有时抛 `ValueError`——那说明干员快照缺了整档，
     抽下去只会得到空结果，此时宁可让指令报错也不要静默发一张空白。
     """
@@ -100,7 +133,10 @@ def draw_batch(
     if not len(roster):
         raise ValueError("干员数据为空，无法抽取")
 
+    guarantee = guarantee_count_of(pool)
     current = max(0, counter)
+    pulls = max(0, pool_pulls)
+    hit = first10_hit
     drafts: list[Draft] = []
     for _ in range(times):
         table = core_engine.weights(
@@ -110,13 +146,20 @@ def draw_batch(
             soft_start=SOFT_PITY_START,
         )
         star = core_engine.pick_star(table, rng)
+        # 这是本池第 N 抽，前面还没出过 5★ 以上：兜底。第 N 抽之后不再强制，
+        # 否则一个前 N 抽没记账的旧存档会在之后每一抽都白送 5★。
+        if not hit and guarantee and pulls + 1 == guarantee:
+            star = _force_five_star(star, table, rng)
         pool_chars = candidates(roster, pool, star, channels=channels)
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
         chosen = core_engine.pick_member(pool_chars, rng)
         drafts.append(Draft(char_id=chosen.char_id, name=chosen.name, star=star))
+        if star >= FIRST10_MIN_STAR:
+            hit = True
+        pulls += 1
         current = core_engine.advance(star, current)
-    return Batch(tuple(drafts), current)
+    return Batch(tuple(drafts), current, pulls, hit)
 
 
 def distance_text(counter: int) -> str:

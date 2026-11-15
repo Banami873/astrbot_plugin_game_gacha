@@ -16,7 +16,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterable, Iterator, Sequence
 
 # 建表语句用 IF NOT EXISTS，重复调用是幂等的，插件重载时可以直接再跑一遍。
 _SCHEMA: tuple[str, ...] = (
@@ -238,6 +238,36 @@ class Store:
     # 再 `commit_pulls` 在一个事务里落库。两步之间余额可能被别人改掉，所以
     # commit 里的 UPDATE 自带 `tickets >= cost` 条件，扣不动就整批回滚。
 
+    def pity_groups_of(self, uid: str, platform: str) -> dict[str, int]:
+        """这个用户所有水位组及其计数。清理过期组时用来挑候选。"""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT group_key, six_counter FROM pity "
+                "WHERE uid = ? AND platform = ? ORDER BY group_key",
+                (uid, platform),
+            ).fetchall()
+        return {str(row["group_key"]): int(row["six_counter"]) for row in rows}
+
+    def delete_pity_groups(
+        self, uid: str, platform: str, group_keys: Iterable[str]
+    ) -> int:
+        """删掉指定的水位组，返回实际删掉的行数。
+
+        空列表直接返回 0，不拼一条 `IN ()` 的非法 SQL——那会在池子还没过期时
+        每次都抛一次异常。
+        """
+        keys = [str(key) for key in group_keys]
+        if not keys:
+            return 0
+        placeholders = ",".join("?" for _ in keys)
+        with self._session() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM pity WHERE uid = ? AND platform = ? "
+                f"AND group_key IN ({placeholders})",
+                (uid, platform, *keys),
+            )
+            return cursor.rowcount
+
     def read_pull_state(
         self, uid: str, platform: str, *, pool_id: str, group_key: str
     ) -> PullState:
@@ -275,11 +305,14 @@ class Store:
         six_counter: int,
         char_ids: Sequence[str],
         when: str,
+        first10_hit: bool = False,
     ) -> PullCommit:
         """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数。
 
         保证：要么四件事全成立，要么一件都不成立。抽数不足、或 `char_ids` 的条数与
         `cost` 不一致（结果算漏了一条）时回滚，返回 `committed=False`。
+        `first10_hit` 是「本池前 N 抽保底是否已达成」，只进不退：库里已有真值时不写回
+        假——否则一次「这批没出 5★」会把之前达成的记录擦掉，保底就会重复触发。
         失败：库打不开等 `sqlite3.Error` 让异常冒出去，由调用方提示用户——静默当成
         「没抽过」会让扣掉的抽数凭空消失。
         """
@@ -309,11 +342,13 @@ class Store:
                     (uid, platform, group_key, max(0, six_counter)),
                 )
                 conn.execute(
-                    "INSERT INTO pool_state (uid, platform, pool_id, pulls) "
-                    "VALUES (?, ?, ?, ?) "
-                    "ON CONFLICT(uid, platform, pool_id) "
-                    "DO UPDATE SET pulls = pulls + excluded.pulls",
-                    (uid, platform, pool_id, cost),
+                    "INSERT INTO pool_state "
+                    "(uid, platform, pool_id, pulls, first10_hit) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT(uid, platform, pool_id) DO UPDATE SET "
+                    "pulls = pulls + excluded.pulls, "
+                    "first10_hit = MAX(first10_hit, excluded.first10_hit)",
+                    (uid, platform, pool_id, cost, 1 if first10_hit else 0),
                 )
                 for char_id in char_ids:
                     conn.execute(

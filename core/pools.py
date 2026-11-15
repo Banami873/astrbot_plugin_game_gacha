@@ -61,6 +61,10 @@ DEFAULT_CHANNEL_BY_RULE_TYPE: dict[str, tuple[str, ...]] = {
 # 类别的基础池映射缺失时的兜底。标准寻访覆盖面最广，新池型猜成标准比猜成中坚或联动安全。
 FALLBACK_CHANNELS: tuple[str, ...] = ("standard",)
 
+# 官方表 `guarantee5Count` 的常见值。只有字段整个缺失（老快照）时用得上：459 个池
+# 全部写着 10，所以它不是「规则参数」而是「字段缺失时按最普遍的情况处理」。
+DEFAULT_GUARANTEE5_COUNT = 10
+
 # 抽卡指令里「没指定池」时的取值理由，文案层据此决定说什么。
 CHOICE_OK = ""
 CHOICE_NONE_ACTIVE = "none_active"
@@ -193,6 +197,10 @@ class Pool:
     gacha_index: int = 0
     name: str = ""
     char_ids: tuple[str, ...] = ()
+    # R-03 的「新池前 N 抽必出 5★」。真源是官方字段 `guarantee5Avail` / `guarantee5Count`；
+    # 缺 `Avail` 时视为启用（459 个池全写着 1），缺 `Count` 时按 10。
+    guarantee5_avail: bool = False
+    guarantee5_count: int = DEFAULT_GUARANTEE5_COUNT
     limit_param: Mapping[str, Any] | None = None
     linkage_param: Mapping[str, Any] | None = None
     dyn_meta: Mapping[str, Any] | None = None
@@ -294,6 +302,9 @@ def _parse_pool(raw: Mapping[str, Any], category_map: Mapping[str, Sequence[str]
         listed = dyn_meta.get("charIdList")
         if isinstance(listed, list):
             char_ids = tuple(str(c) for c in listed)
+    # 「前 N 抽必出 5★」：字段在但为 0 时是官方明确关掉，字段整个缺失时按启用处理。
+    avail = raw.get("guarantee5Avail")
+    count = raw.get("guarantee5Count")
     return Pool(
         pool_id=pool_id,
         rule_type=rule_type,
@@ -303,6 +314,10 @@ def _parse_pool(raw: Mapping[str, Any], category_map: Mapping[str, Sequence[str]
         gacha_index=int(raw.get("gachaIndex") or 0),
         name=name,
         char_ids=char_ids,
+        guarantee5_avail=True if avail is None else bool(avail),
+        guarantee5_count=(
+            int(count) if isinstance(count, int) and count > 0 else DEFAULT_GUARANTEE5_COUNT
+        ),
         limit_param=raw.get("limitParam") or None,
         linkage_param=raw.get("linkageParam") or None,
         dyn_meta=dyn_meta,

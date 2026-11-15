@@ -190,7 +190,7 @@ class TestCommitPulls:
             uid,
             platform,
             pool_id=pool_id,
-            group_key="default",
+            group_key="standard",
             cost=cost,
             six_counter=six_counter,
             char_ids=ids,
@@ -221,7 +221,7 @@ class TestCommitPulls:
         assert result.committed is False
         assert result.tickets == 3
         assert store.get_user(uid, platform)["tickets"] == 3
-        state = store.read_pull_state(uid, platform, pool_id="NORM_TEST", group_key="default")
+        state = store.read_pull_state(uid, platform, pool_id="NORM_TEST", group_key="standard")
         assert state.six_counter == 0
         assert state.pool_pulls == 0
         assert store.inventory_of(uid, platform) == {}
@@ -236,7 +236,7 @@ class TestCommitPulls:
     def test_pity_counter_is_stored_and_read_back(self, store, user):
         uid, platform = user
         self._commit(store, uid, platform, cost=1, ids=["char_a"], six_counter=42)
-        state = store.read_pull_state(uid, platform, pool_id="NORM_TEST", group_key="default")
+        state = store.read_pull_state(uid, platform, pool_id="NORM_TEST", group_key="standard")
         assert state.six_counter == 42
         assert state.pool_pulls == 1
 
@@ -244,7 +244,7 @@ class TestCommitPulls:
         uid, platform = user
         self._commit(store, uid, platform, cost=1, ids=["char_a"], six_counter=1)
         self._commit(store, uid, platform, cost=10, ids=[f"char_{i}" for i in range(10)], six_counter=3)
-        state = store.read_pull_state(uid, platform, pool_id="NORM_TEST", group_key="default")
+        state = store.read_pull_state(uid, platform, pool_id="NORM_TEST", group_key="standard")
         assert state.pool_pulls == 11
         assert state.six_counter == 3
 
@@ -258,7 +258,10 @@ class TestCommitPulls:
 class TestPullCommands:
     @pytest.fixture()
     def plugin(self, pkg, store, real_roster, pools_pkg, pool):
+        from conftest import PLUGIN_DIR
+
         main_mod = pkg("main")
+        pity_mod = pkg("core.pity")
         instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
         instance.config = {}
         instance.store = store
@@ -269,6 +272,10 @@ class TestPullCommands:
         instance.channel_rules = pools_pkg.ChannelRules(
             dict(pools_pkg.DEFAULT_CHANNEL_MAP),
             dict(pools_pkg.DEFAULT_CHANNEL_BY_RULE_TYPE),
+        )
+        # 水位分组读真实配置：测试池是 NORMAL，组键应为 standard，与生产一致。
+        instance.pity_groups = pity_mod.load_pity_groups(
+            PLUGIN_DIR / "resources" / "pity_groups.json"
         )
         instance._locks = {}
         instance._load_error = ""
@@ -286,7 +293,7 @@ class TestPullCommands:
         text = run(plugin.cmd_pull_single(FakeEvent(message="单抽")))
         assert "剩余 29 抽" in text
         state = store.read_pull_state(
-            "10001", "qq", pool_id="NORM_TEST", group_key="default"
+            "10001", "qq", pool_id="NORM_TEST", group_key="standard"
         )
         assert state.pool_pulls == 1
 
@@ -300,7 +307,7 @@ class TestPullCommands:
         assert store.get_user("10001", "qq")["tickets"] == 3
         assert store.inventory_of("10001", "qq") == {}
         state = store.read_pull_state(
-            "10001", "qq", pool_id="NORM_TEST", group_key="default"
+            "10001", "qq", pool_id="NORM_TEST", group_key="standard"
         )
         assert state.pool_pulls == 0
 
