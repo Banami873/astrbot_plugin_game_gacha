@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import http.client
+import inspect
 import random
 from datetime import datetime, timezone, timedelta
 
@@ -218,6 +220,31 @@ class TestAlignBanners:
         assert normalize("【限定寻访·庆典】将雪投火") == "将雪投火"
         assert normalize("永不落幕·复刻") == "永不落幕"
         assert normalize(" 跨 年 欢 庆 ") == "跨年欢庆"
+
+
+class TestFetcher:
+    def test_header_names_survive_urllib(self, banner_data_mod, build_data_mod):
+        """请求头名多一个冒号会让 `putheader` 抛 `ValueError`，而它**不是** `OSError`，
+        抓取函数的 `except` 捕不到——整趟直接崩。
+
+        这个错曾真实存在（`Sec-Fetch-Mode:`），且长期没暴露，因为工具与插件各带一份
+        请求头，工具跑自己那份一切正常。用一条不连网的假连接走一遍 http.client 的同一条
+        校验路径：不发请求，但能复现「真去抓时才崩」的那一刻。
+        """
+        connection = http.client.HTTPConnection("example.invalid")
+        connection.putrequest("GET", "/")
+        try:
+            for headers in (banner_data_mod.BROWSER_HEADERS, build_data_mod.PRTS_HEADERS):
+                for name, value in headers.items():
+                    connection.putheader(name, value)
+        finally:
+            connection.close()
+
+    def test_tool_delegates_the_banner_fetch(self, build_data_mod):
+        """工具不另写一份抓取：两份请求头就是两个失效点，且只有一份会被真正跑到。"""
+        source = inspect.getsource(build_data_mod.fetch_prts_banners)
+        assert "urlopen" not in source
+        assert "fetch_banners_html" in source
 
 
 class TestBuildBannerSnapshot:

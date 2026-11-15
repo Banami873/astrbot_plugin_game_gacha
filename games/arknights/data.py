@@ -30,6 +30,9 @@ CST = timezone(timedelta(hours=8))
 PRTS_URL = "https://prts.wiki/w/%E5%8D%A1%E6%B1%A0%E4%B8%80%E8%A7%88"
 
 # PRTS 的 WAF 会按这几个头判定「是不是浏览器」。
+# 键名必须是合法的 header 名：多一个冒号（写 `Sec-Fetch-Mode:`）会让 `putheader` 抛
+# ValueError，而那不是 OSError 子类，抓取函数的 except 捕不到——整趟直接崩，且只在
+# 真正走这条路径时才暴露。所以下面的抓取逻辑只有一份，工具与插件都调它。
 BROWSER_HEADERS: dict[str, str] = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -38,7 +41,7 @@ BROWSER_HEADERS: dict[str, str] = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode:": "navigate",
+    "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Site": "none",
     "Upgrade-Insecure-Requests": "1",
 }

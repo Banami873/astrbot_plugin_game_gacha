@@ -178,24 +178,16 @@ def fetch_prts_channels(timeout: int = 60) -> dict[str, list[str]]:
 def fetch_prts_banners(timeout: int = 60) -> str:
     """下载 PRTS「卡池一览」原始 HTML。
 
-    失败：网络异常、页面不是 UTF-8、或解析出的池记录少得离谱时抛 `RuntimeError`。
-    抓不到时调用方保留旧名单——半张表会让大半池显示「UP 名单未获取」，比旧数据更糟。
+    抓取与「解析出的池记录够不够」的校验都在 `games/arknights/data.py::fetch_banners_html`
+    里，这里只转一手。**不在这里另写一份**：之前工具自带一套请求头、插件自带另一套，
+    结果插件那套的 `Sec-Fetch-Mode` 键名多了一个冒号，`putheader` 直接抛 ValueError，
+    而工具走自己的副本一切正常——这类 bug 只有「两条路径共用一份实现」才测得出来。
+
+    失败：网络异常、非 200、页面里解析不出足够的池记录时抛 `RuntimeError`，由调用方
+    决定是否退回旧名单——拿半张表覆盖快照比沿用旧数据危险得多。
     """
     _pools_module, banner_module = _plugin_modules()
-    request = urllib.request.Request(banner_module.PRTS_URL, headers=PRTS_HEADERS)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError(f"PRTS 卡池一览下载失败：{exc}") from exc
-    try:
-        page = body.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise RuntimeError(f"PRTS 卡池一览不是 UTF-8：{exc}") from exc
-    rows = banner_module.parse_banners(page)
-    if len(rows) < banner_module.MIN_BANNERS:
-        raise RuntimeError(f"PRTS 只解析出 {len(rows)} 条卡池记录，疑似被拦截或页面结构变化")
-    return page
+    return banner_module.fetch_banners_html(timeout=timeout)
 
 
 def channels_from_snapshot(payload: dict[str, Any]) -> dict[str, list[str]]:
