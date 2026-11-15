@@ -3,10 +3,16 @@
 插件的 `core/` 与 `games/` 是相对导入的包（`from .core import pools`），直接
 `import core` 会与 AstrBot 进程里其它同名模块撞车。测试改成按文件路径独立加载，
 每个模块在进程里只有一份，且不受 `sys.path` 顺序影响。
+
+例外是 `games/arknights/engine.py`：它要 `from ...core import engine`，路径加载没有包
+上下文，相对导入会失败，只能按 `data.plugins.<插件名>` 整包导入。两种方式不能在同一个
+用例里混用同一份类——包导入拿到的 `Character` 和路径加载的不是同一个类，
+`isinstance` 与 `==` 会失效，所以新写的用例一律走包导入。
 """
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -15,6 +21,7 @@ from types import ModuleType
 import pytest
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def load_module(module_name: str, path: Path) -> ModuleType:
@@ -28,6 +35,13 @@ def load_module(module_name: str, path: Path) -> ModuleType:
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def package_module(dotted: str) -> ModuleType:
+    """按包导入插件内的模块，`dotted` 是相对插件目录的点分路径。"""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    return importlib.import_module(f"data.plugins.astrbot_plugin_game_gacha.{dotted}")
 
 
 @pytest.fixture(scope="session")
@@ -68,3 +82,47 @@ def build_data_mod() -> ModuleType:
 @pytest.fixture(scope="session")
 def plugin_dir() -> Path:
     return PLUGIN_DIR
+
+
+# ---- 03 起的用例统一走包导入 ----------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def pkg():
+    """把 `package_module` 交给用例，方便按名字取模块。"""
+    return package_module
+
+
+@pytest.fixture(scope="session")
+def core_engine_mod() -> ModuleType:
+    return package_module("core.engine")
+
+
+@pytest.fixture(scope="session")
+def pools_pkg() -> ModuleType:
+    return package_module("core.pools")
+
+
+@pytest.fixture(scope="session")
+def characters_mod() -> ModuleType:
+    return package_module("core.characters")
+
+
+@pytest.fixture(scope="session")
+def ark_engine_mod() -> ModuleType:
+    return package_module("games.arknights.engine")
+
+
+@pytest.fixture(scope="session")
+def real_roster(characters_mod):
+    """仓库里那份角色快照。抽卡用例需要一个真实规模的字典，再造一份假的没意义。"""
+    return characters_mod.load_roster(PLUGIN_DIR / "resources" / "snapshot" / "characters.json")
+
+
+@pytest.fixture(scope="session")
+def real_snapshot(pools_pkg):
+    """仓库里那份卡池快照，按默认分类映射解析。"""
+    return pools_pkg.load_snapshot(
+        PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json",
+        pools_pkg.FALLBACK_CATEGORY_MAP,
+    )

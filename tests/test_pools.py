@@ -320,3 +320,90 @@ class TestRealSnapshot:
         """快照缺失要抛出去，让调用方提示用户，而不是假装没有池。"""
         with pytest.raises(FileNotFoundError):
             pools_mod.load_snapshot(tmp_path / "没有.json", pools_mod.FALLBACK_CATEGORY_MAP)
+
+
+class TestChoosePool:
+    """R-12：抽卡指令怎么定池。"""
+
+    def test_no_active_pool(self, pools_mod):
+        snapshot = _snapshot(pools_mod, [_pool(openTime=NOW + DAY, endTime=NOW + 2 * DAY)])
+        assert pools_mod.choose_pool(snapshot, NOW).reason == pools_mod.CHOICE_NONE_ACTIVE
+
+    def test_default_prefers_limited_pool(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="N", gachaRuleType="NORMAL", endTime=NOW + 9 * DAY),
+                _pool(gachaPoolId="L", gachaRuleType="LIMITED", endTime=NOW + DAY),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW).pool.pool_id == "L"
+
+    def test_default_takes_latest_when_no_limited(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="A", endTime=NOW + DAY),
+                _pool(gachaPoolId="B", endTime=NOW + 5 * DAY),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW).pool.pool_id == "B"
+
+    def test_numeric_input_is_refused(self, pools_mod):
+        snapshot = _snapshot(pools_mod, [_pool()])
+        choice = pools_mod.choose_pool(snapshot, NOW, ["3"])
+        assert choice.reason == pools_mod.CHOICE_NUMERIC
+        assert choice.pool is None
+        assert choice.query == "3"
+
+    def test_single_pool_in_category_is_taken(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="N", gachaRuleType="NORMAL", gachaPoolName="常驻轮换"),
+                _pool(gachaPoolId="S", gachaRuleType="SINGLE", gachaPoolName="海渊之下的回声"),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW, ["限时"]).pool.pool_id == "S"
+
+    def test_multiple_pools_in_category_are_listed_not_guessed(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="S1", gachaRuleType="SINGLE", gachaPoolName="海渊之下的回声"),
+                _pool(gachaPoolId="S2", gachaRuleType="SINGLE", gachaPoolName="沉向海渊"),
+            ],
+        )
+        choice = pools_mod.choose_pool(snapshot, NOW, ["限时"])
+        assert choice.reason == pools_mod.CHOICE_AMBIGUOUS
+        assert {p.pool_id for p in choice.candidates} == {"S1", "S2"}
+
+    def test_category_plus_prefix_narrows_to_one(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="S1", gachaRuleType="SINGLE", gachaPoolName="海渊之下的回声"),
+                _pool(gachaPoolId="S2", gachaRuleType="SINGLE", gachaPoolName="沉向海渊"),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW, ["限时", "海渊之"]).pool.pool_id == "S1"
+
+    def test_prefix_falls_back_to_contains(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="S1", gachaRuleType="SINGLE", gachaPoolName="沉向海渊"),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW, ["海渊"]).pool.pool_id == "S1"
+
+    def test_unknown_prefix_reports_current_pools(self, pools_mod):
+        snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="S1", gachaPoolName="沉向海渊")])
+        choice = pools_mod.choose_pool(snapshot, NOW, ["不存在的池"])
+        assert choice.reason == pools_mod.CHOICE_NO_MATCH
+        assert [p.pool_id for p in choice.candidates] == ["S1"]
+
+    def test_empty_category_reports_missing_category(self, pools_mod):
+        snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="N", gachaRuleType="NORMAL")])
+        choice = pools_mod.choose_pool(snapshot, NOW, ["联动"])
+        assert choice.reason == pools_mod.CHOICE_NO_CATEGORY

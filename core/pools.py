@@ -40,6 +40,20 @@ FALLBACK_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
 # 没有对应 gachaRuleType，故不在名单内）。
 DEFAULT_UNIMPLEMENTED: frozenset[str] = frozenset({"BACKFLOW"})
 
+# 能出限定干员的池型。标准/中坚寻访里没有限定干员，限定与联动池才有；
+# 跨年欢庆（FESCLASSIC）本身就是限定干员的复刻池。
+DEFAULT_LIMITED_ROSTER_TYPES: frozenset[str] = frozenset(
+    {"LIMITED", "LINKAGE", "FESCLASSIC"}
+)
+
+# 抽卡指令里「没指定池」时的取值理由，文案层据此决定说什么。
+CHOICE_OK = ""
+CHOICE_NONE_ACTIVE = "none_active"
+CHOICE_NUMERIC = "numeric"
+CHOICE_NO_CATEGORY = "no_category"
+CHOICE_AMBIGUOUS = "ambiguous"
+CHOICE_NO_MATCH = "no_match"
+
 
 def load_category_map(rules_path: Path | str) -> dict[str, tuple[str, ...]]:
     """读出「类别 → gachaRuleType」映射。
@@ -78,6 +92,24 @@ def load_unimplemented_types(rules_path: Path | str) -> frozenset[str]:
         return frozenset(str(t) for t in listed)
     except (OSError, ValueError, KeyError, TypeError):
         return DEFAULT_UNIMPLEMENTED
+
+
+def load_limited_roster_types(rules_path: Path | str) -> frozenset[str]:
+    """读出「能出限定干员的池型」名单。
+
+    保证：返回一个集合，非空。
+    失败：文件缺失、JSON 损坏或该段缺失/不是非空数组时退回
+    `DEFAULT_LIMITED_ROSTER_TYPES`——漏了这条只会让标准池偶尔蹦出限定干员，
+    不影响抽卡本身，不值得让插件起不来。
+    """
+    try:
+        raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
+        listed = raw["limited_roster_rule_types"]
+        if not isinstance(listed, list) or not listed:
+            raise TypeError("limited_roster_rule_types 不是非空数组")
+        return frozenset(str(t) for t in listed)
+    except (OSError, ValueError, KeyError, TypeError):
+        return DEFAULT_LIMITED_ROSTER_TYPES
 
 
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:
@@ -282,3 +314,81 @@ def timestamp_of(moment: datetime | None = None) -> int:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=CST)
     return int(moment.timestamp())
+
+
+@dataclass(frozen=True)
+class PoolChoice:
+    """抽卡指令的定池结果。
+
+    `reason` 为空串表示成功，此时 `pool` 有值；其余情况 `pool` 为 None，
+    `candidates` 是要列给用户挑的池（多义候选或当前全部池），`query` 是用户输入里
+    用于消歧的那一段。
+    """
+
+    pool: Pool | None = None
+    candidates: tuple[Pool, ...] = ()
+    reason: str = CHOICE_OK
+    query: str = ""
+
+
+def _latest(pools: Sequence[Pool]) -> Pool:
+    return max(pools, key=lambda p: (p.end_time, p.open_time))
+
+
+def _prefix_matches(pools: Sequence[Pool], prefix: str) -> list[Pool]:
+    """先按池名前缀匹配，一个都没有时降级为包含匹配（R-12）。
+
+    降级是必要的：用户记住的常常是池名中间那几个字（「海渊」对
+    「海渊之下的回声」是前缀，对「沉向海渊」就不是）。
+    """
+    direct = [p for p in pools if p.display_name.startswith(prefix)]
+    if direct:
+        return direct
+    return [p for p in pools if prefix in p.display_name]
+
+
+def choose_pool(
+    snapshot: Snapshot,
+    now: int,
+    tokens: Sequence[str] = (),
+    known_categories: Sequence[str] = CATEGORY_ORDER,
+) -> PoolChoice:
+    """按 `/单抽 [类别] [池名前缀]` 的参数定池（R-12）。
+
+    保证：参数合法时返回唯一池；多义、类目不存在、匹配不到、输入是纯数字时返回
+    对应 `reason`，绝不替用户随便挑一个——抽错池比让用户多打两个字麻烦得多。
+    """
+    live = snapshot.active(now)
+    if not live:
+        return PoolChoice(reason=CHOICE_NONE_ACTIVE)
+
+    words = [token.strip() for token in tokens if token and token.strip()]
+    if not words:
+        limited = [p for p in live if p.category == "限定"]
+        return PoolChoice(pool=_latest(limited) if limited else _latest(live))
+
+    if all(word.isdigit() for word in words):
+        return PoolChoice(reason=CHOICE_NUMERIC, query="".join(words))
+
+    category = words[0] if words[0] in known_categories else ""
+    prefix = "".join(words[1:]) if category else "".join(words)
+    scoped = [p for p in live if not category or p.category == category]
+    if category and not scoped:
+        return PoolChoice(reason=CHOICE_NO_CATEGORY, query=category)
+    if not prefix:
+        if len(scoped) == 1:
+            return PoolChoice(pool=scoped[0])
+        return PoolChoice(
+            reason=CHOICE_AMBIGUOUS, candidates=tuple(scoped), query=category
+        )
+
+    matched = _prefix_matches(scoped, prefix)
+    if not matched:
+        return PoolChoice(
+            reason=CHOICE_NO_MATCH, candidates=tuple(scoped), query=prefix
+        )
+    if len(matched) == 1:
+        return PoolChoice(pool=matched[0])
+    return PoolChoice(
+        reason=CHOICE_AMBIGUOUS, candidates=tuple(matched), query=prefix
+    )

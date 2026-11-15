@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import random
+import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 from astrbot.api import AstrBotConfig, logger
@@ -16,13 +20,18 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import At
 from astrbot.api.star import Context, Star, StarTools
 
+from .core import characters as char_module
 from .core import economy
 from .core import pools as pool_module
-from .core.store import Store
+from .core.store import PullCommit, Store
+from .games.arknights import engine as ark_engine
+from .games.arknights.engine import Batch
 from .games.arknights.views import (
     render_adjust,
     render_newbie_notice,
     render_pool_list,
+    render_pool_problem,
+    render_pulls,
     render_signin,
 )
 
@@ -31,7 +40,21 @@ PLUGIN_VERSION = "0.1.0"
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
+CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
 RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
+
+
+@dataclass(frozen=True)
+class PullOutcome:
+    """一次抽卡的结果：要么一条给用户看的错误文案，要么「这批结果 + 入账回执」。"""
+
+    error: str = ""
+    batch: Batch | None = None
+    commit: PullCommit | None = None
+
+    @property
+    def ok(self) -> bool:
+        return not self.error
 
 
 class GameGachaPlugin(Star):
@@ -40,11 +63,15 @@ class GameGachaPlugin(Star):
         self.config = config or {}
         self.store: Store | None = None
         self.snapshot: pool_module.Snapshot | None = None
+        self.roster: char_module.Roster | None = None
         self.category_map: dict[str, tuple[str, ...]] = dict(
             pool_module.FALLBACK_CATEGORY_MAP
         )
         self.unimplemented: frozenset[str] = pool_module.DEFAULT_UNIMPLEMENTED
+        self.limited_types: frozenset[str] = pool_module.DEFAULT_LIMITED_ROSTER_TYPES
+        self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
+        self._roster_error = ""
 
     async def initialize(self) -> None:
         """建库并装载快照。
@@ -58,6 +85,7 @@ class GameGachaPlugin(Star):
 
         self.category_map = pool_module.load_category_map(RULES_PATH)
         self.unimplemented = pool_module.load_unimplemented_types(RULES_PATH)
+        self.limited_types = pool_module.load_limited_roster_types(RULES_PATH)
         try:
             self.snapshot = pool_module.load_snapshot(
                 SNAPSHOT_PATH, self.category_map, self.unimplemented
@@ -72,6 +100,20 @@ class GameGachaPlugin(Star):
             logger.info(
                 f"[{PLUGIN_NAME}] 已装载 {len(self.snapshot.pools)} 个卡池，"
                 f"快照时间 {self.snapshot.fetched_text()}"
+            )
+
+        # 角色字典与卡池快照分开装载：缺了角色表只是不能抽卡，查询仍然可用。
+        try:
+            self.roster = char_module.load_roster(CHAR_SNAPSHOT_PATH)
+        except FileNotFoundError:
+            self._roster_error = f"角色数据不存在：{CHAR_SNAPSHOT_PATH.name}"
+            logger.error(f"[{PLUGIN_NAME}] {self._roster_error}")
+        except ValueError as exc:
+            self._roster_error = f"角色数据解析失败：{exc}"
+            logger.error(f"[{PLUGIN_NAME}] {self._roster_error}")
+        else:
+            logger.info(
+                f"[{PLUGIN_NAME}] 已装载 {len(self.roster)} 名可抽取干员"
             )
 
     # ---- 配置 ------------------------------------------------------------
@@ -202,6 +244,135 @@ class GameGachaPlugin(Star):
             if isinstance(component, At) and str(component.qq) != "all":
                 return str(component.qq)
         return None
+
+    @filter.command("单抽")
+    async def cmd_pull_single(self, event: AstrMessageEvent):
+        """抽一次。用法：/单抽 [限定|常驻|限时|中坚|联动] [池名前缀]"""
+        async for chunk in self._pull(event, 1):
+            yield chunk
+
+    @filter.command("十连")
+    async def cmd_pull_ten(self, event: AstrMessageEvent):
+        """抽十次。用法：/十连 [限定|常驻|限时|中坚|联动] [池名前缀]"""
+        async for chunk in self._pull(event, 10):
+            yield chunk
+
+    async def _pull(self, event: AstrMessageEvent, times: int):
+        """单抽与十连共用的抽卡流程。
+
+        顺序是「定池 → 锁用户 → 读余额 → 算结果 → 提交事务 → 渲染」。渲染在事务之后
+        （SPEC R-15）：出图或排版出错时，抽数与水位已经入账，不能因为画不出来就让玩家
+        白抽一次；反过来，余额不足时连随机数都不该消耗掉结果。
+        """
+        notice = self._register(event)
+        if self.store is None or self.snapshot is None or self.roster is None:
+            yield event.plain_result(self._not_ready_text())
+            return
+
+        now = pool_module.timestamp_of()
+        parts = event.message_str.strip().split()
+        choice = pool_module.choose_pool(self.snapshot, now, parts[1:])
+        if choice.pool is None:
+            yield event.plain_result(
+                render_pool_problem(choice.reason, choice.query, choice.candidates, now)
+            )
+            return
+
+        pool = choice.pool
+        uid, platform = self._identity(event)
+        group_key = ark_engine.pity_group_of(pool)
+        # 锁里只做读库、算结果、写库三件同步事，不发消息：把 yield 留在锁里会让一次
+        # 网络发送期间一直占着这个用户的锁。
+        async with self._lock_for(uid, platform):
+            outcome = self._draw_and_commit(uid, platform, pool, times, group_key)
+        if outcome.error:
+            yield event.plain_result(outcome.error)
+            return
+
+        text = render_pulls(
+            pool.display_name,
+            outcome.batch.drafts,
+            outcome.commit.counts,
+            cost=times,
+            tickets=outcome.commit.tickets,
+            six_counter=outcome.batch.six_counter,
+            hard_pity=ark_engine.HARD_PITY,
+        )
+        yield event.plain_result(text + notice)
+
+    def _draw_and_commit(
+        self, uid: str, platform: str, pool, times: int, group_key: str
+    ) -> PullOutcome:
+        """一次抽卡的完整副作用：判余额、算结果、单事务入账。
+
+        保证：成功时 `error` 为空且 `batch` / `commit` 都有值；失败时一切归零
+        （余额不足时连一条结果都没生成，更没扣抽数）。
+        """
+        state = self.store.read_pull_state(
+            uid, platform, pool_id=pool.pool_id, group_key=group_key
+        )
+        if state.tickets < times:
+            return PullOutcome(error=f"需要 {times} 抽，你还有 {state.tickets} 抽。")
+        try:
+            batch = ark_engine.draw_batch(
+                self.roster,
+                pool,
+                counter=state.six_counter,
+                times=times,
+                rng=random.Random(),
+                limited_types=self.limited_types,
+            )
+        except ValueError as exc:
+            logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
+            return PullOutcome(error=f"抽卡失败：{exc}")
+
+        try:
+            commit = self.store.commit_pulls(
+                uid,
+                platform,
+                pool_id=pool.pool_id,
+                group_key=group_key,
+                cost=times,
+                six_counter=batch.six_counter,
+                char_ids=ark_engine.draft_ids(batch),
+                when=economy.now_iso(),
+            )
+        except (sqlite3.Error, ValueError) as exc:
+            logger.error(f"[{PLUGIN_NAME}] 抽卡入账失败：{exc}")
+            return PullOutcome(error="存档写入失败，本次抽卡没有扣抽数，请稍后再试。")
+
+        if not commit.committed:
+            # 读余额与提交之间余额被改掉了：按提交时点的真实余额回报，不重算结果。
+            return PullOutcome(error=f"需要 {times} 抽，你还有 {commit.tickets} 抽。")
+        return PullOutcome(batch=batch, commit=commit)
+
+    def _lock_for(self, uid: str, platform: str) -> asyncio.Lock:
+        """同一用户的一把锁（R-13）。
+
+        并发两次 `/单抽` 时，两边的「读余额 → 扣抽数」会交错，前一个还没提交、后一个
+        已经读到同一个余额，于是都认为够扣。锁把同一用户的抽卡串起来，不同用户互不
+        阻塞。锁按用户懒建：只在第一次抽卡时占一个字典项，不预先铺满所有群成员。
+        """
+        locks = getattr(self, "_locks", None)
+        if locks is None:
+            locks = self._locks = {}
+        return locks.setdefault((uid, platform), asyncio.Lock())
+
+    def _not_ready_text(self) -> str:
+        """数据没就绪时说什么。区分「卡池没加载」与「角色表没加载」，便于对症处理。"""
+        if self.snapshot is None:
+            reason = self._load_error or "未知原因"
+            return (
+                f"卡池数据未就绪：{reason}\n"
+                "请管理员在 AstrBot 根目录执行：\n"
+                ".venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/build_data.py"
+            )
+        reason = self._roster_error or "未知原因"
+        return (
+            f"角色数据未就绪：{reason}\n"
+            "请管理员在 AstrBot 根目录执行：\n"
+            ".venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/build_data.py"
+        )
 
     async def terminate(self) -> None:
         """插件卸载时的收尾。当前没有长连接或后台任务需要停。"""

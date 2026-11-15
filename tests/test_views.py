@@ -131,3 +131,94 @@ def test_placeholder_name_shows_pool_id(pools_mod, views_mod):
     text = views_mod.render_pool_list(snapshot, NOW)
     assert "NORM_79_0_3" in text
     assert "适合多种场合的强力干员" not in text
+
+
+# ---- 抽卡结果 ------------------------------------------------------------
+
+
+class _Draft:
+    """渲染只要 `char_id` / `name` / `star` 三个字段。"""
+
+    def __init__(self, char_id, name, star):
+        self.char_id = char_id
+        self.name = name
+        self.star = star
+
+
+class _Pool:
+    def __init__(self, name):
+        self.display_name = name
+
+    def remaining_text(self, now):
+        return "3 天"
+
+
+class TestRenderPulls:
+    def test_lists_each_draft_with_star_marks(self, views_mod):
+        drafts = [_Draft("a", "芬", 3), _Draft("b", "史尔特尔", 6)]
+        text = views_mod.render_pulls(
+            "遗愿焰火", drafts, {"a": 1, "b": 1}, cost=2, tickets=28, six_counter=0
+        )
+        assert "遗愿焰火" in text
+        assert "★★★ 芬" in text
+        assert "★★★★★★ 史尔特尔" in text
+        assert "2 抽：6★ 1 · 3★ 1" in text
+        assert "剩余 28 抽" in text
+        assert "距 6★ 硬保底还有 99 抽" in text
+
+    def test_ten_pull_gets_its_own_title(self, views_mod):
+        drafts = [_Draft(f"c{i}", "干员", 3) for i in range(10)]
+        text = views_mod.render_pulls(
+            "测试池", drafts, {}, cost=10, tickets=0, six_counter=10
+        )
+        assert "十连" in text
+        assert "10 抽：3★ 10" in text
+        assert "还有 89 抽" in text
+
+    def test_potential_shown_only_for_duplicates(self, views_mod):
+        drafts = [_Draft("a", "芬", 3), _Draft("b", "炎熔", 3)]
+        text = views_mod.render_pulls(
+            "池", drafts, {"a": 1, "b": 3}, cost=2, tickets=10
+        )
+        assert "★★★ 芬\n" in text
+        assert "炎熔（潜能 2）" in text
+
+    def test_potential_caps_at_five(self, views_mod):
+        drafts = [_Draft("a", "芬", 3)]
+        text = views_mod.render_pulls("池", drafts, {"a": 12}, cost=1, tickets=10)
+        assert "潜能 5" in text
+        assert "满潜" in text
+
+    def test_counter_beyond_hard_pity_never_shows_zero(self, views_mod):
+        drafts = [_Draft("a", "芬", 3)]
+        text = views_mod.render_pulls(
+            "池", drafts, {}, cost=1, tickets=10, six_counter=200
+        )
+        assert "还有 1 抽" in text
+
+
+class TestRenderPoolProblem:
+    def test_no_active_pool(self, views_mod):
+        text = views_mod.render_pool_problem("none_active", "", [], NOW)
+        assert "没有进行中的卡池" in text
+
+    def test_numeric_input_explains_why(self, views_mod):
+        text = views_mod.render_pool_problem("numeric", "3", [], NOW)
+        assert "不使用卡池编号" in text
+        assert "/单抽 限定 海渊" in text
+
+    def test_ambiguous_lists_candidates(self, views_mod):
+        candidates = [_Pool("海渊之下的回声"), _Pool("沉向海渊")]
+        text = views_mod.render_pool_problem("ambiguous", "海渊", candidates, NOW)
+        assert "请补几个字" in text
+        assert "海渊之下的回声" in text
+        assert "沉向海渊" in text
+
+    def test_no_match_lists_current_pools(self, views_mod):
+        text = views_mod.render_pool_problem("no_match", "不存在", [_Pool("测试池")], NOW)
+        assert "没有名称含「不存在」" in text
+        assert "测试池" in text
+
+    def test_missing_category(self, views_mod):
+        text = views_mod.render_pool_problem("no_category", "联动", [], NOW)
+        assert "「联动」类别" in text

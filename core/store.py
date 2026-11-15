@@ -1,18 +1,22 @@
-"""SQLite 存档：建库、`meta` 与 `users` 的读写，以及后续各表的事务边界。
+"""SQLite 存档：建库、各表读写、抽卡事务边界。
 
 本模块是唯一允许写 `gacha.db` 的地方——抽卡涉及「扣抽数 + 记水位 + 入仓库」三件事，
 它们必须在同一个事务里成立，分散到各处写库迟早出现扣了抽数没记账的情况。
 
-表结构按 issue 逐步落地：01 只建 `meta`，02 加 `users`，后续 issue 各自往 `_SCHEMA`
-里追加自己的表。
+表结构按 issue 逐步落地：01 只建 `meta`，02 加 `users`，03 加 `inventory` / `pity` /
+`pool_state`，后续 issue 各自往 `_SCHEMA` 里追加自己的表。
+
+所有表都以 `(uid, platform)` 为前缀。SPEC 的表格只写了 `uid`，但 R-16 要求同一个号在
+不同平台是两个人；主键少了 platform 会让两边共用一份存档，这里以 R-16 为准。
 """
 
 from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 # 建表语句用 IF NOT EXISTS，重复调用是幂等的，插件重载时可以直接再跑一遍。
 _SCHEMA: tuple[str, ...] = (
@@ -35,7 +39,73 @@ _SCHEMA: tuple[str, ...] = (
         PRIMARY KEY (uid, platform)
     )
     """,
+    # count 是累计获得次数，不封顶：潜能 = min(count - 1, 5) 是展示层的事，
+    # 把上限写进库里会让「又抽到一个满潜的」变成静默丢弃。
+    """
+    CREATE TABLE IF NOT EXISTS inventory (
+        uid       TEXT    NOT NULL,
+        platform  TEXT    NOT NULL,
+        char_id   TEXT    NOT NULL,
+        count     INTEGER NOT NULL DEFAULT 1 CHECK (count >= 1),
+        first_at  TEXT    NOT NULL,
+        PRIMARY KEY (uid, platform, char_id)
+    )
+    """,
+    # six_counter = 连续未出 6★ 的次数。03 阶段 group_key 只有一个占位值，
+    # 04 接入 pity_groups.json 后同一用户会同时存在多行。
+    """
+    CREATE TABLE IF NOT EXISTS pity (
+        uid         TEXT    NOT NULL,
+        platform    TEXT    NOT NULL,
+        group_key   TEXT    NOT NULL,
+        six_counter INTEGER NOT NULL DEFAULT 0 CHECK (six_counter >= 0),
+        PRIMARY KEY (uid, platform, group_key)
+    )
+    """,
+    # pulls 是「这个池抽了几次」，与水位不同：水位按池类分组，池内计数只属于本池。
+    """
+    CREATE TABLE IF NOT EXISTS pool_state (
+        uid         TEXT    NOT NULL,
+        platform    TEXT    NOT NULL,
+        pool_id     TEXT    NOT NULL,
+        pulls       INTEGER NOT NULL DEFAULT 0 CHECK (pulls >= 0),
+        first10_hit INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (uid, platform, pool_id)
+    )
+    """,
 )
+
+
+@dataclass(frozen=True)
+class PullState:
+    """抽卡前要读的全部计数。用户没建档时全为 0，而不是抛异常。"""
+
+    tickets: int = 0
+    six_counter: int = 0
+    pool_pulls: int = 0
+    first10_hit: bool = False
+
+
+@dataclass(frozen=True)
+class PullCommit:
+    """一次抽卡事务的结果。
+
+    `committed=False` 表示抽数不足、整批未入账，此时 `tickets` 是**没有变动**的余额。
+    `counts` 是本次涉及的干员在库里累计获得次数（同一干员在一批里抽到两次会记到 2）。
+    """
+
+    committed: bool
+    tickets: int
+    counts: dict[str, int] = field(default_factory=dict)
+
+
+class _Abort(Exception):
+    """事务内主动回滚的哨兵。不对外暴露——调用方只看 `PullCommit.committed`。"""
+
+    def __init__(self, tickets: int):
+        super().__init__(str(tickets))
+        self.tickets = tickets
+
 
 
 class Store:
@@ -161,3 +231,123 @@ class Store:
             ).fetchone()
         final = int(after["tickets"])
         return final - before, final
+
+    # ---- 抽卡 ------------------------------------------------------------
+    #
+    # 抽卡分两步：先 `read_pull_state` 读齐计数（用于判余额、算这一批的结果），
+    # 再 `commit_pulls` 在一个事务里落库。两步之间余额可能被别人改掉，所以
+    # commit 里的 UPDATE 自带 `tickets >= cost` 条件，扣不动就整批回滚。
+
+    def read_pull_state(
+        self, uid: str, platform: str, *, pool_id: str, group_key: str
+    ) -> PullState:
+        """读一次抽卡需要的全部计数。缺行按 0 处理——新用户的第一次抽卡没有存档。"""
+        with self._session() as conn:
+            user = conn.execute(
+                "SELECT tickets FROM users WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+            pity = conn.execute(
+                "SELECT six_counter FROM pity "
+                "WHERE uid = ? AND platform = ? AND group_key = ?",
+                (uid, platform, group_key),
+            ).fetchone()
+            pool = conn.execute(
+                "SELECT pulls, first10_hit FROM pool_state "
+                "WHERE uid = ? AND platform = ? AND pool_id = ?",
+                (uid, platform, pool_id),
+            ).fetchone()
+        return PullState(
+            tickets=int(user["tickets"]) if user else 0,
+            six_counter=int(pity["six_counter"]) if pity else 0,
+            pool_pulls=int(pool["pulls"]) if pool else 0,
+            first10_hit=bool(pool["first10_hit"]) if pool else False,
+        )
+
+    def commit_pulls(
+        self,
+        uid: str,
+        platform: str,
+        *,
+        pool_id: str,
+        group_key: str,
+        cost: int,
+        six_counter: int,
+        char_ids: Sequence[str],
+        when: str,
+    ) -> PullCommit:
+        """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数。
+
+        保证：要么四件事全成立，要么一件都不成立。抽数不足、或 `char_ids` 的条数与
+        `cost` 不一致（结果算漏了一条）时回滚，返回 `committed=False`。
+        失败：库打不开等 `sqlite3.Error` 让异常冒出去，由调用方提示用户——静默当成
+        「没抽过」会让扣掉的抽数凭空消失。
+        """
+        if cost <= 0:
+            raise ValueError(f"抽数必须为正，收到 {cost}")
+        if len(char_ids) != cost:
+            raise ValueError(f"结果 {len(char_ids)} 条与抽数 {cost} 不一致，拒绝入账")
+        try:
+            with self._session() as conn:
+                cursor = conn.execute(
+                    "UPDATE users SET tickets = tickets - ? "
+                    "WHERE uid = ? AND platform = ? AND tickets >= ?",
+                    (cost, uid, platform, cost),
+                )
+                if cursor.rowcount != 1:
+                    row = conn.execute(
+                        "SELECT tickets FROM users WHERE uid = ? AND platform = ?",
+                        (uid, platform),
+                    ).fetchone()
+                    raise _Abort(int(row["tickets"]) if row else 0)
+
+                conn.execute(
+                    "INSERT INTO pity (uid, platform, group_key, six_counter) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(uid, platform, group_key) "
+                    "DO UPDATE SET six_counter = excluded.six_counter",
+                    (uid, platform, group_key, max(0, six_counter)),
+                )
+                conn.execute(
+                    "INSERT INTO pool_state (uid, platform, pool_id, pulls) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(uid, platform, pool_id) "
+                    "DO UPDATE SET pulls = pulls + excluded.pulls",
+                    (uid, platform, pool_id, cost),
+                )
+                for char_id in char_ids:
+                    conn.execute(
+                        "INSERT INTO inventory (uid, platform, char_id, count, first_at) "
+                        "VALUES (?, ?, ?, 1, ?) "
+                        "ON CONFLICT(uid, platform, char_id) "
+                        "DO UPDATE SET count = count + 1",
+                        (uid, platform, char_id, when),
+                    )
+
+                counts: dict[str, int] = {}
+                for char_id in char_ids:
+                    row = conn.execute(
+                        "SELECT count FROM inventory "
+                        "WHERE uid = ? AND platform = ? AND char_id = ?",
+                        (uid, platform, char_id),
+                    ).fetchone()
+                    if row is not None:
+                        counts[char_id] = int(row["count"])
+                after = conn.execute(
+                    "SELECT tickets FROM users WHERE uid = ? AND platform = ?",
+                    (uid, platform),
+                ).fetchone()
+                tickets_after = int(after["tickets"]) if after else 0
+        except _Abort as abort:
+            return PullCommit(committed=False, tickets=abort.tickets, counts={})
+        return PullCommit(committed=True, tickets=tickets_after, counts=counts)
+
+    def inventory_of(self, uid: str, platform: str) -> dict[str, int]:
+        """整个仓库：`{char_id: count}`。给 `/潜能仓库` 与测试用。"""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT char_id, count FROM inventory "
+                "WHERE uid = ? AND platform = ? ORDER BY char_id",
+                (uid, platform),
+            ).fetchall()
+        return {str(row["char_id"]): int(row["count"]) for row in rows}

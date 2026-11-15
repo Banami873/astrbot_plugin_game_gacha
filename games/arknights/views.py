@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 DIVIDER = "━" * 18
 
@@ -40,6 +40,14 @@ class SigninLike(Protocol):
 class AdjustLike(Protocol):
     applied: int
     tickets: int
+
+
+class DraftLike(Protocol):
+    """一条抽取结果。渲染只用到星级、名字与 id（id 用来查潜能）。"""
+
+    char_id: str
+    name: str
+    star: int
 
 
 def render_newbie_notice(bonus: int) -> str:
@@ -113,3 +121,93 @@ def render_pool_list(
                 lines.append("  UP 名单未接入")
         blocks.append("\n".join(lines))
     return "\n".join(header) + "\n" + "\n\n".join(blocks)
+
+
+# ---- 抽卡结果 ------------------------------------------------------------
+
+# 星级的通用写法：几星就几个 ★。单抽与十连共用，避免两处各写一套。
+STAR_MARK = "★"
+
+# 潜能上限。第 6 个重复之后不再往上加，但「又抽到一个」本身仍要显示出来。
+MAX_POTENTIAL = 5
+
+# 十连与单抽的标题分开：单抽只出一条，用「寻访结果」会显得空。
+TITLE_SINGLE = "【寻访结果】"
+TITLE_TEN = "【寻访结果 · 十连】"
+
+
+def _potential_suffix(count: int) -> str:
+    """重复获得时挂在名字后面的潜能标注。第一次获得什么都不加。"""
+    if count <= 1:
+        return ""
+    potential = min(count - 1, MAX_POTENTIAL)
+    full = "，满潜" if count - 1 >= MAX_POTENTIAL else ""
+    return f"（潜能 {potential}{full}）"
+
+
+def render_pulls(
+    pool_name: str,
+    drafts: Sequence[DraftLike],
+    counts: Mapping[str, int],
+    *,
+    cost: int,
+    tickets: int,
+    six_counter: int | None = None,
+    hard_pity: int = 99,
+) -> str:
+    """一次（或一次十连）的结果。
+
+    `counts` 是这批干员在库里的累计获得次数，用来算潜能；缺键时按「本次刚获得」处理。
+    保证：星级按实际结果升序展示（低星在前，与游戏列表一致），末尾一定带余额。
+    """
+    title = TITLE_TEN if len(drafts) > 1 else TITLE_SINGLE
+    lines = [f"{title}{pool_name}", DIVIDER]
+    for draft in drafts:
+        mark = STAR_MARK * max(1, min(6, draft.star))
+        lines.append(f"{mark} {draft.name}{_potential_suffix(counts.get(draft.char_id, 1))}")
+    lines.append(DIVIDER)
+
+    star_counts: dict[int, int] = {}
+    for draft in drafts:
+        star_counts[draft.star] = star_counts.get(draft.star, 0) + 1
+    summary = " · ".join(
+        f"{star}★ {star_counts[star]}" for star in sorted(star_counts, reverse=True)
+    )
+    lines.append(f"{cost} 抽：{summary}")
+    tail = f"剩余 {tickets} 抽"
+    if six_counter is not None:
+        tail += f" · 距 6★ 硬保底还有 {max(1, hard_pity - six_counter)} 抽"
+    lines.append(tail)
+    return "\n".join(lines)
+
+
+def render_pool_problem(
+    reason: str,
+    query: str,
+    candidates: Sequence[PoolLike],
+    now: int,
+    known_categories: Sequence[str] = CATEGORY_ORDER,
+) -> str:
+    """定池失败时说什么。`reason` 的取值见 `core.pools` 里的 `CHOICE_*`。
+
+    保证：每条都给出可执行的下一步（补字、换类别、或去查当前池），不只说「失败」。
+    """
+    if reason == "none_active":
+        return "当前没有进行中的卡池，数据可能未更新。"
+    if reason == "numeric":
+        return (
+            "本插件不使用卡池编号——池子结束后编号会顺延，抽错池就是这么来的。\n"
+            "请用池名指定，例如：/单抽 限定 海渊"
+        )
+    if reason == "no_category":
+        return f"当前没有「{query}」类别的进行中卡池，/卡池查询 看看现在有什么。"
+
+    if not candidates:
+        return "没有匹配到进行中的卡池。"
+
+    listing = "\n".join(
+        f"· {pool.display_name}（{pool.remaining_text(now)}）" for pool in candidates[:8]
+    )
+    if reason == "no_match":
+        return f"没有名称含「{query}」的进行中卡池。\n当前进行中：\n{listing}"
+    return f"「{query}」匹配到 {len(candidates)} 个卡池，请补几个字再试：\n{listing}"

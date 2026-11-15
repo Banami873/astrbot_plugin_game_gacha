@@ -1,7 +1,10 @@
-"""从官方游戏数据仓库拉卡池表，裁剪成随包快照。
+"""从官方游戏数据仓库拉卡池表与角色表，裁剪成随包快照。
 
-只保留骨架字段：池 id、池型、起止、保底与井参数、名单池的 charId。池名与 UP 名单不在
-这里——官方表近期池名是占位串、详情为空，那半边必须另找来源（见 SPEC R-14）。
+卡池快照只保留骨架字段：池 id、池型、起止、保底与井参数、名单池的 charId。池名与
+UP 名单不在这里——官方表近期池名是占位串、详情为空，那半边必须另找来源（见 SPEC R-14）。
+
+角色快照是抽卡结果的落点：id、名字、星级、是否限定。限定标记由卡池表的
+`limitParam.limitedCharId` 反推——那是官方自己声明的限定干员名单，比按名字猜可靠。
 
 用法（在 AstrBot 根目录执行）：
 
@@ -26,11 +29,14 @@ CST = timezone(timedelta(hours=8))
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
+CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
 
-SOURCE_URL = (
+SOURCE_BASE = (
     "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/"
-    "zh_CN/gamedata/excel/gacha_table.json"
+    "zh_CN/gamedata/excel/"
 )
+SOURCE_URL = SOURCE_BASE + "gacha_table.json"
+CHAR_SOURCE_URL = SOURCE_BASE + "character_table.json"
 
 # 与另一个插件共用同一份来源；带上自己的 UA，方便对方在日志里认出是谁在拉。
 USER_AGENT = "astrbot-plugin-game-gacha/0.1 (+https://github.com/Banami873/astrbot_plugin_game_gacha)"
@@ -139,6 +145,106 @@ def trim(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ---- 角色快照 ------------------------------------------------------------
+
+# 官方表把星级写成 TIER_N，且用 profession 区分干员与召唤物/装置。
+_RARITY_BY_TIER: dict[str, int] = {
+    "TIER_3": 3,
+    "TIER_4": 4,
+    "TIER_5": 5,
+    "TIER_6": 6,
+}
+
+# TOKEN 是召唤物、TRAP 是地图装置：它们有自己的星级，但不在寻访池里。
+_SKIP_PROFESSIONS: frozenset[str] = frozenset({"TOKEN", "TRAP"})
+
+
+def limited_char_ids(pools: list[dict[str, Any]]) -> list[str]:
+    """从卡池表反推限定干员 id 名单。
+
+    官方在限定池的 `limitParam.limitedCharId` 里写明了当期限定干员，460 个池累计
+    能覆盖全部 27 名限定 6★——这比按名字猜「谁算限定」可靠得多。
+    """
+    found: set[str] = set()
+    for pool in pools:
+        param = pool.get("limitParam")
+        if isinstance(param, dict) and param.get("limitedCharId"):
+            found.add(str(param["limitedCharId"]))
+    return sorted(found)
+
+
+def _raw_characters(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """兼容两种输入：原始 `character_table`（`{id: {...}}`）或本脚本产出的列表。"""
+    if isinstance(payload.get("characters"), list):
+        return payload["characters"]
+    rows: list[dict[str, Any]] = []
+    for char_id, value in payload.items():
+        if isinstance(value, dict) and "name" in value:
+            rows.append({**value, "id": char_id})
+    return rows
+
+
+def trim_characters(
+    payload: dict[str, Any], limited_ids: list[str] | tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """裁剪成角色快照。
+
+    保证：只留寻访能出的角色（3–6 星、非召唤物、可获取），每条都带 id / name /
+    rarity；限定角色额外带 `limited: true`。输出的列表按星级降序、id 升序，
+    同一份输入永远得到同一份输出。
+    补齐：`limited` 取「卡池表推出的限定名单」与「输入里已标的限定」的并集，
+    于是 `--offline` 回读写回的快照不会把限定标记洗掉。
+    """
+    limited = set(limited_ids)
+    characters: list[dict[str, Any]] = []
+    skipped = 0
+    for raw in _raw_characters(payload):
+        try:
+            char_id = str(raw["id"])
+            name = str(raw["name"]).strip()
+            rarity_raw = raw["rarity"]
+            rarity = (
+                rarity_raw
+                if isinstance(rarity_raw, int)
+                else _RARITY_BY_TIER[str(rarity_raw)]
+            )
+        except (KeyError, TypeError, ValueError):
+            skipped += 1
+            continue
+        if not name or rarity not in _RARITY_BY_TIER.values():
+            skipped += 1
+            continue
+        if str(raw.get("profession") or "") in _SKIP_PROFESSIONS:
+            continue
+        if raw.get("isNotObtainable"):
+            continue
+        item: dict[str, Any] = {"id": char_id, "name": name, "rarity": rarity}
+        if char_id in limited or raw.get("limited"):
+            item["limited"] = True
+        characters.append(item)
+    characters.sort(key=lambda c: (-c["rarity"], c["id"]))
+    return {
+        "source": CHAR_SOURCE_URL,
+        "fetched_at": datetime.now(CST).isoformat(timespec="seconds"),
+        "skipped": skipped,
+        "characters": characters,
+    }
+
+
+def summarize_characters(snapshot: dict[str, Any]) -> str:
+    """统计各星级人数，方便肉眼核对本次拉取是否合理。"""
+    counts: dict[int, int] = {}
+    for character in snapshot.get("characters") or ():
+        counts[character["rarity"]] = counts.get(character["rarity"], 0) + 1
+    limited = sum(1 for c in snapshot.get("characters") or () if c.get("limited"))
+    lines = [f"角色总数 {len(snapshot.get('characters') or ())}（限定 {limited}）"]
+    for rarity in sorted(counts, reverse=True):
+        lines.append(f"  {rarity} 星 {counts[rarity]:>4}")
+    if snapshot.get("skipped"):
+        lines.append(f"跳过无法解析的记录 {snapshot['skipped']} 条")
+    return "\n".join(lines)
+
+
 def write_snapshot(snapshot: dict[str, Any], path: Path = SNAPSHOT_PATH) -> None:
     """写快照。先写临时文件再替换，避免中途失败留下半个 JSON。"""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,12 +270,18 @@ def summarize(snapshot: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None, snapshot_path: Path | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    snapshot_path: Path | None = None,
+    char_path: Path | None = None,
+) -> int:
     """执行一次快照生成。
 
-    `snapshot_path` 供测试注入临时文件；默认写回仓库里的 `resources/snapshot/`。
+    `snapshot_path` / `char_path` 供测试注入临时文件；默认写回仓库里的
+    `resources/snapshot/`。只注入 `snapshot_path` 时，角色快照落在它旁边，
+    这样测试不会顺手改写仓库里的真文件。
     """
-    parser = argparse.ArgumentParser(description="生成卡池快照")
+    parser = argparse.ArgumentParser(description="生成卡池与角色快照")
     parser.add_argument(
         "--offline",
         action="store_true",
@@ -177,6 +289,10 @@ def main(argv: list[str] | None = None, snapshot_path: Path | None = None) -> in
     )
     args = parser.parse_args(argv)
     target = snapshot_path or SNAPSHOT_PATH
+    # 只注入 snapshot_path 时（测试），角色快照跟着落在它旁边，免得顺手改写仓库里的真文件。
+    char_target = char_path or (
+        CHAR_SNAPSHOT_PATH if snapshot_path is None else target.parent / "characters.json"
+    )
 
     if args.offline:
         try:
@@ -187,6 +303,11 @@ def main(argv: list[str] | None = None, snapshot_path: Path | None = None) -> in
         except json.JSONDecodeError as exc:
             print(f"快照不是合法 JSON：{exc}", file=sys.stderr)
             return 1
+        try:
+            char_payload: dict[str, Any] | None = read_snapshot(char_target)
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            char_payload = None
+            print(f"角色快照不可用，跳过角色重建：{exc}", file=sys.stderr)
     else:
         try:
             payload = fetch()
@@ -194,6 +315,11 @@ def main(argv: list[str] | None = None, snapshot_path: Path | None = None) -> in
             # 保留现有快照不动：拉到一半失败也比拿旧数据跑更危险。
             print(f"{exc}\n现有快照未改动。", file=sys.stderr)
             return 1
+        try:
+            char_payload = fetch(CHAR_SOURCE_URL)
+        except RuntimeError as exc:
+            char_payload = None
+            print(f"角色表下载失败：{exc}\n现有角色快照未改动。", file=sys.stderr)
 
     snapshot = trim(payload)
     if not snapshot["pools"]:
@@ -202,6 +328,18 @@ def main(argv: list[str] | None = None, snapshot_path: Path | None = None) -> in
     write_snapshot(snapshot, target)
     print(summarize(snapshot))
     print(f"已写入 {target}")
+
+    if char_payload is None:
+        print("角色快照未更新。")
+        return 0
+    chars = trim_characters(char_payload, limited_char_ids(snapshot["pools"]))
+    if not chars["characters"]:
+        # 空角色表会让抽卡指令全部报「数据未就绪」，比保留旧文件更糟。
+        print("裁剪后一个角色都没有，拒绝覆盖角色快照。", file=sys.stderr)
+        return 1
+    write_snapshot(chars, char_target)
+    print(summarize_characters(chars))
+    print(f"已写入 {char_target}")
     return 0
 
 
