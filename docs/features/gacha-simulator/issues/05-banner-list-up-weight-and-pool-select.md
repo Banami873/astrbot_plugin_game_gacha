@@ -22,8 +22,10 @@ UP 占比分配、其余按权重回落；用户可用五大类 + 池名前缀�
   池名 + UP 6★/5★/4★、与官方骨架按 `open_time` 精确对齐、池名二次匹配
 - `resources/snapshot/banners.json`：对齐后的名单快照
 - `resources/pool_rules.json`：`up6_share` / `up5_share`（NORMAL 0.5、LIMITED 0.7、
-  DOUBLE/SPECIAL/BACKFLOW 1.0 …）
-- `core/pools.py`：五大类归并 + 前缀匹配 + 多义候选
+  DOUBLE/SPECIAL/BACKFLOW/GACHAWITHSPECIFIED6 1.0 …）
+- **先读官方 `dynMeta.charIdList`**：有值的名单池（卫戍、定向甄选、特选、归航等）直接用官方名单，
+  为空才去 PRTS 取——省一次网络依赖（SPEC R-14「例外」段）
+- `core/pools.py`：五大类归并 + 前缀匹配 + 多义候选。卫戍（`GACHAWITHSPECIFIED6`）归「限时」
 - `games/arknights/engine.py`：星级内先分 UP 名额，再按剩余权重选人
 - 降级链：PRTS 成功 → PRTS 失败用快照名单 → 双源失败全用快照 → 名单缺失按「无 UP 加成」
   运行并在结果里标注

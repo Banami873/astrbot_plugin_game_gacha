@@ -22,7 +22,8 @@
 - 常驻：累计抽数（= `pool_state.pulls`）与 150/300 比较；命中后锁定目标，第二次命中锁另一名
 - 限时：`up_miss_counter` 只在「出 6★ 且不是 UP 6★」时 +1，出 UP 6★ 时清零
 - 结果文案标注「选调」
-- 不做：限定池（无选调）、联动（Issue 09）、兑换
+- 不做：限定池（无选调）、卫戍/联合行动/定向甄选（`GACHAWITHSPECIFIED6`/`DOUBLE`/`SPECIAL`
+  三类名单池均无选调，见 SPEC R-06b）、联动（Issue 09）、兑换
 
 ## Acceptance criteria
 
