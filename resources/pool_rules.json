@@ -1,0 +1,10 @@
+{
+  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用；同一个 gachaRuleType 只能出现在一个类别里。up6_share / up5_share 等概率参数由 issue 05 追加。",
+  "categories": {
+    "限定": ["LIMITED"],
+    "常驻": ["NORMAL"],
+    "限时": ["SINGLE", "DOUBLE", "SPECIAL", "ATTAIN", "GACHAWITHSPECIFIED6", "BACKFLOW"],
+    "中坚": ["CLASSIC", "CLASSIC_DOUBLE", "CLASSIC_ATTAIN", "FESCLASSIC"],
+    "联动": ["LINKAGE"]
+  }
+}

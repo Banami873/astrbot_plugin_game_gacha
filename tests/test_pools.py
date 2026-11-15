@@ -1,0 +1,290 @@
+"""卡池装载、活动判定与分类归并的测试。
+
+夹具用固定时间点，不依赖真实时钟——否则跨天跑测试会时红时绿。
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+CST = timezone(timedelta(hours=8))
+NOW = int(datetime(2026, 11, 15, 10, 0, tzinfo=CST).timestamp())
+DAY = 86400
+
+
+def _pool(**kwargs):
+    """构造官方表格式的一条记录，字段名与 `gacha_table.json` 一致。"""
+    base = {
+        "gachaPoolId": "P_1",
+        "gachaRuleType": "NORMAL",
+        "gachaPoolName": "测试池",
+        "gachaIndex": 1,
+        "openTime": NOW - DAY,
+        "endTime": NOW + DAY,
+    }
+    base.update(kwargs)
+    return base
+
+
+def _snapshot(pools_mod, records, category_map=None):
+    return pools_mod.Snapshot(
+        pools=tuple(
+            pools_mod.parse_pools({"pools": records}, category_map or pools_mod.FALLBACK_CATEGORY_MAP)
+        )
+    )
+
+
+class TestCategory:
+    def test_known_types_map_to_five_categories(self, pools_mod):
+        mapping = pools_mod.FALLBACK_CATEGORY_MAP
+        expected = {
+            "LIMITED": "限定",
+            "NORMAL": "常驻",
+            "SINGLE": "限时",
+            "DOUBLE": "限时",
+            "SPECIAL": "限时",
+            "ATTAIN": "限时",
+            "GACHAWITHSPECIFIED6": "限时",
+            "BACKFLOW": "限时",
+            "CLASSIC": "中坚",
+            "CLASSIC_DOUBLE": "中坚",
+            "CLASSIC_ATTAIN": "中坚",
+            "FESCLASSIC": "中坚",
+            "LINKAGE": "联动",
+        }
+        for rule_type, category in expected.items():
+            assert pools_mod.category_of(rule_type, mapping) == category
+
+    def test_unknown_type_falls_back_to_other(self, pools_mod):
+        """官方新增池型时不能被丢弃，否则用户看不到那个池。"""
+        assert pools_mod.category_of("SOMETHING_NEW", pools_mod.FALLBACK_CATEGORY_MAP) == "其他"
+        assert pools_mod.category_of("", pools_mod.FALLBACK_CATEGORY_MAP) == "其他"
+
+    def test_category_map_reads_rules_file(self, pools_mod, plugin_dir):
+        mapping = pools_mod.load_category_map(plugin_dir / "resources" / "pool_rules.json")
+        assert "限定" in mapping
+        assert "LIMITED" in mapping["限定"]
+
+    def test_category_map_falls_back_when_file_missing(self, pools_mod, tmp_path):
+        mapping = pools_mod.load_category_map(tmp_path / "不存在.json")
+        assert mapping == pools_mod.FALLBACK_CATEGORY_MAP
+
+    def test_category_map_falls_back_when_json_broken(self, pools_mod, tmp_path):
+        broken = tmp_path / "broken.json"
+        broken.write_text("{不是 JSON", encoding="utf-8")
+        assert pools_mod.load_category_map(broken) == pools_mod.FALLBACK_CATEGORY_MAP
+
+
+class TestActive:
+    def test_open_inclusive_end_exclusive(self, pools_mod):
+        """官方表里两个池首尾相接是常态，边界判错会同时出两个池或一个都不出。"""
+        records = [
+            _pool(gachaPoolId="OPEN", openTime=NOW, endTime=NOW + DAY),
+            _pool(gachaPoolId="CLOSING", openTime=NOW - DAY, endTime=NOW),
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        ids = [p.pool_id for p in snapshot.active(NOW)]
+        assert ids == ["OPEN"]
+
+    def test_filters_future_and_ended_pools(self, pools_mod):
+        records = [
+            _pool(gachaPoolId="LIVE", openTime=NOW - DAY, endTime=NOW + DAY),
+            _pool(gachaPoolId="FUTURE", openTime=NOW + 1, endTime=NOW + DAY),
+            _pool(gachaPoolId="ENDED", openTime=NOW - 2 * DAY, endTime=NOW - 1),
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        assert [p.pool_id for p in snapshot.active(NOW)] == ["LIVE"]
+
+    def test_ended_pools_stay_in_snapshot(self, pools_mod):
+        """已结束的池仍要留在快照里，将来历史池查询与兑换档位判定要用。"""
+        records = [_pool(gachaPoolId="ENDED", openTime=NOW - 2 * DAY, endTime=NOW - 1)]
+        snapshot = _snapshot(pools_mod, records)
+        assert snapshot.active(NOW) == []
+        assert snapshot.by_id("ENDED") is not None
+
+    def test_active_sorted_by_end_time(self, pools_mod):
+        """越早结束的池越该先看到。"""
+        records = [
+            _pool(gachaPoolId="LATE", endTime=NOW + 10 * DAY),
+            _pool(gachaPoolId="SOON", endTime=NOW + DAY),
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        assert [p.pool_id for p in snapshot.active(NOW)] == ["SOON", "LATE"]
+
+
+class TestRemaining:
+    def test_remaining_never_negative(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod, [_pool(gachaPoolId="ENDED", openTime=NOW - 2 * DAY, endTime=NOW - 1)]
+        )
+        ended = snapshot.by_id("ENDED")
+        assert ended is not None
+        assert ended.remaining_text(NOW) == "已结束"
+
+    @pytest.mark.parametrize(
+        ("left", "expected"),
+        [
+            (2 * DAY + 3 * 3600, "2 天 3 小时"),
+            (5 * 3600, "5 小时"),
+            (60, "不足 1 小时"),
+            (0, "已结束"),
+        ],
+    )
+    def test_remaining_format(self, pools_mod, left, expected):
+        snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="P", endTime=NOW + left)])
+        pool = snapshot.by_id("P")
+        assert pool is not None
+        assert pool.remaining_text(NOW) == expected
+
+    def test_long_open_pool_reads_as_years(self, pools_mod):
+        """归航寻访的官方 endTime 在 2030 年，逐日报 1262 天像数据出错。"""
+        snapshot = _snapshot(
+            pools_mod,
+            [_pool(gachaPoolId="P", openTime=NOW - DAY, endTime=NOW + 1262 * DAY)],
+        )
+        pool = snapshot.by_id("P")
+        assert pool is not None
+        assert pool.remaining_text(NOW) == "长期开放（约 3 年）"
+
+    def test_local_window_adds_year_when_crossing(self, pools_mod):
+        """只写 05-01 会让人以为本周就结束。"""
+        snapshot = _snapshot(
+            pools_mod,
+            [_pool(gachaPoolId="P", openTime=NOW, endTime=NOW + 1262 * DAY)],
+        )
+        pool = snapshot.by_id("P")
+        assert pool is not None
+        start, end = pool.local_window()
+        assert start.startswith("2026-")
+        assert end.startswith("2030-") or end.startswith("2031-")
+
+    def test_local_window_omits_year_within_same_year(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod, [_pool(gachaPoolId="P", openTime=NOW, endTime=NOW + 2 * DAY)]
+        )
+        pool = snapshot.by_id("P")
+        assert pool is not None
+        start, _ = pool.local_window()
+        assert start.startswith("11-")
+
+
+class TestGrouped:
+    def test_groups_follow_fixed_order(self, pools_mod):
+        """读者按固定次序找池，不能按字典序。"""
+        records = [
+            _pool(gachaPoolId="E", gachaRuleType="WEIRD", endTime=NOW + 3 * DAY),
+            _pool(gachaPoolId="B", gachaRuleType="NORMAL", endTime=NOW + DAY),
+            _pool(gachaPoolId="A", gachaRuleType="LIMITED", endTime=NOW + 2 * DAY),
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        assert list(snapshot.grouped(NOW).keys()) == ["限定", "常驻", "其他"]
+
+    def test_empty_categories_absent(self, pools_mod):
+        records = [_pool(gachaPoolId="A", gachaRuleType="LIMITED")]
+        snapshot = _snapshot(pools_mod, records)
+        assert list(snapshot.grouped(NOW).keys()) == ["限定"]
+
+
+class TestParsing:
+    def test_placeholder_name_falls_back_to_pool_id(self, pools_mod):
+        records = [_pool(gachaPoolId="NORM_79_0_3", gachaPoolName="适合多种场合的强力干员")]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("NORM_79_0_3")
+        assert pool is not None
+        assert pool.name == ""
+        assert pool.display_name == "NORM_79_0_3"
+
+    def test_real_name_kept(self, pools_mod):
+        snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="L", gachaPoolName="将雪投火")])
+        pool = snapshot.by_id("L")
+        assert pool is not None
+        assert pool.display_name == "将雪投火"
+
+    def test_char_id_list_lifted_from_dyn_meta(self, pools_mod):
+        """名单池的干员名单在 dynMeta 里，提上来下游就不必关心嵌套。"""
+        records = [
+            _pool(
+                gachaPoolId="SPEC",
+                gachaRuleType="GACHAWITHSPECIFIED6",
+                dynMeta={"charIdList": ["char_4064_mlynar", "char_4133_logos"]},
+            )
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("SPEC")
+        assert pool is not None
+        assert pool.char_ids == ("char_4064_mlynar", "char_4133_logos")
+
+    def test_dyn_meta_kept_for_later_rules(self, pools_mod):
+        """中坚的主副 6★、特选的名单都在 dynMeta 里，01 不解析但要留着。"""
+        records = [
+            _pool(
+                gachaPoolId="C",
+                gachaRuleType="CLASSIC",
+                dynMeta={
+                    "main6RarityCharId": "char_x",
+                    "sub6RarityCharId": "char_y",
+                    "rare5CharList": ["char_1"],
+                },
+            )
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("C")
+        assert pool is not None
+        assert pool.dyn_meta is not None
+        assert pool.dyn_meta["main6RarityCharId"] == "char_x"
+        # 不是 charIdList 结构，不要臆造一个名单出来。
+        assert pool.char_ids == ()
+
+    def test_dirty_record_skipped_without_killing_table(self, pools_mod):
+        """单条脏数据只丢这一条，其余照常可用。"""
+        records = [
+            _pool(gachaPoolId="GOOD"),
+            {"gachaPoolId": "NO_TIME", "gachaRuleType": "NORMAL"},
+            {"gachaRuleType": "NORMAL", "openTime": NOW, "endTime": NOW + DAY},
+            _pool(gachaPoolId="ALSO_GOOD"),
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        assert {p.pool_id for p in snapshot.pools} == {"GOOD", "ALSO_GOOD"}
+
+    def test_limit_and_linkage_params_kept(self, pools_mod):
+        records = [
+            _pool(
+                gachaPoolId="L",
+                gachaRuleType="LIMITED",
+                limitParam={"freeCount": 300, "limitedCharId": "char_4247_oxi"},
+            ),
+            _pool(
+                gachaPoolId="K",
+                gachaRuleType="LINKAGE",
+                linkageParam={"guaranteeTarget6Count": 120},
+            ),
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        limited = snapshot.by_id("L")
+        linkage = snapshot.by_id("K")
+        assert limited is not None and limited.limit_param["freeCount"] == 300
+        assert linkage is not None and linkage.linkage_param["guaranteeTarget6Count"] == 120
+
+
+class TestRealSnapshot:
+    """对内置于仓库的快照做冒烟检查：它必须能装上，且含已知的池。"""
+
+    def test_snapshot_loads(self, pools_mod, plugin_dir):
+        path = plugin_dir / "resources" / "snapshot" / "gacha_table.json"
+        snapshot = pools_mod.load_snapshot(path, pools_mod.FALLBACK_CATEGORY_MAP)
+        assert len(snapshot.pools) >= 400
+        assert snapshot.fetched_at is not None
+
+    def test_snapshot_has_limited_pool(self, pools_mod, plugin_dir):
+        path = plugin_dir / "resources" / "snapshot" / "gacha_table.json"
+        snapshot = pools_mod.load_snapshot(path, pools_mod.FALLBACK_CATEGORY_MAP)
+        limited = [p for p in snapshot.pools if p.rule_type == "LIMITED"]
+        assert limited, "快照里应该有 LIMITED 池"
+        assert all(p.category == "限定" for p in limited)
+
+    def test_snapshot_missing_file_raises(self, pools_mod, tmp_path):
+        """快照缺失要抛出去，让调用方提示用户，而不是假装没有池。"""
+        with pytest.raises(FileNotFoundError):
+            pools_mod.load_snapshot(tmp_path / "没有.json", pools_mod.FALLBACK_CATEGORY_MAP)
