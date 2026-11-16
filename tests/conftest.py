@@ -67,6 +67,19 @@ def store(store_mod, tmp_path):
     return instance
 
 
+@pytest.fixture()
+def pool(pools_pkg):
+    """一个永不过期的常驻测试池。抽卡、出图的用例共用同一份。"""
+    return pools_pkg.Pool(
+        pool_id="NORM_TEST",
+        rule_type="NORMAL",
+        open_time=0,
+        end_time=4102444800,  # 2100-01-01
+        category="常驻",
+        name="测试池",
+    )
+
+
 @pytest.fixture(scope="session")
 def views_mod() -> ModuleType:
     return load_module(
@@ -127,6 +140,28 @@ def banners_mod() -> ModuleType:
 def limited_mod() -> ModuleType:
     """限定寻访的系列、解限期与 5 倍名单。"""
     return package_module("games.arknights.limited")
+
+
+@pytest.fixture(scope="session")
+def render_mod() -> ModuleType:
+    """出图包：Assets / PortraitStore / Renderer / CardItem。"""
+    return package_module("games.arknights.render")
+
+
+@pytest.fixture(scope="session")
+def layout_mod() -> ModuleType:
+    """出图的元素表：几何断言的唯一来源。"""
+    return package_module("games.arknights.render.layout")
+
+
+@pytest.fixture(scope="session")
+def assets_mod() -> ModuleType:
+    return package_module("games.arknights.render.assets")
+
+
+@pytest.fixture(scope="session")
+def portraits_mod() -> ModuleType:
+    return package_module("games.arknights.render.portraits")
 
 
 @pytest.fixture(scope="session")

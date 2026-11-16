@@ -195,6 +195,30 @@ def render_pulls(
     return "\n".join(lines)
 
 
+def render_pull_brief(
+    pool_name: str,
+    *,
+    cost: int,
+    tickets: int,
+    six_counter: int | None = None,
+    hard_pity: int = 99,
+    up_missing: bool = False,
+) -> str:
+    """出图成功时配的那一行文字。
+
+    结果本身在图里，文字只补图上没有的信息：池名、剩余抽数、离硬保底还差多少。
+    不重复列抽到了谁——那就和图的内容打架了。
+    """
+    lines = [f"【寻访结果】{pool_name} · {cost} 抽"]
+    tail = f"剩余 {tickets} 抽"
+    if six_counter is not None:
+        tail += f" · 距 6★ 硬保底还有 {max(1, hard_pity - six_counter)} 抽"
+    lines.append(tail)
+    if up_missing:
+        lines.append("（UP 名单未获取，本批按同星级均分概率）")
+    return "\n".join(lines)
+
+
 def render_pool_problem(
     reason: str,
     query: str,

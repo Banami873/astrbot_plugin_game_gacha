@@ -53,6 +53,10 @@ class FakeEvent:
     def plain_result(self, text: str):
         return text
 
+    def image_result(self, path: str):
+        """出图成功时走这条。带上 `[图片]` 前缀，用例才好断言「发的是图不是文字」。"""
+        return f"[图片] {path}"
+
 
 def run(agen) -> str:
     """把指令的 async generator 收成一段文本。"""

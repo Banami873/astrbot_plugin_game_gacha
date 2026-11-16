@@ -34,6 +34,7 @@ from .games.arknights.views import (
     render_newbie_notice,
     render_pool_list,
     render_pool_problem,
+    render_pull_brief,
     render_pulls,
     render_signin,
 )
@@ -84,6 +85,12 @@ class GameGachaPlugin(Star):
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
         self._roster_error = ""
+        # 出图三件：素材/绘制器、立绘缓存、开关。关掉出图时三者都不建，
+        # 连 PIL 都不 import——素材与字体也就不会被加载（R-18）。
+        self.renderer = None
+        self.portraits = None
+        self.image_enabled = False
+        self._preload_task: asyncio.Task | None = None
 
     async def initialize(self) -> None:
         """建库并装载快照。
@@ -152,6 +159,103 @@ class GameGachaPlugin(Star):
                 f"[{PLUGIN_NAME}] 已装载 {len(self.roster)} 名可抽取干员"
             )
 
+        self._setup_renderer(Path(data_dir))
+
+    # ---- 出图 ------------------------------------------------------------
+
+    def _setup_renderer(self, data_dir: Path) -> None:
+        """按配置建绘制器与立绘缓存，然后起后台预热。
+
+        出图是锦上添花：素材缺失、PIL 装不上、配置写坏，任何一种都只该让指令回到
+        纯文字，不能让插件加载失败（R-15）。
+        """
+        self.image_enabled = self._cfg_bool("enable_image", True)
+        if not self.image_enabled:
+            logger.info(f"[{PLUGIN_NAME}] 出图已关闭，一律文字结果")
+            return
+        try:
+            from .games.arknights.render import Assets, PortraitStore, Renderer
+        except Exception as exc:  # noqa: BLE001 — 缺 PIL 之类的环境问题不该拖垮插件
+            logger.warning(f"[{PLUGIN_NAME}] 出图组件加载失败，改用文字：{exc}")
+            self.image_enabled = False
+            return
+        cache_dir = data_dir / "cache"
+        self.portraits = PortraitStore(
+            cache_dir,
+            allow_network=self._cfg_bool("allow_network", True),
+            quality=str(self.config.get("image_quality") or "中"),
+        )
+        self.renderer = Renderer(Assets(), self.portraits, out_dir=cache_dir / "render")
+        if self.portraits.allow_network and self.roster is not None:
+            # 全量预热立绘：318 人两套图，600 多次请求，跑十几分钟。
+            # 存进实例字段——`asyncio` 只持有 Task 的弱引用，不存引用会在 await 期间被 GC。
+            self._preload_task = asyncio.create_task(self._preload_portraits())
+
+    async def _preload_portraits(self) -> None:
+        """后台把全部干员的立绘下载进缓存。失败只记日志，抽卡时会再试一次。"""
+        if self.portraits is None or self.roster is None:
+            return
+        characters = list(self.roster.characters)
+        try:
+            counts = await asyncio.to_thread(self.portraits.ensure_many, characters)
+        except Exception as exc:  # noqa: BLE001 — 预热失败不影响任何指令
+            logger.warning(f"[{PLUGIN_NAME}] 立绘预热中断：{exc}")
+            return
+        logger.info(
+            f"[{PLUGIN_NAME}] 立绘预热完成：半身像 {counts.get('half', 0)} 张、"
+            f"精一立绘 {counts.get('art', 0)} 张（已缓存的跳过）"
+        )
+
+    def _card_item(self, draft) -> object:
+        """把抽取结果变成渲染层的 `CardItem`：展示字段从干员字典补。"""
+        from .games.arknights.render import CardItem
+
+        character = self.roster.get(draft.char_id) if self.roster else None
+        return CardItem(
+            char_id=draft.char_id,
+            name=draft.name,
+            star=draft.star,
+            profession=character.profession if character else "",
+            name_en=character.name_en if character else "",
+            camp=character.camp if character else "",
+        )
+
+    async def _render_image(self, drafts, *, single: bool) -> Path | None:
+        """画一张结果图。失败返回 `None`，调用方降级为文字（R-15）。
+
+        渲染是同步 CPU 操作（十连要解 10 张立绘、叠十几层），必须扔进线程，
+        否则会把整个 AstrBot 的事件循环卡住。
+        """
+        renderer = getattr(self, "renderer", None)
+        if renderer is None or not getattr(self, "image_enabled", False):
+            return None
+        items = [self._card_item(draft) for draft in drafts]
+        try:
+            if single and len(items) == 1:
+                image = await asyncio.to_thread(renderer.render_single, items[0])
+            else:
+                image = await asyncio.to_thread(renderer.render_ten, items)
+            path = await asyncio.to_thread(
+                renderer.save, image, prefix="single" if single and len(items) == 1 else "ten"
+            )
+        except Exception as exc:  # noqa: BLE001 — 画不出来不能回滚已入账的抽卡
+            logger.warning(f"[{PLUGIN_NAME}] 出图失败，降级为文字：{exc}")
+            return None
+        self._prune_images(path.parent)
+        return path
+
+    @staticmethod
+    def _prune_images(folder: Path, keep: int = 40) -> None:
+        """只留最近 40 张结果图。历史图没人会看，攒着只会让数据目录变胖。"""
+        try:
+            files = sorted(
+                folder.glob("*.png"), key=lambda item: item.stat().st_mtime, reverse=True
+            )
+            for stale in files[keep:]:
+                stale.unlink(missing_ok=True)
+        except OSError:
+            pass
+
     # ---- 配置 ------------------------------------------------------------
 
     def _cfg_int(self, key: str, default: int) -> int:
@@ -160,6 +264,13 @@ class GameGachaPlugin(Star):
             return int(self.config.get(key, default))
         except (TypeError, ValueError):
             return default
+
+    def _cfg_bool(self, key: str, default: bool) -> bool:
+        """读一个布尔配置项。AstrBot 的配置面板可能给字符串，这里一并认。"""
+        value = self.config.get(key, default)
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        return bool(value)
 
     @property
     def signin_reward(self) -> int:
@@ -338,6 +449,24 @@ class GameGachaPlugin(Star):
             hard_pity=ark_engine.HARD_PITY,
             up_missing=self.banners.get(pool.pool_id) is None,
         )
+        # 事务已经提交（R-15）：出图成功发图 + 一行水位，失败就把完整文字发出去。
+        image_path = await self._render_image(
+            outcome.batch.drafts, single=times == 1
+        )
+        if image_path is not None:
+            yield event.image_result(str(image_path))
+            yield event.plain_result(
+                render_pull_brief(
+                    pool.display_name,
+                    cost=times,
+                    tickets=outcome.commit.tickets,
+                    six_counter=outcome.batch.six_counter,
+                    hard_pity=ark_engine.HARD_PITY,
+                    up_missing=self.banners.get(pool.pool_id) is None,
+                )
+                + notice
+            )
+            return
         yield event.plain_result(text + notice)
 
     def _purge_expired_pity(self, uid: str, platform: str, now: int) -> None:
@@ -508,4 +637,14 @@ class GameGachaPlugin(Star):
         )
 
     async def terminate(self) -> None:
-        """插件卸载时的收尾。当前没有长连接或后台任务需要停。"""
+        """插件卸载时停掉立绘预热。
+
+        线程没法强杀，先置停止标志再取消任务：`ensure_many` 会在每张图之间检查标志，
+        最多再等一次请求（1 秒）就退出，不会拖着插件重载。
+        """
+        task = getattr(self, "_preload_task", None)
+        portraits = getattr(self, "portraits", None)
+        if portraits is not None:
+            portraits.stop()
+        if task is not None and not task.done():
+            task.cancel()
