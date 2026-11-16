@@ -41,6 +41,10 @@ class Character:
 
     `channels` 是该干员能出现的基础池集合；`limited` 是「限定干员」的语义标记
     （由卡池表的 `limitParam` 反推，与基础池里的 `limited` 互为印证）。
+
+    `name_en` / `profession` / `camp` 是**展示字段**，只给渲染层用（单抽要写中英文名、
+    画阵营 logo 与带文字职业图标；十连要职业图标）。它们不参与任何抽取判定，缺失时
+    只是少画一个图标或一行英文名。
     """
 
     char_id: str
@@ -48,6 +52,9 @@ class Character:
     rarity: int
     limited: bool = False
     channels: frozenset[str] = field(default_factory=frozenset)
+    name_en: str = ""
+    profession: str = ""
+    camp: str = ""
 
 
 @dataclass(frozen=True)
@@ -112,6 +119,9 @@ def _parse_character(raw: Mapping[str, Any]) -> Character:
         rarity=rarity,
         limited=bool(raw.get("limited", False)),
         channels=channels,
+        name_en=str(raw.get("name_en") or "").strip(),
+        profession=str(raw.get("profession") or "").strip(),
+        camp=str(raw.get("camp") or "").strip(),
     )
 
 

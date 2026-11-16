@@ -23,6 +23,7 @@ import json
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -128,6 +129,30 @@ _DATA_ATTR_RE = re.compile(r'data-([a-z\-]+)="([^"]*)"')
 # 解析出的干员数低于这个值时判定为「页面变了或被拦了」。正常是 300+。
 PRTS_MIN_CHANNELS = 100
 
+# ---- PRTS 干员详情（英文名 / 职业 / 阵营）---------------------------------
+#
+# `cargoquery` 是 MediaWiki 的表查询接口，一条请求就能按 charId 取回干员页信息栏的字段。
+# 这三个字段只给渲染用：单抽要写中英文名、画阵营 logo 与带文字职业图标，十连要职业图标。
+# 它们不参与抽卡判定，所以抓不到时可以让快照里的旧值原地保留（见 `main`）。
+PRTS_API_URL = "https://prts.wiki/api.php"
+PRTS_API_HEADERS = {
+    **PRTS_HEADERS,
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Referer": PRTS_ROSTER_URL,
+    "X-Requested-With": "XMLHttpRequest",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
+PRTS_META_FIELDS = (
+    "chara.charId=charId,chara.en=en,chara.profession=profession,chara.logo=logo"
+)
+# 接口单次最多 500 条，多页兜底防 offset 失效时死循环。
+PRTS_META_PAGE = 500
+PRTS_META_MAX_PAGES = 40
+# 低于这个条数判定被拦。chara 表连不可获取的干员一起返回，正常 330+。
+PRTS_MIN_META = 300
+
 
 def parse_prts_channels(page: str) -> dict[str, list[str]]:
     """从 PRTS 干员一览的 HTML 里取出 `{char_id: [基础池...]}`。
@@ -173,6 +198,103 @@ def fetch_prts_channels(timeout: int = 60) -> dict[str, list[str]]:
             f"PRTS 只解析出 {len(channels)} 名干员，疑似被拦截或页面结构变化"
         )
     return channels
+
+
+def parse_prts_meta_rows(payload: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    """把 `cargoquery` 的响应读成 `{char_id: {name_en, profession, camp}}`。
+
+    `cargoquery` 的形状是 `{"cargoquery": [{"title": {...}}, ...]}`，字段名由查询时的
+    `别名` 决定。空值不写进结果——空串当成「有值」会让出图时画一个不存在的图标。
+    错误响应（`{"error": {...}}`）抛 `RuntimeError`，让调用方走「沿用旧字段」那条路。
+    """
+    if "error" in payload:
+        raise RuntimeError(f"PRTS 干员详情返回错误：{payload['error']}")
+    found: dict[str, dict[str, str]] = {}
+    for row in payload.get("cargoquery") or ():
+        fields = row.get("title") if isinstance(row, dict) else None
+        if not isinstance(fields, dict):
+            continue
+        char_id = str(fields.get("charId") or "").strip()
+        if not char_id:
+            continue
+        item: dict[str, str] = {}
+        for key, source in (
+            ("name_en", "en"),
+            ("profession", "profession"),
+            ("camp", "logo"),
+        ):
+            value = str(fields.get(source) or "").strip()
+            if value:
+                item[key] = value
+        if item:
+            found[char_id] = item
+    return found
+
+
+def fetch_prts_meta(timeout: int = 60) -> dict[str, dict[str, str]]:
+    """取干员的英文名、职业与阵营（渲染用），键是 `char_id`。
+
+    来源是 PRTS 的 `cargoquery` 接口（`chara.en` / `chara.profession` / `chara.logo`），
+    一次请求就能拿全，不必逐个解析干员页。三个字段只影响出图的文字与图标，不参与抽卡，
+    所以调用方抓不到时可以沿用旧字段，不像基础池那样必须整趟失败。
+
+    失败：网络异常、响应不是 JSON、或拿到的条数少得离谱时抛 `RuntimeError`。
+    """
+    found: dict[str, dict[str, str]] = {}
+    offset = 0
+    for page in range(PRTS_META_MAX_PAGES):
+        query = urllib.parse.urlencode(
+            {
+                "action": "cargoquery",
+                "tables": "chara",
+                "fields": PRTS_META_FIELDS,
+                "order_by": "chara.charId ASC",
+                "limit": str(PRTS_META_PAGE),
+                "offset": str(offset),
+                "format": "json",
+            }
+        )
+        request = urllib.request.Request(
+            f"{PRTS_API_URL}?{query}", headers=PRTS_API_HEADERS
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read()
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError(f"PRTS 干员详情下载失败：{exc}") from exc
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"PRTS 干员详情不是合法 JSON：{exc}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("PRTS 干员详情响应顶层不是对象，可能被重定向了")
+        rows = payload.get("cargoquery") or []
+        found.update(parse_prts_meta_rows(payload))
+        if len(rows) < PRTS_META_PAGE:
+            break
+        offset += PRTS_META_PAGE
+    if len(found) < PRTS_MIN_META:
+        raise RuntimeError(
+            f"PRTS 只返回 {len(found)} 名干员的详情，疑似被拦截或接口变了"
+        )
+    return found
+
+
+def meta_from_snapshot(payload: dict[str, Any] | None) -> dict[str, dict[str, str]]:
+    """从已产出的干员快照里读回英文名/职业/阵营，供 `--offline` 与联网失败兜底。"""
+    found: dict[str, dict[str, str]] = {}
+    for raw in _raw_characters(payload or {}):
+        char_id = str(raw.get("id") or "")
+        if not char_id:
+            continue
+        item = {
+            key: str(raw.get(key) or "").strip()
+            for key in ("name_en", "profession", "camp")
+        }
+        item = {key: value for key, value in item.items() if value}
+        if item:
+            found[char_id] = item
+    return found
 
 
 def fetch_prts_banners(timeout: int = 60) -> str:
@@ -306,20 +428,27 @@ def trim_characters(
     payload: dict[str, Any],
     limited_ids: list[str] | tuple[str, ...] = (),
     channels: Mapping[str, Sequence[str]] | None = None,
+    meta: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """裁剪成干员快照。
 
     保证：只留寻访能出的干员（3–6 星、非召唤物、可获取、且至少有一种基础池），每条
-    都带 id / name / rarity / channels；限定干员额外带 `limited: true`。输出的列表按
-    星级降序、id 升序，同一份输入永远得到同一份输出。
+    都带 id / name / rarity / channels；限定干员额外带 `limited: true`；`meta` 里有的
+    干员再带 `name_en` / `profession` / `camp` 三个展示字段。输出的列表按星级降序、
+    id 升序，同一份输入永远得到同一份输出。
 
     `channels` 是权威基础池数据（来自 PRTS）；为 None 时不做基础池过滤，只用于诊断——正式
     产出一律要求它非空，因为缺了它就会把活动赠送和商店干员一起放回池子里。
 
+    `meta` 是渲染用的展示字段（PRTS `cargoquery`），缺了不影响抽卡，只让单抽的英文名与
+    阵营 logo、单抽/十连的职业图标退化成空白。
+
     补齐：`limited` 取「卡池表推出的限定名单」与「输入里已标的限定」的并集，于是
-    `--offline` 回读写回的快照不会把限定标记洗掉。
+    `--offline` 回读写回的快照不会把限定标记洗掉；展示字段同理，空值不写入，已写入的
+    在离线重建时从旧快照继承（见 `meta_from_snapshot`）。
     """
     limited = set(limited_ids)
+    details = meta or {}
     characters: list[dict[str, Any]] = []
     skipped = 0
     excluded = 0
@@ -344,6 +473,11 @@ def trim_characters(
         if raw.get("isNotObtainable"):
             continue
         item: dict[str, Any] = {"id": char_id, "name": name, "rarity": rarity}
+        extra = details.get(char_id) or {}
+        for key in ("name_en", "profession", "camp"):
+            value = str(extra.get(key) or "").strip()
+            if value:
+                item[key] = value
         if channels is not None:
             marked = channels.get(char_id)
             if not marked:
@@ -390,6 +524,13 @@ def summarize_characters(snapshot: dict[str, Any]) -> str:
         lines.append(f"排除无基础池的干员 {snapshot['excluded_no_channel']} 名")
     if snapshot.get("skipped"):
         lines.append(f"跳过无法解析的记录 {snapshot['skipped']} 条")
+    professions = sorted({c["profession"] for c in rows if c.get("profession")})
+    if professions:
+        lines.append("  职业：" + " / ".join(professions))
+    missing = sum(1 for c in rows if not c.get("profession"))
+    if missing:
+        # 缺职业只影响出图（不画职业图标），不影响抽卡，所以只提示不拦。
+        lines.append(f"  缺职业字段 {missing} 名（出图时不画职业图标）")
     return "\n".join(lines)
 
 
@@ -534,8 +675,9 @@ def main(
             char_payload = None
             print(f"干员快照不可用，跳过干员重建：{exc}", file=sys.stderr)
         # 离线时基础池数据只能来自旧快照本身：这样 --offline 走的是与联网完全相同的裁剪
-        # 路径，才谈得上验证幂等。
+        # 路径，才谈得上验证幂等。展示字段同理。
         channels = channels_from_snapshot(char_payload) if char_payload else {}
+        meta = meta_from_snapshot(char_payload) if char_payload else {}
     else:
         try:
             payload = fetch()
@@ -555,6 +697,17 @@ def main(
             # 干员重新放回池里，比沿用旧字典糟糕得多。
             char_payload = None
             print(f"{exc}\n现有干员快照未改动。", file=sys.stderr)
+        try:
+            meta = fetch_prts_meta()
+        except RuntimeError as exc:
+            # 英文名/职业/阵营只给渲染用，抓不到就沿用旧快照，不能让整份干员字典拒绝更新。
+            try:
+                meta = meta_from_snapshot(read_snapshot(char_target))
+            except (FileNotFoundError, json.JSONDecodeError):
+                meta = {}
+            print(
+                f"{exc}\n干员展示字段沿用旧快照（{len(meta)} 条）。", file=sys.stderr
+            )
 
     snapshot = trim(payload)
     if not snapshot["pools"]:
@@ -571,7 +724,7 @@ def main(
         print("缺少基础池数据，拒绝覆盖干员快照。", file=sys.stderr)
         return 1
     chars = trim_characters(
-        char_payload, limited_char_ids(snapshot["pools"]), channels
+        char_payload, limited_char_ids(snapshot["pools"]), channels, meta
     )
     if not chars["characters"]:
         # 空干员表会让抽卡指令全部报「数据未就绪」，比保留旧文件更糟。
