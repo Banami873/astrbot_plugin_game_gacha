@@ -62,6 +62,8 @@ class TestTenLayout:
         # 立绘比卡宽，靠裁剪把两侧切掉——这正是游戏内「人站在卡里」的做法。
         assert layout_mod.portrait_width() > card.w
         assert card.contains(clip)
+        # 裁剪区就是卡本身：额外内缩会切掉脸（2026-11-17 用户反馈）。
+        assert clip.w == card.w, "别再给立绘加左右内缩"
         left, _ = layout_mod.portrait_anchor(card)
         assert left < clip.x, "立绘左边没落到裁剪区外，说明宽度常量没生效"
 

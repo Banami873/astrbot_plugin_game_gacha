@@ -29,7 +29,10 @@ CARD_GAP = -16
 PORTRAIT_SCALE = 1.35
 PORTRAIT_OFFSET_X = 6
 PORTRAIT_OFFSET_Y = -18
-PORTRAIT_CROP_SIDE = 9
+# 0 = 只裁到卡边界。**别再设正数**：半身像是游戏已裁好的不透明图，人物在框内本来就不
+# 一定居中，额外左右各内缩 9px（照抄参考实现）会让脸偏的干员被切掉小半边脸（2026-11-17
+# 用户反馈）。立绘比卡宽 39px，裁到卡边界已经是游戏内效果。
+PORTRAIT_CROP_SIDE = 0
 
 # 星级条与职业图标都是**独立层**：星级条压在卡顶外面，职业图标从卡底溢出去。
 STAR_STRIP_TOP = -10
@@ -261,9 +264,10 @@ def portrait_width() -> int:
 
 
 def portrait_clip(card: Rect) -> Rect:
-    """立绘允许出现的区域：卡片矩形左右各内缩 9px。
+    """立绘允许出现的区域：卡片矩形（左右再内缩 `PORTRAIT_CROP_SIDE`，现为 0）。
 
     立绘比卡宽（151 > 112），靠这个裁剪区把两侧切掉，看起来才是「站在卡里」。
+    内缩量必须为 0：再往里收就会切到脸，见 `PORTRAIT_CROP_SIDE` 的注释。
     """
     return Rect(
         card.x + PORTRAIT_CROP_SIDE,
