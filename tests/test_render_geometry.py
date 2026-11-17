@@ -35,6 +35,33 @@ def _items(render_mod, count: int = 10):
     return made
 
 
+def _dark_run(image: Image.Image, side: str, threshold: int = 40) -> int:
+    """从一条边往里数连续深色（黑边框）像素的宽度，用来核对素材自带的边框。"""
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    px = rgb.load()
+    if side in ("left", "right"):
+        columns = range(width) if side == "left" else range(width - 1, -1, -1)
+        lines = list(columns)
+    else:
+        rows = range(height) if side == "top" else range(height - 1, -1, -1)
+        lines = list(rows)
+
+    def is_dark(index: int) -> bool:
+        if side in ("left", "right"):
+            samples = [px[index, y] for y in range(int(height * 0.35), int(height * 0.65), 3)]
+        else:
+            samples = [px[x, index] for x in range(int(width * 0.35), int(width * 0.65), 3)]
+        return all(sum(pixel[:3]) / 3 < threshold for pixel in samples)
+
+    run = 0
+    for index in lines:
+        if not is_dark(index):
+            break
+        run += 1
+    return run
+
+
 class TestTenLayout:
     """十连：一排压叠竖卡。"""
 
@@ -62,10 +89,39 @@ class TestTenLayout:
         # 立绘比卡宽，靠裁剪把两侧切掉——这正是游戏内「人站在卡里」的做法。
         assert layout_mod.portrait_width() > card.w
         assert card.contains(clip)
-        # 裁剪区就是卡本身：额外内缩会切掉脸（2026-11-17 用户反馈）。
-        assert clip.w == card.w, "别再给立绘加左右内缩"
+        # 裁到卡背黑边框内侧：左右各内缩几像素，卡与卡之间的分隔黑边才留得下来。
+        assert clip.x > card.x
+        assert clip.right < card.right
         left, _ = layout_mod.portrait_anchor(card)
         assert left < clip.x, "立绘左边没落到裁剪区外，说明宽度常量没生效"
+
+    def test_portrait_crop_matches_card_back_border(self, layout_mod, assets_mod):
+        """立绘裁切框必须正好落在卡背黑边框的内侧。
+
+        这是「立绘边界与背景彩条边界重合」的机械验证：常量与素材差 1px 就红。
+        素材换了（比如以后换成透明底卡背）这条会先报，提醒重新量边框。
+        """
+        ui = assets_mod.Assets().ui_dir
+        for star, filename in layout_mod.CARD_BACK_FILES.items():
+            with Image.open(ui / filename) as opened:
+                image = opened.convert("RGBA")
+            measured = (
+                _dark_run(image, "left"),
+                _dark_run(image, "right"),
+                _dark_run(image, "bottom"),
+            )
+            assert layout_mod.card_border(star) == measured, (
+                f"{star}★ 卡背 {filename} 实测边框 {measured}，"
+                f"与 CARD_BACK_BORDER 不一致"
+            )
+            assert layout_mod.CARD_BACK_SIZE[star] == image.size
+            left, top, right, bottom = layout_mod.portrait_crop(star, image.size)
+            assert (left, top, right - image.width, image.height - bottom) == (
+                measured[0],
+                0,
+                -measured[1],
+                0,
+            )
 
     def test_portrait_width_follows_card_scale(self, layout_mod):
         assert layout_mod.portrait_width() == round(

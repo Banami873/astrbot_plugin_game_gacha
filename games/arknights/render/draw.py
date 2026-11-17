@@ -186,25 +186,26 @@ class Renderer:
             portrait = portrait.resize((max(1, pw), max(1, ph)), Image.LANCZOS)
             px = (card_w - pw) // 2 + layout.PORTRAIT_OFFSET_X
             py = card_h - ph - layout.PORTRAIT_BOTTOM_MARGIN + layout.PORTRAIT_OFFSET_Y
-            card = self._paste_portrait_cropped(card, portrait, px, py)
+            card = self._paste_portrait_cropped(card, portrait, px, py, item.star)
         else:
             self._draw_placeholder(card, item)
 
         return card
 
     def _paste_portrait_cropped(
-        self, card: Image.Image, portrait: Image.Image, px: int, py: int
+        self, card: Image.Image, portrait: Image.Image, px: int, py: int, star: int
     ) -> Image.Image:
-        """把半身像贴进卡内并按 `AVATAR_CROP_*` 裁剪（现为 0 = 只裁到卡边界）。"""
+        """把半身像贴进卡内，裁到卡背黑边框内侧（边界与彩条区重合）。"""
         card_w, card_h = card.size
         layer = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
         layer.paste(portrait, (px, py), portrait)
 
+        left, top, right, bottom = layout.portrait_crop(star, card.size)
         box = (
-            min(layout.AVATAR_CROP_LEFT, card_w - 1),
-            min(layout.AVATAR_CROP_TOP, card_h - 1),
-            max(card_w - layout.AVATAR_CROP_RIGHT, 1),
-            max(card_h - layout.AVATAR_CROP_BOTTOM, 1),
+            max(0, min(left, card_w - 1)),
+            max(0, min(top, card_h - 1)),
+            max(1, min(right, card_w)),
+            max(1, min(bottom, card_h)),
         )
         if box[2] <= box[0] or box[3] <= box[1]:
             box = (0, 0, card_w, card_h)
@@ -217,11 +218,18 @@ class Renderer:
         return Image.alpha_composite(card, cropped)
 
     def _draw_placeholder(self, card: Image.Image, item: CardItem) -> None:
-        """缺立绘时的占位：一块半透明深色 + 首字，保证版式不塌。"""
+        """缺立绘时的占位：彩条区内一块半透明深色 + 首字，保证版式不塌。
+
+        同样裁到卡背黑边框内侧——否则占位块会把卡与卡之间的分隔黑边糊掉。
+        """
         card_w, card_h = card.size
+        left, top, right, bottom = layout.portrait_crop(item.star, card.size)
         layer = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(layer)
-        draw.rectangle([0, 0, card_w - 1, card_h - 1], fill=(24, 26, 30, 190))
+        draw.rectangle(
+            [left, top, max(left, right - 1), max(top, bottom - 1)],
+            fill=(24, 26, 30, 190),
+        )
         font = self.assets.font(max(20, card_w // 2))
         initial = (item.name or "?")[:1]
         if font is not None:

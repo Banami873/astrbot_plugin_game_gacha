@@ -7,9 +7,11 @@
 image_renderer.py」）。字段名也保持原样（`pos` 相对参考中心、`size` 绝对像素或百分比、
 `layer` 越小越靠上），这样对着参考实现能一行行核对，不必做翻译。
 
-两处**有意偏离**参考实现，都写在对应常量旁边：
-  · `AVATAR_CROP_LEFT/RIGHT` 由 9 改成 0（参考值会切掉人脸）；
-  · 单抽的暗角/渐变与文字的相对顺序（参考表里渐变会盖住英文名，这里把文字抬到渐变之上）。
+一处**有意偏离**参考实现，写在对应常量旁边：单抽的暗角/渐变与文字的相对顺序
+（参考表里渐变会盖住英文名，这里把文字抬到渐变之上）。
+
+立绘的左右裁切量**不再是常量**，而是按卡背素材自带的黑边框实测取值（`CARD_BACK_BORDER`）：
+参考实现硬编码的 9 对 5★/6★ 卡背偏小（右边框其实 12），会让立绘压住边框、相邻两卡连成一片。
 """
 
 from __future__ import annotations
@@ -60,14 +62,25 @@ PORTRAIT_BOTTOM_MARGIN = 0
 PORTRAIT_OFFSET_X = 6
 PORTRAIT_OFFSET_Y = -18
 
-# 左右各内缩多少像素再裁进卡内。
-# **参考实现是 9，这里是 0**：半身像是游戏已裁好的不透明图，人物在框内本来就不一定居中，
-# 额外内缩 9px 会让脸偏一侧的干员（如凯尔希）被切掉小半边脸（2026-11-17 用户反馈）。
-# 立绘比卡宽 39px，裁到卡边界已经是游戏内效果。
-AVATAR_CROP_TOP = 0
-AVATAR_CROP_BOTTOM = 0
-AVATAR_CROP_LEFT = 0
-AVATAR_CROP_RIGHT = 0
+# 立绘的裁切框 = 卡背黑边框的内侧。**不写死像素**，按素材实测的边框宽度换算。
+#
+# 卡背素材自身带一圈黑边框，边框里面才是彩条（白色底板）区：
+#   back_low_1_3 / back_four (140×388) → 左 9 / 右 9 / 下 19
+#   back_five             (144×392) → 左 10 / 右 12 / 下 20
+# 立绘裁到这个内侧，边界就与彩条边界重合：卡与卡之间保留那条黑边，不会连成一片；
+# 再往里收就会切脸（2026-11-17 用户两次反馈的正是这一对矛盾，最终以「与彩条重合」为准）。
+CARD_BACK_SIZE: dict[int, tuple[int, int]] = {
+    3: (140, 388),
+    4: (140, 388),
+    5: (144, 392),
+    6: (144, 392),
+}
+CARD_BACK_BORDER: dict[int, tuple[int, int, int]] = {
+    3: (9, 9, 19),
+    4: (9, 9, 19),
+    5: (10, 12, 20),
+    6: (10, 12, 20),
+}
 
 # ---- 职业图标 ------------------------------------------------------------
 
@@ -533,17 +546,37 @@ def portrait_width() -> int:
     return round(CARD_WIDTH * PORTRAIT_SCALE)
 
 
-def portrait_clip(card: Rect) -> Rect:
-    """立绘允许出现的区域：卡片矩形左右各内缩 `AVATAR_CROP_LEFT/RIGHT`（现为 0）。
+def card_border(star: int) -> tuple[int, int, int]:
+    """该星级卡背的黑边框宽度（左、右、下），**原尺寸素材像素**。"""
+    return CARD_BACK_BORDER.get(int(star), CARD_BACK_BORDER[3])
 
-    立绘比卡宽（151 > 112），靠这个裁剪区把两侧切掉，看起来才是「站在卡里」。
-    内缩量必须为 0：再往里收就会切到脸。
+
+def portrait_crop(star: int, card_size: tuple[int, int]) -> tuple[int, int, int, int]:
+    """立绘裁剪框（原尺寸卡像素）：
+
+    `(left, top, right, bottom)` —— 只裁左右，上下不裁（立绘底边本来就抬高了 18px）。
+    左右取卡背黑边框的内侧，使立绘边界与卡背彩条区边界重合。
     """
+    left, right, _ = card_border(star)
+    width, height = card_size
+    return (left, 0, max(width - right, left + 1), height)
+
+
+def portrait_clip(card: Rect, star: int = 6) -> Rect:
+    """立绘允许出现的区域（画布坐标）：卡片左右各内缩卡背黑边框。
+
+    立绘比卡宽（151 > 112），靠这个裁剪区把两侧切掉，看起来才是「站在卡里」；
+    裁到边框内侧，卡与卡之间的分隔黑边才留得下来。
+    """
+    left, right, _ = card_border(star)
+    native_w = CARD_BACK_SIZE.get(int(star), CARD_BACK_SIZE[3])[0]
+    inset_left = round(card.w * left / native_w)
+    inset_right = round(card.w * right / native_w)
     return Rect(
-        card.x + AVATAR_CROP_LEFT,
-        card.y + AVATAR_CROP_TOP,
-        card.w - AVATAR_CROP_LEFT - AVATAR_CROP_RIGHT,
-        card.h - AVATAR_CROP_TOP - AVATAR_CROP_BOTTOM,
+        card.x + inset_left,
+        card.y,
+        card.w - inset_left - inset_right,
+        card.h,
     )
 
 
