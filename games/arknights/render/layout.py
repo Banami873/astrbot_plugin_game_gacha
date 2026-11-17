@@ -1,10 +1,15 @@
-"""出图的元素表：画布、卡片、立绘、星级条、职业图标、单抽各元素。
+"""出图的参数表：画布、卡片、立绘、星级条、光效、单抽元素表。
 
-**改版式只改这个文件。** 这里不加载任何图片、不读文件、不碰抽卡逻辑，只把坐标与
-尺寸算出来交给 `draw.py`；`tests/test_render_geometry.py` 直接对这些矩形做断言。
+**改版式只改这个文件。** 这里不加载任何图片、不读文件、不碰抽卡逻辑，只把坐标、
+尺寸、层级算出来交给 `draw.py`；`tests/test_render_geometry.py` 直接对这些矩形做断言。
 
-参数取自游戏内寻访结果界面（参考实现 `composer_config.py` 的同名常量）。2026-11-16
-用户审定：画布 1024×576 不变、单抽左文右图、十连卡上不写名字。
+数值与语义**逐项照抄参考实现的 `composer_config.py`**（2026-11-17 用户要求「生成参考
+image_renderer.py」）。字段名也保持原样（`pos` 相对参考中心、`size` 绝对像素或百分比、
+`layer` 越小越靠上），这样对着参考实现能一行行核对，不必做翻译。
+
+两处**有意偏离**参考实现，都写在对应常量旁边：
+  · `AVATAR_CROP_LEFT/RIGHT` 由 9 改成 0（参考值会切掉人脸）；
+  · 单抽的暗角/渐变与文字的相对顺序（参考表里渐变会盖住英文名，这里把文字抬到渐变之上）。
 """
 
 from __future__ import annotations
@@ -12,12 +17,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-# 画布与素材原生尺寸一致。放大到 1280×720 要把所有贴图再放大 1.25 倍，只会更糊。
+# =============================================================================
+#  1. 画布
+# =============================================================================
+
 CANVAS_WIDTH = 1024
 CANVAS_HEIGHT = 576
 CANVAS: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT)
 
-# ---- 十连：一排压叠的竖卡 -------------------------------------------------
+# 背景素材是 1024×1024 的正方形 POT 纹理，有效区域为中间 1024×576（上下各 224px 黑边）。
+SRC_POT_SIZE = 1024
+SRC_EFFECTIVE_HEIGHT = 576
+
+# 是否在底层铺纯黑实底。False = 保留背景素材的透明区域（合成时下面还是透明）。
+BG_BLACK_BASE = False
+# 背景整体亮度系数（1.0 = 原样）。
+BG_BRIGHTNESS = 1.0
+
+BACKGROUND_FILE = "gacha_beijing_composed.png"
+BACKGROUND_FALLBACK = "gacha_beijing_1.png"
+SP3_BACKGROUND_FILE = "gacha_beijing_composed_single.png"
+SEPARATOR_FILE = "sprite_avg_cutscene.png"
+
+# =============================================================================
+#  2. 十连卡片
+# =============================================================================
 
 CARD_COUNT = 10
 CARD_WIDTH = 112
@@ -25,27 +49,42 @@ CARD_HEIGHT = 305
 # 负数 = 相邻卡互相压叠。游戏内就是叠着的，不是十个独立的格子。
 CARD_GAP = -16
 
-# 立绘宽 = 卡宽 × 该值；底对齐后再上下偏移；左右各内缩若干像素裁进卡内。
+CARD_CENTER_Y = True
+CARD_START_Y = (CANVAS_HEIGHT - CARD_HEIGHT) // 2
+
+# ---- 立绘 ----------------------------------------------------------------
+
+# 立绘宽 = 卡宽 × 该值。
 PORTRAIT_SCALE = 1.35
+PORTRAIT_BOTTOM_MARGIN = 0
 PORTRAIT_OFFSET_X = 6
 PORTRAIT_OFFSET_Y = -18
-# 0 = 只裁到卡边界。**别再设正数**：半身像是游戏已裁好的不透明图，人物在框内本来就不
-# 一定居中，额外左右各内缩 9px（照抄参考实现）会让脸偏的干员被切掉小半边脸（2026-11-17
-# 用户反馈）。立绘比卡宽 39px，裁到卡边界已经是游戏内效果。
-PORTRAIT_CROP_SIDE = 0
 
-# 星级条与职业图标都是**独立层**：星级条压在卡顶外面，职业图标从卡底溢出去。
-STAR_STRIP_TOP = -10
-# 星级条素材是照「卡宽 112」画的（1★ 36px、6★ 132px），肉眼偏大；用户 2026-11-17 要求
-# 缩到一半。只缩星级条，职业图标与卡背不动。
-STAR_STRIP_SCALE = 0.5
+# 左右各内缩多少像素再裁进卡内。
+# **参考实现是 9，这里是 0**：半身像是游戏已裁好的不透明图，人物在框内本来就不一定居中，
+# 额外内缩 9px 会让脸偏一侧的干员（如凯尔希）被切掉小半边脸（2026-11-17 用户反馈）。
+# 立绘比卡宽 39px，裁到卡边界已经是游戏内效果。
+AVATAR_CROP_TOP = 0
+AVATAR_CROP_BOTTOM = 0
+AVATAR_CROP_LEFT = 0
+AVATAR_CROP_RIGHT = 0
+
+# ---- 职业图标 ------------------------------------------------------------
+
 PROFESSION_SIZE = 82
+# 负数 = 从卡底溢出。
 PROFESSION_BOTTOM = -32
 
-# ---- 素材文件名（相对 resources/ui/）-------------------------------------
+# ---- 星级条 --------------------------------------------------------------
 
-BACKGROUND_TEN = "gacha_beijing_composed.png"
-BACKGROUND_SINGLE = "gacha_beijing_composed_single.png"
+# 参考实现不是整体缩放素材，而是「每颗星固定宽度、按星数拼出来」：6★ = 6×15 + 5×2 = 100px。
+STAR_STAR_SIZE = 15
+STAR_STRIP_STAR_GAP = 2
+STAR_STRIP_TOP = -10
+
+# =============================================================================
+#  3. 素材文件名（相对 resources/ui/）
+# =============================================================================
 
 # 卡背：3★ 用低星底，4★ 一档，5★/6★ 共用（6★ 靠光效与渐变区分，与游戏一致）。
 CARD_BACK_FILES: dict[int, str] = {
@@ -55,141 +94,367 @@ CARD_BACK_FILES: dict[int, str] = {
     6: "back_five.png",
 }
 
-STAR_STRIP_FILES: dict[int, str] = {
-    star: f"star_{star}.png" for star in range(1, 7)
-}
+STAR_STRIP_FILES: dict[int, str] = {star: f"star_{star}.png" for star in range(1, 7)}
 
-# 光效贴图：逻辑键 → 文件名。程序后期不在这里（见下方画布后处理段）。
+# 光效贴图：逻辑键 → 文件名。
 LIGHT_FILES: dict[str, str] = {
-    "star_4": "sixing_01.png",
-    "star_5": "wuxingguang_01.png",
-    "star_6_beam": "liuxingguangyun_01.png",
-    "star_6_glow": "guangxiao_03.png",
-    "star_6_halo": "trail_06.png",
-    "star_6_dots": "dianzhen_01.png",
-    "star_light": "star_light.png",
+    "star_4": "sixing_01.png",  # 4★ 光柱
+    "star_5": "wuxingguang_01.png",  # 5★ 光柱
+    "star_6_glow": "guangxiao_03.png",  # 6★ 光晕 1（底层）
+    "star_6_glow2": "guangxiao_03.png",  # 6★ 光晕 2（不同位置，复用同素材）
+    "star_6_halo": "trail_06.png",  # 6★ 光环
+    "star_6_beam": "liuxingguangyun_01.png",  # 6★ 光柱
+    "star_6_dots": "dianzhen_01.png",  # 6★ 点阵（卡内）
+    "star_6_dots_back": "dianzhen_01.png",  # 6★ 底层点阵（垫在卡后）
+    "star_light": "star_light.png",  # 光柱上方的星点光效
 }
 
-# 第二团光晕复用第一团的贴图，只是位置不同。
-LIGHT_ALIAS: dict[str, str] = {"star_6_glow2": "star_6_glow"}
-
-# 光效布局：位置相对【卡片中心】，尺寸是绝对像素（None = 按素材原始尺寸 × scale）。
+# 光效布局：位置相对【卡片中心】；`size` 是绝对像素、`scale` 是相对卡宽的比例（二选一）。
+# 图层语义：`on_card` 画在卡背之上、立绘之下；`above_card` 画在卡片之上；其余垫在卡片之下。
 LIGHT_LAYOUT: dict[int, dict[str, dict[str, Any]]] = {
     4: {
         "star_4": {"pos": (-1, 0), "size": (400, 600), "opacity": 0.7},
-        # 光柱上方的星点，滤色叠加才显得亮。
-        "star_light": {"pos": (0, -130), "scale": 2, "opacity": 1.0, "screen": True},
+        "star_light": {
+            "pos": (0, -130),
+            "scale": 2,
+            "opacity": 1.0,
+            "blend_mode": "SCREEN",
+        },
     },
     5: {
         "star_5": {"pos": (-1, 0), "size": (600, 600), "opacity": 1.0},
-        "star_5_top_glow": {"pos": (0, -220), "size": (400, 180), "program": True},
-        "star_5_sparkles": {"pos": (0, 0), "size": (400, 565), "program": True},
+        "star_5_sparkles": {
+            "pos": (0, 0),
+            "size": (400, 565),
+            "opacity": 1.0,
+            "blend_mode": "SCREEN",
+            "clip_box": {"w": 400, "h": 565, "ox": 0, "oy": 0},
+        },
+        "star_5_top_glow": {
+            "pos": (0, -220),
+            "size": (400, 180),
+            "opacity": 1.0,
+            "blend_mode": "SCREEN",
+            "clip_box": {"w": 400, "h": 565, "ox": 0, "oy": 0},
+        },
     },
     6: {
-        "star_6_beam": {"pos": (20, 0), "size": (400, 545), "opacity": 1.0},
-        # 两团光晕，复用同一张贴图，一左上一右下。
-        "star_6_glow": {"pos": (30, -160), "size": (50, 50), "scale": 1.5, "angle": 20},
-        "star_6_glow2": {"pos": (-40, 160), "size": (30, 30), "scale": 1.5},
+        "star_6_glow": {
+            "pos": (30, -160),
+            "size": (50, 50),
+            "scale": 1.5,
+            "opacity": 1.0,
+            "angle": 20,
+        },
+        "star_6_glow2": {
+            "pos": (-40, 160),
+            "size": (30, 30),
+            "scale": 1.5,
+            "opacity": 1.0,
+        },
         "star_6_halo": {"pos": (0, 0), "scale": 1.3, "opacity": 1.0},
-        # 底层点阵：垫在卡片背后、被光柱框住，染色后是金色。
+        "star_6_beam": {"pos": (20, 0), "size": (400, 545), "opacity": 1.0},
         "star_6_dots_back": {
             "pos": (0, 0),
             "size": (180, 460),
             "opacity": 0.6,
             "angle": 170,
             "tint": (223, 145, 40),
-            "clip": {"w": 80, "h": 500, "ox": 0, "oy": -150},
+            "clip_box": {"w": 80, "h": 500, "ox": 0, "oy": -150},
         },
-        # 卡内点阵：画在卡背之上、立绘之下，裁进卡片。
         "star_6_dots": {
             "pos": (0, -80),
             "size": (280, 440),
+            "opacity": 1.0,
             "angle": -20,
             "tint": (51, 42, 46),
             "on_card": True,
-            "clip": {"w": 123, "h": 400, "ox": 0, "oy": 0},
+            "clip_to_ref": True,
+            "clip_box": {"w": 123, "h": 400, "ox": 0, "oy": 0},
         },
-        "star_6_top_glow": {"pos": (2, -220), "size": (100, 200), "program": True},
-        "star_6_sparkles": {"pos": (20, 0), "size": (500, 565), "program": True},
+        "star_6_top_glow": {
+            "pos": (2, -220),
+            "size": (100, 200),
+            "opacity": 1.0,
+            "blend_mode": "SCREEN",
+            "clip_box": {"w": 400, "h": 565, "ox": 20, "oy": 0},
+        },
+        "star_6_sparkles": {
+            "pos": (20, 0),
+            "size": (500, 565),
+            "opacity": 1.0,
+            "blend_mode": "SCREEN",
+            "clip_box": {"w": 400, "h": 565, "ox": 20, "oy": 0},
+        },
     },
 }
 
-# 6★ 卡背的渐变色调（叠在卡背上、立绘之下）。
+# 6★ 卡背的渐变色调（叠在卡背之上、立绘之下）。pos/size 相对卡片中心。
 CARD_GRADIENT = {
+    "enabled": True,
     "color_top": (237, 90, 16),
     "color_bottom": (203, 201, 73),
     "opacity": 1.0,
-    "size": (124, 378),
+    "direction": "vertical",
     "pos": (0, -200),
+    "size": (124, 378),
 }
 
-# 光柱顶部亮渐变（程序生成）：底部亮、顶部暗。
-TOP_GLOW_6 = {"size": (700, 500), "bright": (255, 251, 102), "dark": (83, 51, 11)}
-TOP_GLOW_5 = {"size": (300, 180), "bright": (255, 200, 90), "dark": (100, 40, 10), "opacity": 0.7}
+# 星点光效（star_light）着色：中心白、向外扩散成紫。
+STAR_LIGHT_COLOR = {
+    "purple": (140, 60, 230),
+    "white_radius": 0.01,
+    "center_power": 1,
+    "halo_enabled": True,
+    "halo_scale": 1.5,
+    "halo_opacity": 0.85,
+    "halo_softness": 1.0,
+}
 
-# 光柱内随机亮条（程序生成）。固定种子，同一张图每次出得一样，便于截图对比。
+# 网点纹理（dianzhen）默认着色。
+DOTS_COLOR = (140, 60, 230)
+
+# 光柱顶部亮渐变（程序生成）：底部亮、顶部暗。
+STAR_6_TOP_GLOW = {
+    "size": (700, 500),
+    "color_bright": (255, 251, 102),
+    "color_dark": (83, 51, 11),
+    "opacity": 1.0,
+}
+STAR_5_TOP_GLOW = {
+    "size": (300, 180),
+    "color_bright": (255, 200, 90),
+    "color_dark": (100, 40, 10),
+    "opacity": 0.7,
+}
+
+# 光柱内随机小亮条（程序生成的「碎光」）。种子按干员名派生：同一人每次都一样。
 SPARKLES = {
     "count": 12,
     "seed": 42,
     "bar_width": (3, 6),
     "bar_height": (8, 20),
+    "color": (255, 255, 255),
     "alpha": (150, 230),
+    "exclude_zone": [{"x": 100, "y": 200, "w": 200, "h": 400}],
 }
 
-# ---- 单抽：一张立绘 + 左下文字区 ------------------------------------------
-#
-# 坐标相对【画布中心】，size 是素材原始尺寸的百分比（100 = 原样）。层级越小越靠上，
-# 与参考实现一致——这种反直觉的约定只在这里出现一次，绘制侧照做即可。
-#
-# **下面的数值整段照搬参考实现的 `SP3_ELEMENTS`（即用户说的「v3」版式）
-# （2026-11-17 用户复审：我自己调小的那版「元素散架、星级与阵营太远太小」，退回 v3）。**
-# 别按观感再缩小：camp logo 337px 之所以不遮人，是因为立绘（layer 40）画在它上面（41）。
+# 全局纹理参数（参考实现里默认关闭/无效果，保留以备调参）。
+TEXTURE_ROTATE_ANGLE = 0.0
+TEXTURE_OPACITY = 1.0
+TEXTURE_BLEND_MODE = "NORMAL"
 
-SINGLE_PORTRAIT_FILL = 1.2  # 精一立绘高 = 画布高 × 1.2（下半身出画是正常的）
-SINGLE_PORTRAIT_OFFSET = (130, 85)
+# =============================================================================
+#  4. 单抽：元素表（参考实现的 SP3_ELEMENTS，即用户说的「v3」）
+#
+#  pos 相对【画布中心】；size 是素材原始尺寸的百分比（100 = 原样）；
+#  layer 越小越靠上层（后绘制，会遮挡下层）——这种反直觉的约定只在这里出现一次。
+# =============================================================================
+
+SINGLE_PULL_CARD_FILL = 0.92  # 仅参考实现的「放大一张卡」版式使用，本实现走元素表
 
 SINGLE_ELEMENTS: dict[str, dict[str, Any]] = {
-    "background": {"file": BACKGROUND_SINGLE, "layer": 100, "size": 100},
-    "deco_beijing05": {"file": "beijing_05.png", "layer": 90, "pos": (66, -20), "size": 155},
-    # 阵营 logo 源图 510×510，66% ≈ 337px。它会盖到画面左中部，但立绘压在它上面，
-    # 所以实际看到的只是从人像左侧露出的那一角。
+    "background": {"file": SP3_BACKGROUND_FILE, "layer": 100, "pos": (0, 0), "size": 100},
+    # 立绘高 = 画布高 × fill × size_percent/100 = 576 × 1.0 × 1.2（下半身出画是正常的）。
+    "portrait": {"layer": 40, "pos": (130, 85), "fill": 1.0, "size_percent": 120},
+    # 阵营 logo 源图 510×510，66% ≈ 337px。它盖到画面左中部，但立绘（layer 40）画在它
+    # 上面（41 更大 = 更下层），所以实际只从人像左侧露出一角，不会糊在脸上。
     "camp_logo": {"layer": 41, "pos": (-112, -50), "size": 66},
-    "skip": {"file": "btn_skip.png", "layer": 1, "pos": (450, -240), "size": 80,
-             "above_vignette": True},
-    # 五角星源图 256×256，47% ≈ 120px/颗；gap −51 让六颗星叠着连成一排（总宽 465px）。
-    "stars": {"file": "wujiaoxing_01.png", "layer": 19, "pos": (-147, 72),
-              "size": 47, "gap": -51},
     "profession": {"layer": 24, "pos": (-70, 143), "size": 83},
-    "name_cn": {"layer": 21, "pos": (8, 143), "font_size": 59,
-                "fill": (255, 255, 255, 255), "stroke_fill": (0, 0, 0, 80)},
-    "name_en": {"layer": 22, "pos": (8, 186), "font_size": 25,
-                "fill": (255, 255, 255, 255), "stroke_fill": (0, 0, 0, 80)},
+    "btn_skip": {
+        "file": "btn_skip.png",
+        "layer": 1,
+        "pos": (450, -240),
+        "size": 80,
+        # 界面元素：在打光之后绘制，不被暗角压暗。
+        "above_vignette": True,
+        "backdrop": {
+            "enabled": True,
+            "color": (28, 30, 34, 210),
+            "size": (75, 55),
+            "radius": 0,
+            "offset": (0, 0),
+        },
+    },
+    # 五角星源图 256×256，47% ≈ 120px/颗；gap −51 让六颗星叠着连成一排（总宽 465px）。
+    "stars": {
+        "file": "wujiaoxing_01.png",
+        "layer": 19,
+        "pos": (-147, 72),
+        "size": 47,
+        "gap": -51,
+        "align": "left",
+        "count_from_rarity": True,
+    },
+    "new_tag": {"file": "sprite_new.png", "layer": 23, "pos": (-40, 185), "size": 80},
+    "name_cn": {
+        "layer": 21,
+        "pos": (8, 143),
+        "text": "cn",
+        "font_size": 59,
+        "fill": (255, 255, 255, 255),
+        # 半透明黑描边：亮背景上叠出灰轮廓（≈165，与原版一致），暗背景几乎不可见。
+        "stroke_fill": (0, 0, 0, 80),
+        "stroke_width": 1,
+        "letter_spacing": 0.0,
+        "align": "left",
+    },
+    "name_en": {
+        "layer": 22,
+        "pos": (8, 186),
+        "text": "en",
+        "font_size": 25,
+        "fill": (255, 255, 255, 255),
+        "stroke_fill": (0, 0, 0, 80),
+        "stroke_width": 1,
+        "letter_spacing": 0.02,
+        "uppercase": True,
+        "align": "left",
+    },
+    # 装饰星：固定画上、不随星级变化，也非星级用途。random_count > 0 时在 random_area
+    # 内随机生成 N 个副本（允许重叠），尺寸在 random_size 区间内随机。
+    "deco_star04": {
+        "file": "star_04.png",
+        "layer": 51,
+        "pos": (250, 250),
+        "size": 100,
+        "random_count": 3,
+        "random_area": {"x": (-512, 512), "y": (-100, 280)},
+        "random_size": (60, 80),
+        "rotated_offset": (0, 0),
+        "rotated_tint": (235, 150, 105),
+        "trail": {
+            "type": "beam",
+            "chance": 0.3,
+            # 必须用小数：+0.5 = 紧贴自身 star 的下一层（整数会撞到相邻 star 的层）。
+            "layer_offset": 0.5,
+            "size_ratio": 1.0,
+            "beam_width": 0.3,
+            "beam_height": 1.8,
+            "flat_ratio": 0.7,
+            "softness_x": 1.2,
+            "softness_y": 1.0,
+            "color": (255, 255, 255),
+            "opacity": 0.8,
+            "blend": "SCREEN",
+            "follow_rotate": True,
+            "offset": (0, 0),
+        },
+    },
+    "deco_star24": {
+        "file": "star_24.png",
+        "layer": 72,
+        "pos": (200, -200),
+        "size": 100,
+        "random_count": 3,
+        "random_area": {"x": (-512, 512), "y": (-100, 280)},
+        "random_size": (60, 80),
+        "rotated_offset": (0, 0),
+        "rotated_tint": (235, 150, 105),
+        "trail": {
+            "type": "beam",
+            "chance": 0.3,
+            "layer_offset": 0.5,
+            "size_ratio": 1.0,
+            "beam_width": 0.2,
+            "beam_height": 1.8,
+            "flat_ratio": 0.7,
+            "softness_x": 1.2,
+            "softness_y": 1.0,
+            "color": (255, 255, 255),
+            "opacity": 0.8,
+            "blend": "SCREEN",
+            "follow_rotate": True,
+            "offset": (0, 0),
+        },
+    },
+    "deco_star25": {
+        "file": "star_25.png",
+        "layer": 53,
+        "pos": (-200, 200),
+        "size": 100,
+        "random_count": 3,
+        "random_area": {"x": (-512, 512), "y": (-100, 280)},
+        "random_size": (60, 80),
+        "rotated_offset": (0, 0),
+        "rotated_tint": (235, 150, 105),
+        "trail": {
+            "type": "beam",
+            "chance": 0.3,
+            "layer_offset": 0.5,
+            "size_ratio": 1.0,
+            "beam_width": 0.2,
+            "beam_height": 1.8,
+            "flat_ratio": 0.7,
+            "softness_x": 1.2,
+            "softness_y": 1.0,
+            "color": (255, 255, 255),
+            "opacity": 0.8,
+            "blend": "SCREEN",
+            "follow_rotate": True,
+            "offset": (0, 0),
+        },
+    },
+    "deco_star26": {
+        "file": "star_26.png",
+        "layer": 54,
+        "pos": (-200, -200),
+        "size": 100,
+        "random_count": 8,
+        "random_area": {"x": (-512, 512), "y": (-100, 280)},
+        "random_size": (60, 80),
+        # 70% 概率翻转 180°，翻转后的实例换层并染成暖橙色。
+        "rotate_chance": 0.7,
+        "rotated_layer": 61,
+        "rotated_offset": (0, -20),
+        "rotated_tint": (235, 150, 105),
+        "trail": {
+            "type": "beam",
+            "chance": 0.3,
+            "layer_offset": 0.5,
+            "size_ratio": 1.0,
+            "beam_width": 0.3,
+            "beam_height": 1.8,
+            "flat_ratio": 0.7,
+            "softness_x": 1.2,
+            "softness_y": 1.0,
+            "color": (255, 255, 255),
+            "opacity": 0.8,
+            "blend": "SCREEN",
+            "follow_rotate": True,
+            "offset": (0, 0),
+        },
+    },
+    # 放射状星形装饰底纹（512×512），垫在名字下方。
+    "deco_beijing05": {"file": "beijing_05.png", "layer": 90, "pos": (66, -20), "size": 155},
 }
 
-# 装饰星：随机摆几颗，搅一点暖橙色，带一道程序绘制的拖尾光柱。size 同 v3 的 random_size (60,80)。
-SINGLE_DECO_STARS: tuple[dict[str, Any], ...] = (
-    {"file": "star_04.png", "count": 3, "layer": 51, "size": (60, 80)},
-    {"file": "star_24.png", "count": 3, "layer": 72, "size": (60, 80)},
-    {"file": "star_25.png", "count": 3, "layer": 53, "size": (60, 80)},
-    {"file": "star_26.png", "count": 8, "layer": 54, "size": (60, 80)},
-)
-DECO_AREA = {"x": (-512, 512), "y": (-100, 280)}
-DECO_TINT = (235, 150, 105)
-
-# 单抽的后处理：椭圆暗角 + 底部三段式渐变。
+# 单抽打光：椭圆暗角。椭圆内不压暗，向外按羽化曲线渐变到最暗。
 SINGLE_VIGNETTE = {
+    "center": (0, 0),
     "size": (1100, 600),
     "feather": 0.35,
     "darkness": 0.7,
     "power": 1.1,
 }
+
+# 单抽底部三段式渐变：下文 solid_height 恒为纯色，其上 fade_height 渐隐到 0。
 SINGLE_BOTTOM_FADE = {
+    "color": (0, 0, 0),
     "max_alpha": 255,
     "solid_height": 40,
     "fade_height": 60,
+    "power": 1.0,
+    "pos": (0, 0),
 }
 
-# 文字与图标在画布上的绝对位置由下面的辅助函数换算，绘制侧不再自己算。
+# 文字元素在暗角与底部渐变**之后**绘制。参考实现把它们按 layer 排在渐变之下
+# （渐变 layer 12 < 名字 21），实测英文名会被底部纯黑吃掉一半，所以这里单独分组。
+TEXT_ON_TOP = True
+
+# =============================================================================
+#  5. 几何辅助（绘制与断言共用一套，避免「测的和画的不是同一件事」）
+# =============================================================================
 
 
 @dataclass(frozen=True)
@@ -222,7 +487,12 @@ class Rect:
         )
 
     def inside_canvas(self) -> bool:
-        return self.x >= 0 and self.y >= 0 and self.right <= CANVAS_WIDTH and self.bottom <= CANVAS_HEIGHT
+        return (
+            self.x >= 0
+            and self.y >= 0
+            and self.right <= CANVAS_WIDTH
+            and self.bottom <= CANVAS_HEIGHT
+        )
 
     def overlaps(self, other: "Rect") -> bool:
         return not (
@@ -242,9 +512,9 @@ def card_rects(count: int = CARD_COUNT) -> tuple[Rect, ...]:
     step = CARD_WIDTH + CARD_GAP
     total = CARD_WIDTH + (count - 1) * step
     left = (CANVAS_WIDTH - total) // 2
-    top = (CANVAS_HEIGHT - CARD_HEIGHT) // 2
     return tuple(
-        Rect(left + index * step, top, CARD_WIDTH, CARD_HEIGHT) for index in range(count)
+        Rect(left + index * step, CARD_START_Y, CARD_WIDTH, CARD_HEIGHT)
+        for index in range(count)
     )
 
 
@@ -259,21 +529,21 @@ def row_width(count: int = CARD_COUNT) -> int:
 
 
 def portrait_width() -> int:
-    """立绘绘制宽度 = 卡宽 × 1.35，单抽与十连共用这一个比例。"""
+    """立绘绘制宽度 = 卡宽 × 1.35。"""
     return round(CARD_WIDTH * PORTRAIT_SCALE)
 
 
 def portrait_clip(card: Rect) -> Rect:
-    """立绘允许出现的区域：卡片矩形（左右再内缩 `PORTRAIT_CROP_SIDE`，现为 0）。
+    """立绘允许出现的区域：卡片矩形左右各内缩 `AVATAR_CROP_LEFT/RIGHT`（现为 0）。
 
     立绘比卡宽（151 > 112），靠这个裁剪区把两侧切掉，看起来才是「站在卡里」。
-    内缩量必须为 0：再往里收就会切到脸，见 `PORTRAIT_CROP_SIDE` 的注释。
+    内缩量必须为 0：再往里收就会切到脸。
     """
     return Rect(
-        card.x + PORTRAIT_CROP_SIDE,
-        card.y,
-        card.w - 2 * PORTRAIT_CROP_SIDE,
-        card.h,
+        card.x + AVATAR_CROP_LEFT,
+        card.y + AVATAR_CROP_TOP,
+        card.w - AVATAR_CROP_LEFT - AVATAR_CROP_RIGHT,
+        card.h - AVATAR_CROP_TOP - AVATAR_CROP_BOTTOM,
     )
 
 
@@ -281,17 +551,27 @@ def portrait_anchor(card: Rect) -> tuple[int, int]:
     """立绘的（左边, 底边）。底边对齐卡底再下移 18px（负偏移 = 往上）。"""
     width = portrait_width()
     left = card.x + (card.w - width) // 2 + PORTRAIT_OFFSET_X
-    bottom = card.bottom + PORTRAIT_OFFSET_Y
+    bottom = card.bottom - PORTRAIT_BOTTOM_MARGIN + PORTRAIT_OFFSET_Y
     return left, bottom
 
 
-def star_strip_rect(card: Rect, size: tuple[int, int]) -> Rect:
-    """星级条：水平居中，压在卡顶上方 10px。独立层，可以超出卡宽。
+def star_strip_size(star: int, native: tuple[int, int]) -> tuple[int, int]:
+    """星级条的目标尺寸：每颗星 `STAR_STAR_SIZE` 宽，按星数拼出总宽。
 
-    `size` 是素材原生尺寸，这里按 `STAR_STRIP_SCALE` 缩半后再算。
+    `native` 是素材原生尺寸（`star_N.png`），用来反推单颗星的原生宽度，从而等比算高。
+    6★ 素材 132×36 → 6×15 + 5×2 = 100 宽、24 高。
     """
-    width = max(1, round(size[0] * STAR_STRIP_SCALE))
-    height = max(1, round(size[1] * STAR_STRIP_SCALE))
+    width, height = native
+    stars = max(1, int(star))
+    native_star_w = width / stars
+    star_h = int(height * (STAR_STAR_SIZE / native_star_w)) if native_star_w else height
+    total = round(stars * STAR_STAR_SIZE + (stars - 1) * STAR_STRIP_STAR_GAP)
+    return max(1, total), max(1, star_h)
+
+
+def star_strip_rect(card: Rect, star: int, native: tuple[int, int]) -> Rect:
+    """星级条：水平居中，压在卡顶上方 10px。独立层，可以超出卡宽。"""
+    width, height = star_strip_size(star, native)
     left = card.x + (card.w - width) // 2
     return Rect(left, card.y + STAR_STRIP_TOP, width, height)
 
@@ -304,9 +584,10 @@ def profession_rect(card: Rect, size: int = PROFESSION_SIZE) -> Rect:
 
 
 def single_portrait_size(image: tuple[int, int]) -> tuple[int, int]:
-    """单抽立绘的绘制尺寸：高 = 画布高 × 1.2，宽按原图比例。"""
+    """单抽立绘的绘制尺寸：高 = 画布高 × fill × size_percent/100，宽按原图比例。"""
+    element = SINGLE_ELEMENTS["portrait"]
     width, height = image
-    target_h = round(CANVAS_HEIGHT * SINGLE_PORTRAIT_FILL)
+    target_h = round(CANVAS_HEIGHT * element["fill"] * element["size_percent"] / 100)
     target_w = round(width * target_h / height) if height else target_h
     return target_w, target_h
 
@@ -314,8 +595,9 @@ def single_portrait_size(image: tuple[int, int]) -> tuple[int, int]:
 def single_portrait_box(image: tuple[int, int]) -> Rect:
     """单抽立绘在画布上的矩形（可以超出画布——人物下半身出画是游戏内的样子）。"""
     target_w, target_h = single_portrait_size(image)
-    center_x = CANVAS_WIDTH // 2 + SINGLE_PORTRAIT_OFFSET[0]
-    center_y = CANVAS_HEIGHT // 2 + SINGLE_PORTRAIT_OFFSET[1]
+    offset_x, offset_y = SINGLE_ELEMENTS["portrait"]["pos"]
+    center_x = CANVAS_WIDTH // 2 + offset_x
+    center_y = CANVAS_HEIGHT // 2 + offset_y
     return Rect(
         center_x - target_w // 2,
         center_y - target_h // 2,
@@ -324,15 +606,25 @@ def single_portrait_box(image: tuple[int, int]) -> Rect:
     )
 
 
-def element_rect(name: str, size: tuple[int, int]) -> Rect:
-    """单抽元素表里某个元素的矩形：`pos` 相对画布中心，`size` 是原素材的百分比。"""
-    element = SINGLE_ELEMENTS[name]
-    width = round(size[0] * element.get("size", 100) / 100)
-    height = round(size[1] * element.get("size", 100) / 100)
-    offset_x, offset_y = element.get("pos", (0, 0))
+def element_size(name: str, native: tuple[int, int]) -> tuple[int, int]:
+    """单抽元素的像素尺寸：`size` 是百分比，支持单值等比或 (宽%, 高%)。"""
+    raw = SINGLE_ELEMENTS[name].get("size", 100)
+    width, height = native
+    if isinstance(raw, (int, float)):
+        return max(1, round(width * raw / 100)), max(1, round(height * raw / 100))
+    try:
+        return max(1, round(width * raw[0] / 100)), max(1, round(height * raw[1] / 100))
+    except (TypeError, IndexError, ValueError):
+        return max(1, width), max(1, height)
+
+
+def element_rect(name: str, native: tuple[int, int]) -> Rect:
+    """单抽元素在画布上的矩形：`pos` 相对画布中心，`size` 是原素材的百分比。"""
+    width, height = element_size(name, native)
+    offset_x, offset_y = SINGLE_ELEMENTS[name].get("pos", (0, 0))
     return Rect(
-        CANVAS_WIDTH // 2 + offset_x - width // 2,
-        CANVAS_HEIGHT // 2 + offset_y - height // 2,
+        CANVAS_WIDTH // 2 + int(offset_x) - width // 2,
+        CANVAS_HEIGHT // 2 + int(offset_y) - height // 2,
         width,
         height,
     )

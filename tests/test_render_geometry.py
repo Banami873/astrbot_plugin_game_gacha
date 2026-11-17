@@ -74,14 +74,17 @@ class TestTenLayout:
 
     def test_star_strip_sits_above_card_top(self, layout_mod):
         card = layout_mod.card_rects(10)[0]
-        strip = layout_mod.star_strip_rect(card, (132, 36))
+        native = (132, 36)  # star_6.png 的原生尺寸
+        strip = layout_mod.star_strip_rect(card, 6, native)
         assert strip.y == card.y + layout_mod.STAR_STRIP_TOP
         assert abs(strip.center[0] - card.center[0]) <= 1
-        # 星级条按 STAR_STRIP_SCALE 缩过（用户 2026-11-17 要求缩到一半），
-        # 所以六星那条（素材 132 宽）现在比卡窄，仍然是独立层、不被卡片裁切。
-        assert strip.w == round(132 * layout_mod.STAR_STRIP_SCALE)
-        assert strip.h == round(36 * layout_mod.STAR_STRIP_SCALE)
-        assert strip.w < card.w
+        # 参考实现按「每颗星固定 15px + 星间 2px」拼出来，不是整体缩放素材：
+        # 6 颗星 = 6×15 + 5×2 = 100px（素材原生 132px）。
+        stars = 6
+        expected = stars * layout_mod.STAR_STAR_SIZE + (stars - 1) * layout_mod.STAR_STRIP_STAR_GAP
+        assert strip.w == expected
+        assert strip.h == int(36 * (layout_mod.STAR_STAR_SIZE / (132 / stars)))
+        assert strip.w < card.w, "独立层，但也没必要比卡宽"
 
     def test_profession_icon_straddles_card_bottom(self, layout_mod):
         card = layout_mod.card_rects(10)[0]
@@ -92,7 +95,11 @@ class TestTenLayout:
 
     def test_single_portrait_height_comes_from_canvas(self, layout_mod):
         width, height = layout_mod.single_portrait_size((800, 800))
-        assert height == round(layout_mod.CANVAS_HEIGHT * layout_mod.SINGLE_PORTRAIT_FILL)
+        portrait = layout_mod.SINGLE_ELEMENTS["portrait"]
+        expected = round(
+            layout_mod.CANVAS_HEIGHT * portrait["fill"] * portrait["size_percent"] / 100
+        )
+        assert height == expected
         assert width == height, "方形原图应等比缩放"
 
     def test_single_portrait_can_overflow_canvas(self, layout_mod):
@@ -143,8 +150,8 @@ class TestAssets:
 
     def test_backgrounds_and_card_backs_exist(self, assets_mod):
         assets = assets_mod.Assets()
-        assert assets.image(assets_mod.layout.BACKGROUND_TEN) is not None
-        assert assets.image(assets_mod.layout.BACKGROUND_SINGLE) is not None
+        assert assets.image(assets_mod.layout.BACKGROUND_FILE) is not None
+        assert assets.image(assets_mod.layout.SP3_BACKGROUND_FILE) is not None
         for star in (3, 4, 5, 6):
             assert assets.card_back(star) is not None, f"{star}★ 卡背缺失"
 
@@ -251,13 +258,21 @@ class TestRenderedImages:
     def test_ten_does_not_draw_names(self, renderer, render_mod, monkeypatch):
         """十连卡上只有星级与职业图标；写了名字就与游戏内不一致。"""
         drawn: list[str] = []
-        monkeypatch.setattr(renderer, "_text", lambda *args, **kwargs: drawn.append(args[1]))
+        monkeypatch.setattr(
+            render_mod.text,
+            "draw_text",
+            lambda canvas, xy, value, **kwargs: drawn.append(value),
+        )
         renderer.render_ten(_items(render_mod, 10))
         assert drawn == []
 
     def test_single_draws_name_and_english_name(self, renderer, render_mod, monkeypatch):
         drawn: list[str] = []
-        monkeypatch.setattr(renderer, "_text", lambda *args, **kwargs: drawn.append(args[1]))
+        monkeypatch.setattr(
+            render_mod.text,
+            "draw_text",
+            lambda canvas, xy, value, **kwargs: drawn.append(value),
+        )
         renderer.render_single(_items(render_mod, 1)[0])
         assert "能天使" in drawn
         assert "EXUSIAI" in drawn

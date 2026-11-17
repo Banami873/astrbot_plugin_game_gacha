@@ -1,24 +1,30 @@
-"""把抽取结果画成图：十连一排压叠竖卡，单抽一张大图。
+"""把抽取结果画成图：十连一排压叠竖卡，单抽一张元素表驱动的大图。
 
-画面元素全部来自游戏素材（`resources/ui/`），只有暗角、底部渐变、光柱顶部亮渐变与
-光柱内随机亮条由代码生成——用户 2026-11-16 明确「程序后期可以用代码画」。
+**合成流程照参考实现的 `image_composer.py`**（2026-11-17 用户要求）：
 
-这一层**不读库、不触网、不算概率**：输入是 `CardItem` 列表与已经准备好的立绘，输出是
-一张 PIL 图。素材缺失只让对应元素留白，不抛异常（SPEC R-15 的降级在 `main.py` 兜底）。
+· 十连：背景 → 逐张「画布下层光效 → 卡片（卡背 + 6★渐变 + 卡内点阵 + 半身像）
+  → 星级条独立层 → 职业图标独立层」；
+· 单抽：元素表（`layout.SINGLE_ELEMENTS`）按 layer 降序绘制 → 底部渐变 → 暗角
+  → 文字 → SKIP。
+
+所有贴图来自 `resources/ui/`，光效的位置/尺寸/透明度/混合模式全部由 `layout.LIGHT_LAYOUT`
+驱动，本文件不写死任何坐标——改版式只动 `layout.py`。
+
+这一层**不读库、不触网、不算概率**：输入是 `CardItem` 与已缓存好的立绘，输出一张 PIL 图。
+素材缺失只让对应元素留白，不抛异常（SPEC R-15 的降级在 `main.py` 兜底）。
 """
 
 from __future__ import annotations
 
 import hashlib
-import math
 import random
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance
 
-from . import layout
+from . import effects, layout, text
 from .assets import Assets
 from .portraits import KIND_ART, KIND_HALF, PortraitStore
 
@@ -47,581 +53,722 @@ class Renderer:
         self.assets = assets
         self.portraits = portraits
         self.out_dir = Path(out_dir) if out_dir else None
-        self._generated: dict[tuple, Image.Image] = {}
 
     # ---- 对外 ------------------------------------------------------------
 
     def render_ten(self, items) -> Image.Image:
-        """十连：一排 10 张卡，卡上只有星级与职业图标，**不写名字**（与游戏一致）。"""
+        """十连：背景 + 一排压叠竖卡。卡上只有星级与职业图标，**不写名字**（与游戏一致）。"""
         results = list(items)[: layout.CARD_COUNT]
         if not results:
             raise ValueError("没有可画的结果")
-        canvas = self._canvas(layout.BACKGROUND_TEN)
-        cards = layout.card_rects(len(results))
-        for card, item in zip(cards, results):
-            self._draw_lights(canvas, card, item.star)
-        for card, item in zip(cards, results):
-            self._draw_card(canvas, card, item)
+
+        canvas = self._build_canvas(layout.BACKGROUND_FILE)
+        card_w, card_h = layout.CARD_WIDTH, layout.CARD_HEIGHT
+        step = layout.CARD_WIDTH + layout.CARD_GAP
+        total = len(results) * layout.CARD_WIDTH + (len(results) - 1) * layout.CARD_GAP
+        start_x = (layout.CANVAS_WIDTH - total) // 2
+        card_y = (
+            (layout.CANVAS_HEIGHT - card_h) // 2
+            if layout.CARD_CENTER_Y
+            else layout.CARD_START_Y
+        )
+
+        for index, item in enumerate(results):
+            x = start_x + index * step
+            center = (x + card_w / 2.0, card_y + card_h / 2.0)
+
+            # 3a. 画布下层光效：可溢出卡片，垫在卡片下面。
+            self._apply_lights(canvas, item.star, card_w, card_h, center, seed=item.name)
+
+            # 3b. 卡片本身（卡背 + 渐变 + 卡内点阵 + 半身像）。
+            card = self._composite_card(item)
+            if card is None:
+                continue
+            scaled = card.resize((card_w, card_h), Image.LANCZOS)
+            canvas.paste(scaled, (x, card_y), scaled)
+
+            # 3c. 星级条与职业图标都是独立层，不被卡片裁剪。
+            self._draw_star_strip(canvas, item.star, x, card_y, card_w, card_h)
+            self._draw_profession(canvas, item, x, card_y, card_w, card_h)
+
         return canvas
 
-    def render_single(self, item: CardItem) -> Image.Image:
-        """单抽：右立绘，左侧阵营 logo / 星级 / 带文字职业图标 / 中英文名，右上 SKIP。
+    def render_single(self, item: CardItem, *, is_new: bool = False) -> Image.Image:
+        """单抽：元素表驱动（`layout.SINGLE_ELEMENTS`，即参考实现的 v3）。
 
-        顺序照参考实现 v3 的层级：阵营 logo（layer 41）在立绘（40）**之下**，所以 337px 的
-        logo 只会从人像左侧露出一角，不会糊在脸上；文字与职业图标画在暗角、底部渐变
-        **之后**（渐变 layer 12 比名字 21 小、本该盖住名字，这里刻意反过来，否则英文名被吃
-        掉一半——第一版就是这个错）。
+        绘制顺序：启用的元素按 layer **降序**画（layer 越大越先画 = 越靠下层），
+        然后叠底部渐变与暗角，再画文字与 SKIP —— 参考表里底部渐变（layer 12）比
+        名字（21/22）更靠上层，照抄会把英文名吃掉一半，所以文字统一抬到渐变之后。
         """
-        canvas = self._canvas(layout.BACKGROUND_SINGLE)
-        self._draw_single_deco(canvas, item.char_id)
-        self._draw_single_logo(canvas, item)
-        self._draw_single_portrait(canvas, item)
-        canvas.alpha_composite(self._vignette(canvas.size, layout.SINGLE_VIGNETTE))
-        canvas.alpha_composite(self._bottom_fade(canvas.size, layout.SINGLE_BOTTOM_FADE))
-        self._draw_single_side(canvas, item)
-        self._draw_single_skip(canvas)
+        base = (0, 0, 0, 255) if layout.BG_BLACK_BASE else (0, 0, 0, 0)
+        canvas = Image.new("RGBA", layout.CANVAS, base)
+
+        tasks: list[tuple[str, dict]] = []
+        for key, element in layout.SINGLE_ELEMENTS.items():
+            tasks.extend(self._expand_tasks(key, element))
+
+        normal = [(k, e) for k, e in tasks if not e.get("above_vignette") and not _is_text(k)]
+        on_top = [(k, e) for k, e in tasks if _is_text(k)]
+        above = [(k, e) for k, e in tasks if e.get("above_vignette")]
+
+        normal.sort(key=lambda pair: pair[1].get("layer", 100), reverse=True)
+        for key, element in normal:
+            self._draw_element(canvas, key, element, item, is_new)
+
+        canvas.alpha_composite(self._fade_layer(canvas.size))
+
+        self._apply_vignette(canvas)
+
+        on_top.sort(key=lambda pair: pair[1].get("layer", 100), reverse=True)
+        for key, element in on_top:
+            self._draw_element(canvas, key, element, item, is_new)
+
+        above.sort(key=lambda pair: pair[1].get("layer", 100), reverse=True)
+        for key, element in above:
+            self._draw_element(canvas, key, element, item, is_new)
+
         return canvas
 
     def save(self, image: Image.Image, *, prefix: str = "pull") -> Path:
-        """把图存到 `out_dir`，返回路径。没配目录就存到临时目录。"""
+        """把图存到 `out_dir`，返回路径。没配目录就存到插件旁的缓存目录。"""
         target_dir = self.out_dir or Path(__file__).resolve().parents[3] / "cache" / "render"
         target_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         nonce = hashlib.md5(f"{stamp}{id(image)}".encode()).hexdigest()[:6]
         path = target_dir / f"{prefix}-{stamp}-{nonce}.png"
+        # 转 RGB 丢掉 alpha，输出才是完全不透明的 PNG。
         image.convert("RGB").save(path, "PNG")
         return path
 
-    # ---- 十连 ------------------------------------------------------------
+    # ---- 画布 ------------------------------------------------------------
 
-    def _draw_card(self, canvas: Image.Image, card: layout.Rect, item: CardItem) -> None:
-        card_layer = Image.new("RGBA", (card.w, card.h), (0, 0, 0, 0))
-        back = self.assets.card_back(item.star)
-        if back is not None:
-            card_layer.alpha_composite(back.resize((card.w, card.h), Image.LANCZOS))
-        if item.star >= 6:
-            card_layer.alpha_composite(self._card_gradient(card))
-        dots = self._light_image("star_6_dots") if item.star >= 6 else None
-        if dots is not None:
-            self._paste_within(
-                card_layer,
-                dots,
-                card,
-                layout.LIGHT_LAYOUT[6]["star_6_dots"],
-                clip_to=card,
-            )
-        self._draw_half_portrait(card_layer, card, item)
-        canvas.alpha_composite(card_layer, (card.x, card.y))
+    def _build_canvas(self, background: str) -> Image.Image:
+        """背景底图：POT 裁剪 → 缩到画布 → 亮度系数。"""
+        base = (0, 0, 0, 255) if layout.BG_BLACK_BASE else (0, 0, 0, 0)
+        canvas = Image.new("RGBA", layout.CANVAS, base)
+        bg = self.assets.background(background)
+        if bg is not None:
+            prepared = effects.prepare_background(bg.copy())
+            if prepared.size != layout.CANVAS:
+                prepared = prepared.resize(layout.CANVAS, Image.LANCZOS)
+            if layout.BG_BRIGHTNESS != 1.0:
+                prepared = ImageEnhance.Brightness(prepared).enhance(layout.BG_BRIGHTNESS)
+            canvas = Image.alpha_composite(canvas, prepared)
+        return canvas
 
-        strip = self.assets.star_strip(item.star)
-        if strip is not None:
-            box = layout.star_strip_rect(card, strip.size)
-            canvas.alpha_composite(strip.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y))
+    # ---- 十连：单卡 ------------------------------------------------------
 
-        icon = self.assets.profession(item.profession)
-        if icon is not None:
-            box = layout.profession_rect(card)
-            canvas.alpha_composite(
-                icon.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y)
-            )
+    def _composite_card(self, item: CardItem) -> Image.Image | None:
+        """合成单张卡：卡背 → 6★渐变 → 卡内点阵 → 半身像。
 
-    def _draw_half_portrait(
-        self, card_layer: Image.Image, card: layout.Rect, item: CardItem
-    ) -> None:
-        """半身像：宽度是卡宽的 1.35 倍，底对齐后上移 18px，左右各裁 9px 进卡。
-
-        没有立绘就画一块深色占位：卡背与星级条照样在，看得出「这个位置有人但图没下到」。
+        返回**素材原尺寸**（144×392）的卡，由调用方缩到 112×305——参考实现也是
+        先在原尺寸上合成再缩放，这样卡内光效的 `clip_box`（相对原尺寸）才对得上。
         """
+        back = self.assets.card_back(item.star) or self.assets.card_back(3)
+        if back is None:
+            return None
+
+        card_w, card_h = back.size
+        card = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+        card.paste(back, (0, 0), back)
+
+        if item.star == 6:
+            gradient = effects.card_gradient_layer((card_w, card_h))
+            if gradient is not None:
+                effects.blend_onto(card, gradient, 1.0, "NORMAL")
+
+        self._apply_on_card_lights(card, item.star, card_w, card_h)
+
         portrait = self._portrait(item, KIND_HALF)
-        clip = layout.portrait_clip(card)
-        if portrait is None:
-            self._draw_placeholder(card_layer, card, item.star)
-            return
-        width = layout.portrait_width()
-        height = max(1, round(portrait.height * width / portrait.width))
-        resized = portrait.resize((width, height), Image.LANCZOS)
-        left, bottom = layout.portrait_anchor(card)
-        # 换算到卡片局部坐标再裁，避免负坐标把 paste 弄歪。
-        local_x = left - card.x
-        local_y = bottom - card.y - height
-        clip_local = layout.Rect(clip.x - card.x, clip.y - card.y, clip.w, clip.h)
-        self._paste_resized_clipped(
-            card_layer, resized, (local_x, local_y), clip_local
-        )
+        if portrait is not None:
+            pw = int(card_w * layout.PORTRAIT_SCALE)
+            ph = int(portrait.height * (pw / portrait.width)) if portrait.width else pw
+            portrait = portrait.resize((max(1, pw), max(1, ph)), Image.LANCZOS)
+            px = (card_w - pw) // 2 + layout.PORTRAIT_OFFSET_X
+            py = card_h - ph - layout.PORTRAIT_BOTTOM_MARGIN + layout.PORTRAIT_OFFSET_Y
+            card = self._paste_portrait_cropped(card, portrait, px, py)
+        else:
+            self._draw_placeholder(card, item)
 
-    @staticmethod
-    def _draw_placeholder(
-        card_layer: Image.Image, card: layout.Rect, star: int
+        return card
+
+    def _paste_portrait_cropped(
+        self, card: Image.Image, portrait: Image.Image, px: int, py: int
+    ) -> Image.Image:
+        """把半身像贴进卡内并按 `AVATAR_CROP_*` 裁剪（现为 0 = 只裁到卡边界）。"""
+        card_w, card_h = card.size
+        layer = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+        layer.paste(portrait, (px, py), portrait)
+
+        box = (
+            min(layout.AVATAR_CROP_LEFT, card_w - 1),
+            min(layout.AVATAR_CROP_TOP, card_h - 1),
+            max(card_w - layout.AVATAR_CROP_RIGHT, 1),
+            max(card_h - layout.AVATAR_CROP_BOTTOM, 1),
+        )
+        if box[2] <= box[0] or box[3] <= box[1]:
+            box = (0, 0, card_w, card_h)
+        mask = Image.new("L", (card_w, card_h), 0)
+        mask.paste(255, box)
+
+        red, green, blue, alpha = layer.split()
+        alpha = ImageChops.multiply(alpha, mask)
+        cropped = Image.merge("RGBA", (red, green, blue, alpha))
+        return Image.alpha_composite(card, cropped)
+
+    def _draw_placeholder(self, card: Image.Image, item: CardItem) -> None:
+        """缺立绘时的占位：一块半透明深色 + 首字，保证版式不塌。"""
+        card_w, card_h = card.size
+        layer = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        draw.rectangle([0, 0, card_w - 1, card_h - 1], fill=(24, 26, 30, 190))
+        font = self.assets.font(max(20, card_w // 2))
+        initial = (item.name or "?")[:1]
+        if font is not None:
+            draw.text(
+                (card_w / 2, card_h / 2),
+                initial,
+                font=font,
+                anchor="mm",
+                fill=(255, 255, 255, 70),
+            )
+        card.alpha_composite(layer)
+
+    # ---- 十连：光效 ------------------------------------------------------
+
+    def _apply_lights(
+        self,
+        canvas: Image.Image,
+        star: int,
+        card_w: int,
+        card_h: int,
+        center: tuple[float, float],
+        *,
+        seed: str | None = None,
     ) -> None:
-        shade = {3: (26, 30, 38, 235), 4: (32, 36, 46, 235), 5: (44, 38, 30, 235)}.get(
-            star, (48, 40, 28, 235)
-        )
-        draw = ImageDraw.Draw(card_layer)
-        draw.rectangle([0, 24, card.w - 1, card.h - 24], fill=shade)
-
-    def _draw_lights(self, canvas: Image.Image, card: layout.Rect, star: int) -> None:
-        spec = layout.LIGHT_LAYOUT.get(star)
-        if not spec:
-            return
-        center_x, center_y = card.center
-        for key, conf in spec.items():
-            if conf.get("program"):
-                self._draw_program_light(canvas, card, key, conf)
+        """画布下层光效（可溢出卡片，垫在卡片之下）。"""
+        for key, params in layout.LIGHT_LAYOUT.get(star, {}).items():
+            if params.get("on_card") or params.get("above_card"):
                 continue
-            image = self._light_image(key)
+            image = self._light_image(star, key, seed)
+            if image is not None:
+                self._paste_light(canvas, image, card_w, card_h, params, center)
+
+    def _apply_on_card_lights(
+        self, card: Image.Image, star: int, card_w: int, card_h: int
+    ) -> None:
+        """卡内光效（`on_card`）：画在卡背之上、立绘之下，裁进卡片。"""
+        center = (card_w / 2.0, card_h / 2.0)
+        for key, params in layout.LIGHT_LAYOUT.get(star, {}).items():
+            if not params.get("on_card"):
+                continue
+            image = self._light_image(star, key, None)
+            if image is not None:
+                self._paste_light(card, image, card_w, card_h, params, center)
+
+    def _light_image(self, star: int, key: str, seed: str | None) -> Image.Image | None:
+        """取一张光效图：素材贴图 / 程序生成的光柱顶部渐变与碎光。"""
+        if key.endswith("_sparkles"):
+            return self.assets.sparkles(star, seed)
+        if key.endswith("_top_glow"):
+            return self.assets.top_glow(star)
+        image = self.assets.light(key)
+        if image is not None and key == "star_light":
+            # 白色光球先做径向渐变着色（中心白 → 边缘紫）。
+            image = effects.tint_star_light(image)
+        return image
+
+    def _paste_light(
+        self,
+        canvas: Image.Image,
+        overlay: Image.Image,
+        ref_w: int,
+        ref_h: int,
+        params: dict,
+        ref_center: tuple[float, float] | None = None,
+        zoom: float = 1.0,
+    ) -> None:
+        """按 `layout.LIGHT_LAYOUT` 的一条配置贴一张光效。
+
+        `anchor=center` 时 `pos` 是光效中心相对参考中心的偏移；`topleft` 时相对参考左上角。
+        `clip_to_ref` 裁到参考矩形内，`clip_box` 裁到指定矩形内（都随 zoom 放大）。
+        """
+        anchor = params.get("anchor", "center")
+        tint = params.get("tint")
+        if tint is not None:
+            overlay = effects.tint_dots(overlay, tuple(tint))
+
+        ref_w_z = ref_w * zoom
+        ref_h_z = ref_h * zoom
+        size = params.get("size")
+        if size:
+            target_w, target_h = int(size[0] * zoom), int(size[1] * zoom)
+        else:
+            scale = params.get("scale", 1.0)
+            target_w = int(ref_w_z * scale)
+            target_h = (
+                int(overlay.height * (target_w / overlay.width))
+                if overlay.width
+                else target_w
+            )
+
+        target_w, target_h = max(1, target_w), max(1, target_h)
+        scaled = overlay.resize((target_w, target_h), Image.LANCZOS)
+
+        angle = params.get("angle", layout.TEXTURE_ROTATE_ANGLE)
+        if angle:
+            scaled = scaled.rotate(angle, resample=Image.BICUBIC, expand=True)
+            target_w, target_h = scaled.size
+
+        if ref_center is not None:
+            center_x, center_y = ref_center
+        else:
+            center_x, center_y = ref_w / 2.0, ref_h / 2.0
+
+        offset_x, offset_y = params.get("pos", (0, 0))
+        offset_x, offset_y = offset_x * zoom, offset_y * zoom
+        if anchor == "topleft":
+            left = center_x - ref_w_z / 2.0 + offset_x
+            top = center_y - ref_h_z / 2.0 + offset_y
+        else:
+            left = center_x - target_w / 2.0 + offset_x
+            top = center_y - target_h / 2.0 + offset_y
+        px, py = int(left), int(top)
+
+        opacity = float(params.get("opacity", 1.0)) * layout.TEXTURE_OPACITY
+        blend_mode = params.get("blend_mode", layout.TEXTURE_BLEND_MODE)
+
+        clip_box = params.get("clip_box")
+        if ref_center is not None and (clip_box or params.get("clip_to_ref")):
+            if clip_box:
+                cw = int(clip_box.get("w", ref_w) * zoom)
+                ch = int(clip_box.get("h", ref_h) * zoom)
+                ox = int(clip_box.get("ox", 0) * zoom)
+                oy = int(clip_box.get("oy", 0) * zoom)
+                box = (
+                    int(center_x + ox - cw / 2),
+                    int(center_y + oy - ch / 2),
+                    int(center_x + ox + cw / 2),
+                    int(center_y + oy + ch / 2),
+                )
+            else:
+                box = (
+                    int(center_x - ref_w_z / 2),
+                    int(center_y - ref_h_z / 2),
+                    int(center_x + ref_w_z / 2),
+                    int(center_y + ref_h_z / 2),
+                )
+            scaled = _clip_layer(scaled, px, py, box)
+
+        if opacity >= 1.0 and blend_mode == "NORMAL":
+            canvas.paste(scaled, (px, py), scaled)
+        else:
+            temp = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+            temp.paste(scaled, (px, py), scaled)
+            effects.blend_onto(canvas, temp, opacity, blend_mode)
+
+    # ---- 十连：星级条与职业图标（独立层）---------------------------------
+
+    def _star_strip_image(self, star: int, zoom: float = 1.0) -> Image.Image | None:
+        """星级条：每颗星固定宽度，按星数拼总宽（不是整体缩放素材）。"""
+        strip = self.assets.star_strip(star)
+        if strip is None:
+            return None
+        width, height = layout.star_strip_size(star, strip.size)
+        return strip.resize(
+            (max(1, int(width * zoom)), max(1, int(height * zoom))), Image.LANCZOS
+        )
+
+    def _draw_star_strip(
+        self,
+        canvas: Image.Image,
+        star: int,
+        card_x: int,
+        card_y: int,
+        card_w: int,
+        card_h: int,
+        zoom: float = 1.0,
+    ) -> None:
+        strip = self._star_strip_image(star, zoom)
+        if strip is None:
+            return
+        left = card_x + (card_w - strip.width) // 2
+        top = card_y + layout.STAR_STRIP_TOP * zoom
+        canvas.paste(strip, (int(left), int(top)), strip)
+
+    def _profession_image(self, profession: str, zoom: float = 1.0) -> Image.Image | None:
+        icon = self.assets.profession(profession)
+        if icon is None:
+            return None
+        size = max(1, int(round(layout.PROFESSION_SIZE * zoom)))
+        return icon.resize((size, size), Image.LANCZOS)
+
+    def _draw_profession(
+        self,
+        canvas: Image.Image,
+        item: CardItem,
+        card_x: int,
+        card_y: int,
+        card_w: int,
+        card_h: int,
+        zoom: float = 1.0,
+    ) -> None:
+        icon = self._profession_image(item.profession, zoom)
+        if icon is None:
+            return
+        left = card_x + (card_w - icon.width) // 2
+        top = card_y + card_h - icon.height - layout.PROFESSION_BOTTOM * zoom
+        canvas.paste(icon, (int(left), int(top)), icon)
+
+    # ---- 单抽：元素表 ----------------------------------------------------
+
+    def _expand_tasks(self, key: str, element: dict) -> list[tuple[str, dict]]:
+        """把一个元素展开成若干实例：随机副本、翻转、附属拖尾各自独立排序。"""
+        count = int(element.get("random_count", 0) or 0)
+        if count <= 0:
+            return [(key, element)]
+
+        area = element.get("random_area") or {}
+        rx = area.get("x", (-layout.CANVAS_WIDTH / 2.0, layout.CANVAS_WIDTH / 2.0))
+        ry = area.get("y", (-layout.CANVAS_HEIGHT / 2.0, layout.CANVAS_HEIGHT / 2.0))
+        base_layer = element.get("layer", 100)
+        rotate_chance = float(element.get("rotate_chance", 0.0) or 0.0)
+        rotated_layer = element.get("rotated_layer")
+        trail = element.get("trail") or {}
+        random_size = element.get("random_size")
+        rotated_offset = element.get("rotated_offset") or (0, 0)
+        rotated_tint = element.get("rotated_tint")
+
+        source = self.assets.image(element.get("file", "")) if element.get("file") else None
+        tasks: list[tuple[str, dict]] = []
+        for _ in range(count):
+            px = random.uniform(rx[0], rx[1])
+            py = random.uniform(ry[0], ry[1])
+            rotated = rotate_chance > 0 and random.random() < rotate_chance
+            layer = rotated_layer if (rotated and rotated_layer is not None) else base_layer
+
+            size = element.get("size")
+            if random_size:
+                size = random.uniform(min(random_size), max(random_size))
+            if rotated:
+                px += rotated_offset[0]
+                py += rotated_offset[1]
+
+            instance = dict(element)
+            instance["pos"] = (px, py)
+            instance["size"] = size
+            instance["layer"] = layer
+            instance["_rotated"] = rotated
+            if rotated and rotated_tint:
+                instance["_tint"] = rotated_tint
+            tasks.append((key, instance))
+
+            if not trail or source is None:
+                continue
+
+            instance_w, instance_h = _resolve_size(source, size)
+            if random.random() >= float(trail.get("chance", 0.0) or 0.0):
+                continue
+
+            ratio = float(trail.get("size_ratio", 1.0))
+            offset = trail.get("offset", (0, 0)) or (0, 0)
+            beam_w = max(1, int(instance_w * ratio * float(trail.get("beam_width", 0.35))))
+            beam_h = max(1, int(instance_h * ratio * float(trail.get("beam_height", 1.8))))
+            color = trail.get("color", (255, 255, 255))
+            if rotated:
+                color = trail.get("rotated_color") or rotated_tint or color
+            image = self.assets.beam(
+                beam_w,
+                beam_h,
+                color=color,
+                softness_x=trail.get("softness_x", 2.2),
+                softness_y=trail.get("softness_y", 1.0),
+                opacity=trail.get("opacity", 0.5),
+                flat_ratio=trail.get("flat_ratio", 0.0),
+            )
             if image is None:
                 continue
-            box = self._light_box(image.size, conf, center_x, center_y, card)
-            target = image.resize((box.w, box.h), Image.LANCZOS)
-            if conf.get("angle"):
-                target = target.rotate(
-                    conf["angle"], expand=True, resample=Image.BICUBIC
+            tasks.append(
+                (
+                    key,
+                    {
+                        "layer": layer + float(trail.get("layer_offset", -1)),
+                        "pos": (px + offset[0], py + offset[1]),
+                        "opacity": 1.0,
+                        "blend": trail.get("blend", "NORMAL"),
+                        "_image": image,
+                        "size_px": (beam_w, beam_h),
+                        "_rotated": rotated and bool(trail.get("follow_rotate", True)),
+                    },
                 )
-            if conf.get("tint"):
-                target = _tint(target, conf["tint"])
-            target = _fade(target, conf.get("opacity", 1.0))
-            if conf.get("clip"):
-                self._paste_clipped(canvas, target, box, conf["clip"], center_x, center_y)
-            else:
-                canvas.alpha_composite(
-                    target,
-                    (box.x + (box.w - target.width) // 2, box.y + (box.h - target.height) // 2),
-                )
+            )
+        return tasks
 
-    def _draw_program_light(
-        self, canvas: Image.Image, card: layout.Rect, key: str, conf: dict
+    def _draw_element(
+        self, canvas: Image.Image, key: str, element: dict, item: CardItem, is_new: bool
     ) -> None:
-        """顶部亮渐变与光柱内随机亮条——这两样是程序画的，不是贴图。"""
-        center_x, center_y = card.center
-        width, height = conf["size"]
-        if key.endswith("top_glow"):
-            palette = layout.TOP_GLOW_6 if key.startswith("star_6") else layout.TOP_GLOW_5
-            image = self._cached(
-                ("glow", palette["size"], palette["bright"], palette["dark"]),
-                lambda: _top_glow(palette["size"], palette["bright"], palette["dark"]),
-            )
-            opacity = palette.get("opacity", 1.0)
-        else:
-            image = self._cached(
-                ("sparkles", (width, height)),
-                lambda: _sparkles((width, height), layout.SPARKLES),
-            )
-            opacity = 1.0
-        target = image.resize((width, height), Image.LANCZOS)
-        target = _fade(target, opacity)
-        offset_x, offset_y = conf.get("pos", (0, 0))
-        left = center_x + offset_x - width // 2
-        top = center_y + offset_y - height // 2
-        clip = conf.get("clip")
-        if clip:
-            self._paste_clipped(
-                canvas, target, layout.Rect(left, top, width, height), clip, center_x, center_y
-            )
-        else:
-            canvas.alpha_composite(target, (max(0, left), max(0, top)))
+        """按元素类型分派。单个元素失败不影响整图。"""
+        try:
+            if key == "background":
+                image = self.assets.image(element.get("file", ""))
+                if image is not None:
+                    prepared = effects.prepare_background(image.copy())
+                    canvas.paste(prepared, (0, 0), prepared)
+            elif key == "portrait":
+                self._draw_single_portrait(canvas, element, item)
+            elif key == "camp_logo":
+                self._draw_element_image(canvas, element, self.assets.camp_logo(item.camp))
+            elif key == "profession":
+                icon = self.assets.profession(item.profession, labeled=True)
+                self._draw_element_image(canvas, element, icon)
+            elif key == "stars":
+                self._draw_single_stars(canvas, element, item.star)
+            elif key == "new_tag":
+                if is_new:
+                    self._draw_element_image(
+                        canvas, element, self.assets.image(element.get("file", ""))
+                    )
+            elif key in ("name_cn", "name_en"):
+                self._draw_single_name(canvas, element, item)
+            else:
+                image = element.get("_image")
+                if image is None and element.get("file"):
+                    image = self.assets.image(element["file"])
+                self._draw_element_image(canvas, element, image)
+        except Exception:  # noqa: BLE001 - 单个装饰元素失败不该让整张图崩掉
+            return
 
-    def _light_image(self, key: str) -> Image.Image | None:
-        source = self.assets.light(key)
-        return source
+    def _draw_element_image(
+        self, canvas: Image.Image, element: dict, image: Image.Image | None
+    ) -> None:
+        """普通图片元素：`pos` 是元素中心相对画布中心的偏移。"""
+        self._draw_backdrop(canvas, element)
+        if image is None:
+            return
 
-    @staticmethod
-    def _light_box(
-        source: tuple[int, int], conf: dict, center_x: int, center_y: int, card: layout.Rect
-    ) -> layout.Rect:
-        """光效的位置与尺寸：`pos` 相对卡片中心；`size` 是绝对像素，`scale` 是倍率。"""
-        width, height = source
-        if conf.get("size"):
-            width, height = conf["size"]
+        if element.get("size_px"):
+            target = (
+                max(1, int(element["size_px"][0])),
+                max(1, int(element["size_px"][1])),
+            )
         else:
-            scale = conf.get("scale", 1.0)
-            width, height = round(width * scale), round(height * scale)
-        offset_x, offset_y = conf.get("pos", (0, 0))
-        return layout.Rect(
-            center_x + offset_x - width // 2,
-            center_y + offset_y - height // 2,
-            width,
-            height,
+            target = _resolve_size(image, element.get("size"))
+
+        if target != image.size:
+            image = image.resize(target, Image.LANCZOS)
+        if element.get("_rotated"):
+            image = image.rotate(180)
+        tint = element.get("_tint")
+        if tint:
+            image = effects.tint_image(image, tint)
+
+        opacity = float(element.get("opacity", 1.0))
+        blend = element.get("blend", "NORMAL")
+        offset_x, offset_y = element.get("pos", (0, 0))
+        left = int(layout.CANVAS_WIDTH / 2.0 + offset_x - image.width / 2.0)
+        top = int(layout.CANVAS_HEIGHT / 2.0 + offset_y - image.height / 2.0)
+        if opacity >= 1.0 and blend == "NORMAL":
+            canvas.paste(image, (left, top), image)
+        else:
+            temp = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+            temp.paste(image, (left, top), image)
+            effects.blend_onto(canvas, temp, opacity, blend)
+
+    def _draw_backdrop(self, canvas: Image.Image, element: dict) -> None:
+        """元素的可选纯色底板（SKIP 按钮用：素材只有白字与三角，没有底）。"""
+        backdrop = element.get("backdrop")
+        if not backdrop or not backdrop.get("enabled", True):
+            return
+        width, height = backdrop.get("size", (120, 60))
+        width, height = max(1, int(width)), max(1, int(height))
+        radius = max(0, int(backdrop.get("radius", 0) or 0))
+        color = tuple(backdrop.get("color", (28, 30, 34, 200)))
+        offset_x, offset_y = backdrop.get("offset", (0, 0)) or (0, 0)
+        pos_x, pos_y = element.get("pos", (0, 0))
+
+        center_x = layout.CANVAS_WIDTH / 2.0 + pos_x + offset_x
+        center_y = layout.CANVAS_HEIGHT / 2.0 + pos_y + offset_y
+        left = int(center_x - width / 2.0)
+        top = int(center_y - height / 2.0)
+
+        layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        if radius > 0:
+            draw.rounded_rectangle([0, 0, width - 1, height - 1], radius=radius, fill=color)
+        else:
+            draw.rectangle([0, 0, width - 1, height - 1], fill=color)
+        canvas.paste(layer, (left, top), layer)
+
+    def _draw_single_portrait(
+        self, canvas: Image.Image, element: dict, item: CardItem
+    ) -> None:
+        """精一立绘：高 = 画布高 × fill × size_percent/100，以 pos 为中心。"""
+        art = self._portrait(item, KIND_ART) or self._portrait(item, KIND_HALF)
+        if art is None:
+            return
+        target_h = max(
+            1,
+            int(
+                layout.CANVAS_HEIGHT
+                * float(element.get("fill", 1.0))
+                * float(element.get("size_percent", 100))
+                / 100.0
+            ),
+        )
+        target_w = max(1, int(round(art.width * (target_h / max(1, art.height)))))
+        art = art.resize((target_w, target_h), Image.LANCZOS)
+
+        offset_x, offset_y = element.get("pos", (0, 0))
+        left = int(layout.CANVAS_WIDTH / 2.0 + offset_x - target_w / 2.0)
+        top = int(layout.CANVAS_HEIGHT / 2.0 + offset_y - target_h / 2.0)
+        canvas.paste(art, (left, top), art)
+
+    def _draw_single_stars(self, canvas: Image.Image, element: dict, star: int) -> None:
+        """星级五角星：数量取干员星级，`gap` 为相邻间距，`align` 相对 pos 对齐。"""
+        source = self.assets.image(element.get("file", ""))
+        if source is None:
+            return
+
+        count = (
+            int(star)
+            if element.get("count_from_rarity", True)
+            else int(element.get("fixed_count", 6))
+        )
+        count = max(1, count)
+        star_w, star_h = _resolve_size(source, element.get("size"))
+        gap = int(element.get("gap", 6))
+        align = element.get("align", "center")
+
+        total = count * star_w + (count - 1) * gap
+        pos_x, pos_y = element.get("pos", (0, 0))
+        center_x = layout.CANVAS_WIDTH / 2.0 + pos_x
+        center_y = layout.CANVAS_HEIGHT / 2.0 + pos_y
+        if align == "center":
+            start_x = center_x - total / 2.0
+        elif align == "right":
+            start_x = center_x - total
+        else:
+            start_x = center_x
+
+        star_image = (
+            source
+            if (star_w, star_h) == source.size
+            else source.resize((star_w, star_h), Image.LANCZOS)
+        )
+        opacity = float(element.get("opacity", 1.0))
+        if opacity < 1.0:
+            star_image = star_image.copy()
+            alpha = star_image.getchannel("A").point(
+                lambda value: int(value * max(0.0, opacity))
+            )
+            star_image.putalpha(alpha)
+
+        x = start_x
+        for _ in range(count):
+            canvas.paste(star_image, (int(x), int(center_y - star_h / 2.0)), star_image)
+            x += star_w + gap
+
+    def _draw_single_name(
+        self, canvas: Image.Image, element: dict, item: CardItem
+    ) -> None:
+        """中文名 / 英文名：白字 + 半透明黑外描边，以 pos 为文字块中心。"""
+        value = item.name_en if element.get("text") == "en" else item.name
+        if not value:
+            return
+        if element.get("uppercase"):
+            value = value.upper()
+
+        size = max(1, int(element.get("font_size", 32)))
+        spacing = float(element.get("letter_spacing", 0.0))
+        total, ascent, descent = text.measure_text(value, size, self.assets.font, spacing)
+        if total <= 0:
+            return
+
+        pos_x, pos_y = element.get("pos", (0, 0))
+        center_x = layout.CANVAS_WIDTH / 2.0 + pos_x
+        center_y = layout.CANVAS_HEIGHT / 2.0 + pos_y
+        baseline = center_y + (ascent - descent) / 2.0
+
+        text.draw_text(
+            canvas,
+            (center_x, baseline),
+            value,
+            font_for=self.assets.font,
+            size=size,
+            fill=tuple(element.get("fill", (255, 255, 255, 255))),
+            stroke_fill=tuple(element.get("stroke_fill", (128, 128, 128, 255))),
+            stroke_width=int(element.get("stroke_width", 0)),
+            letter_spacing=spacing,
+            halign=element.get("align", "center"),
+            opacity=float(element.get("opacity", 1.0)),
         )
 
-    def _card_gradient(self, card: layout.Rect) -> Image.Image:
-        """6★ 卡背的橙金渐变：叠在卡背上、立绘之下。"""
-        conf = layout.CARD_GRADIENT
-        width, height = conf["size"]
-        image = self._cached(
-            ("card_gradient", (width, height)),
-            lambda: _vertical_gradient((width, height), conf["color_top"], conf["color_bottom"]),
-        )
-        target = _fade(image, conf["opacity"])
-        offset_x, offset_y = conf["pos"]
-        center_x, center_y = card.center
-        left = center_x + offset_x - width // 2 - card.x
-        top = center_y + offset_y - height // 2 - card.y
-        layer = Image.new("RGBA", (card.w, card.h), (0, 0, 0, 0))
-        layer.alpha_composite(target, (left, top))
+    # ---- 单抽：后处理 ----------------------------------------------------
+
+    def _fade_layer(self, size: tuple[int, int]) -> Image.Image:
+        layer = effects.bottom_fade_layer(size)
+        if layer is None:
+            return Image.new("RGBA", size, (0, 0, 0, 0))
         return layer
 
-    # ---- 单抽 ------------------------------------------------------------
+    def _apply_vignette(self, canvas: Image.Image) -> None:
+        layer = effects.vignette_layer(canvas.size)
+        if layer is not None:
+            canvas.alpha_composite(layer)
 
-    def _draw_single_deco(self, canvas: Image.Image, char_id: str) -> None:
-        deco = self.assets.image("beijing_05.png")
-        if deco is not None:
-            box = layout.element_rect("deco_beijing05", deco.size)
-            canvas.alpha_composite(deco.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y))
-
-        rng = random.Random(hashlib.md5(char_id.encode("utf-8")).hexdigest())
-        for group in layout.SINGLE_DECO_STARS:
-            star = self.assets.image(group["file"])
-            if star is None:
-                continue
-            low, high = group["size"]
-            for _ in range(group["count"]):
-                percent = rng.randint(low, high)
-                width = max(1, round(star.width * percent / 100))
-                height = max(1, round(star.height * percent / 100))
-                pos_x = rng.randint(*layout.DECO_AREA["x"])
-                pos_y = rng.randint(*layout.DECO_AREA["y"])
-                layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-                layer.alpha_composite(star.resize((width, height), Image.LANCZOS))
-                layer = _tint(layer, layout.DECO_TINT)
-                if rng.random() < 0.3:
-                    beam = _beam(max(2, width // 3), height * 3, (255, 255, 255), 0.35)
-                    canvas.alpha_composite(
-                        beam,
-                        (
-                            layout.CANVAS_WIDTH // 2 + pos_x - beam.width // 2,
-                            layout.CANVAS_HEIGHT // 2 + pos_y - beam.height // 2 - height,
-                        ),
-                    )
-                canvas.alpha_composite(
-                    layer,
-                    (
-                        layout.CANVAS_WIDTH // 2 + pos_x - width // 2,
-                        layout.CANVAS_HEIGHT // 2 + pos_y - height // 2,
-                    ),
-                )
-
-    def _draw_single_portrait(self, canvas: Image.Image, item: CardItem) -> None:
-        portrait = self._portrait(item, KIND_ART)
-        if portrait is None:
-            # 占位：画一个深色竖块，位置就是立绘该在的地方。
-            box = layout.single_portrait_box((720, 1080))
-            draw = ImageDraw.Draw(canvas)
-            draw.rectangle([box.x, box.y, box.right, box.bottom], fill=(24, 26, 32, 235))
-            return
-        box = layout.single_portrait_box(portrait.size)
-        resized = portrait.resize((box.w, box.h), Image.LANCZOS)
-        # 立绘比画布高（人物下半身本来就出画），贴之前先裁到画布范围内。
-        left = max(0, box.x)
-        top = max(0, box.y)
-        right = min(box.right, layout.CANVAS_WIDTH)
-        bottom = min(box.bottom, layout.CANVAS_HEIGHT)
-        canvas.alpha_composite(
-            resized.crop((left - box.x, top - box.y, right - box.x, bottom - box.y)),
-            (left, top),
-        )
-
-    def _draw_single_logo(self, canvas: Image.Image, item: CardItem) -> None:
-        """阵营 logo：画在立绘**之前**（下层），人像会压住它右半边。"""
-        logo = self.assets.camp_logo(item.camp)
-        if logo is None:
-            return
-        box = layout.element_rect("camp_logo", logo.size)
-        canvas.alpha_composite(logo.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y))
-
-    def _draw_single_side(self, canvas: Image.Image, item: CardItem) -> None:
-        """左侧文字区：带文字职业图标、星级五角星、中英文名（在立绘之上）。"""
-        icon = self.assets.profession(item.profession, labeled=True)
-        if icon is not None:
-            box = layout.element_rect("profession", icon.size)
-            canvas.alpha_composite(icon.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y))
-
-        self._draw_single_stars(canvas, item.star)
-        self._draw_single_names(canvas, item)
-
-    def _draw_single_stars(self, canvas: Image.Image, star: int) -> None:
-        asset = self.assets.image(layout.SINGLE_ELEMENTS["stars"]["file"])
-        if asset is None:
-            return
-        conf = layout.SINGLE_ELEMENTS["stars"]
-        width = max(1, round(asset.width * conf["size"] / 100))
-        height = max(1, round(asset.height * conf["size"] / 100))
-        gap = conf["gap"]
-        offset_x, offset_y = conf["pos"]
-        count = max(1, min(6, star))
-        left = layout.CANVAS_WIDTH // 2 + offset_x
-        center_y = layout.CANVAS_HEIGHT // 2 + offset_y
-        for index in range(count):
-            # gap 是负数：星星之间互相压一点，和游戏内一样连成一排。
-            x = left + index * (width + gap)
-            canvas.alpha_composite(
-                asset.resize((width, height), Image.LANCZOS), (x, center_y - height // 2)
-            )
-
-    def _draw_single_names(self, canvas: Image.Image, item: CardItem) -> None:
-        draw = ImageDraw.Draw(canvas)
-        cn = layout.SINGLE_ELEMENTS["name_cn"]
-        en = layout.SINGLE_ELEMENTS["name_en"]
-        if item.name:
-            self._text(
-                draw,
-                item.name,
-                cn["font_size"],
-                (layout.CANVAS_WIDTH // 2 + cn["pos"][0], layout.CANVAS_HEIGHT // 2 + cn["pos"][1]),
-                fill=cn["fill"],
-                stroke=cn["stroke_fill"],
-            )
-        if item.name_en:
-            self._text(
-                draw,
-                item.name_en.upper(),
-                en["font_size"],
-                (layout.CANVAS_WIDTH // 2 + en["pos"][0], layout.CANVAS_HEIGHT // 2 + en["pos"][1]),
-                fill=en["fill"],
-                stroke=en["stroke_fill"],
-                spacing=0.02,
-            )
-
-    def _text(
-        self,
-        draw: ImageDraw.ImageDraw,
-        text: str,
-        size: int,
-        origin: tuple[int, int],
-        *,
-        fill,
-        stroke,
-        spacing: float = 0.0,
-    ) -> None:
-        """按左中锚点逐字画，字距由 `spacing` 控制（PIL 没有 letter-spacing）。"""
-        font = self.assets.font(size)
-        x, y = origin
-        for char in text:
-            draw.text((x, y), char, font=font, fill=fill, anchor="lm", stroke_width=1, stroke_fill=stroke)
-            x += draw.textlength(char, font=font) + size * spacing
-
-    def _draw_single_skip(self, canvas: Image.Image) -> None:
-        conf = layout.SINGLE_ELEMENTS["skip"]
-        skip = self.assets.image(conf["file"])
-        if skip is None:
-            return
-        width = max(1, round(skip.width * conf["size"] / 100))
-        height = max(1, round(skip.height * conf["size"] / 100))
-        offset_x, offset_y = conf["pos"]
-        left = layout.CANVAS_WIDTH // 2 + offset_x - width // 2
-        top = layout.CANVAS_HEIGHT // 2 + offset_y - height // 2
-        # 素材只有白色文字与三角，底板得自己铺，否则压在亮背景上看不清。
-        backdrop = Image.new("RGBA", (75, 55), (28, 30, 34, 210))
-        canvas.alpha_composite(
-            backdrop, (left + width // 2 - 37, top + height // 2 - 27)
-        )
-        canvas.alpha_composite(skip.resize((width, height), Image.LANCZOS), (left, top))
-
-    # ---- 后处理 ----------------------------------------------------------
-
-    def _vignette(self, size: tuple[int, int], conf: dict) -> Image.Image:
-        key = ("vignette", size, tuple(sorted(conf.items())))
-        return self._cached(key, lambda: _vignette(size, conf))
-
-    def _bottom_fade(self, size: tuple[int, int], conf: dict) -> Image.Image:
-        key = ("bottom_fade", size, tuple(sorted(conf.items())))
-        return self._cached(key, lambda: _bottom_fade(size, conf))
-
-    # ---- 小工具 ----------------------------------------------------------
-
-    def _canvas(self, background: str) -> Image.Image:
-        image = self.assets.image(background)
-        if image is None:
-            return Image.new("RGBA", layout.CANVAS, (16, 18, 22, 255))
-        return image.resize(layout.CANVAS, Image.LANCZOS).convert("RGBA")
+    # ---- 立绘 ------------------------------------------------------------
 
     def _portrait(self, item: CardItem, kind: str) -> Image.Image | None:
+        """从立绘仓库取图：十连用半身像，单抽用精一立绘。
+
+        `PortraitStore` 认的是「有 char_id / name 属性的对象」——`CardItem` 正好满足，
+        所以这里把整个 item 传进去，不为渲染层再造一套参数。
+        """
         if self.portraits is None:
             return None
-        return self.portraits.half(item) if kind == KIND_HALF else self.portraits.art(item)
+        if kind == KIND_HALF:
+            return self.portraits.half(item)
+        return self.portraits.art(item)
 
-    def _cached(self, key: tuple, factory):
-        image = self._generated.get(key)
-        if image is None:
-            image = factory()
-            self._generated[key] = image
-        return image
 
-    @staticmethod
-    def _paste_resized_clipped(
-        canvas: Image.Image,
-        image: Image.Image,
-        origin: tuple[int, int],
-        clip: layout.Rect,
-    ) -> None:
-        """把已缩放到目标尺寸的图贴到 `origin`，只保留落在 `clip` 里的部分。"""
-        left = max(origin[0], clip.x)
-        top = max(origin[1], clip.y)
-        right = min(origin[0] + image.width, clip.right)
-        bottom = min(origin[1] + image.height, clip.bottom)
-        if right <= left or bottom <= top:
-            return
-        if left < 0 or top < 0:
-            return
-        crop = image.crop((left - origin[0], top - origin[1], right - origin[0], bottom - origin[1]))
-        canvas.alpha_composite(crop, (left, top))
+# ---- 模块级工具 ----------------------------------------------------------
 
-    @staticmethod
-    def _paste_within(
-        layer: Image.Image,
-        image: Image.Image,
-        card: layout.Rect,
-        conf: dict,
-        *,
-        clip_to: layout.Rect,
-    ) -> None:
-        """卡片内层的光效（点阵之类）：坐标相对卡片中心，裁到卡片。"""
-        width, height = conf["size"] if conf.get("size") else image.size
-        offset_x, offset_y = conf.get("pos", (0, 0))
-        center_x, center_y = card.center
-        box = layout.Rect(
-            center_x + offset_x - width // 2 - card.x,
-            center_y + offset_y - height // 2 - card.y,
-            width,
-            height,
+
+def _is_text(key: str) -> bool:
+    return key in ("name_cn", "name_en")
+
+
+def _resolve_size(image: Image.Image, size) -> tuple[int, int]:
+    """把元素配置的 `size`（百分比）解析成像素宽高。None/100 = 原样。"""
+    width, height = image.size
+    if size is None:
+        return max(1, width), max(1, height)
+    if isinstance(size, (int, float)):
+        scale = float(size) / 100.0
+        return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+    try:
+        return (
+            max(1, int(round(width * float(size[0]) / 100.0))),
+            max(1, int(round(height * float(size[1]) / 100.0))),
         )
-        target = image.resize((width, height), Image.LANCZOS)
-        if conf.get("angle"):
-            target = target.rotate(conf["angle"], expand=True, resample=Image.BICUBIC)
-        if conf.get("tint"):
-            target = _tint(target, conf["tint"])
-        target = _fade(target, conf.get("opacity", 1.0))
-        clip_local = layout.Rect(clip_to.x - card.x, clip_to.y - card.y, clip_to.w, clip_to.h)
-        Renderer._paste_resized_clipped(layer, target, (box.x, box.y), clip_local)
-
-    @staticmethod
-    def _paste_clipped(
-        canvas: Image.Image,
-        image: Image.Image,
-        box: layout.Rect,
-        clip: dict,
-        center_x: int,
-        center_y: int,
-    ) -> None:
-        """把光效裁到一个相对卡片中心的矩形里再贴（6★ 的光柱框住点阵）。"""
-        clip_box = layout.Rect(
-            center_x + clip.get("ox", 0) - clip["w"] // 2,
-            center_y + clip.get("oy", 0) - clip["h"] // 2,
-            clip["w"],
-            clip["h"],
-        )
-        left = box.x + (box.w - image.width) // 2
-        top = box.y + (box.h - image.height) // 2
-        Renderer._paste_resized_clipped(canvas, image, (left, top), clip_box)
+    except (TypeError, IndexError, ValueError):
+        return max(1, width), max(1, height)
 
 
-# ---- 程序生成的画面元素 ---------------------------------------------------
-
-
-def _fade(image: Image.Image, opacity: float) -> Image.Image:
-    if opacity >= 1.0:
-        return image
-    result = image.copy()
-    result.putalpha(result.getchannel("A").point(lambda value: int(value * max(0.0, opacity))))
-    return result
-
-
-def _tint(image: Image.Image, color: tuple[int, int, int] | tuple[int, int, int, int]) -> Image.Image:
-    """把贴图染成单色，保留它的透明度（网点、装饰星的纹理都在 alpha 里）。"""
-    solid = Image.new("RGBA", image.size, (color[0], color[1], color[2], 255))
-    solid.putalpha(image.getchannel("A"))
-    return solid
-
-
-def _vertical_gradient(
-    size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]
+def _clip_layer(
+    layer: Image.Image, px: int, py: int, box: tuple[int, int, int, int]
 ) -> Image.Image:
-    width, height = size
-    column = Image.new("RGBA", (1, height))
-    for y in range(height):
-        ratio = y / max(1, height - 1)
-        rgb = tuple(round(a + (b - a) * ratio) for a, b in zip(top, bottom))
-        column.putpixel((0, y), (*rgb, 255))
-    return column.resize((width, height), Image.BILINEAR)
+    """把已定位的图层裁到 box（画布坐标），box 外的像素 alpha 置 0。"""
+    width, height = layer.size
+    left, top = px, py
+    right, bottom = px + width, py + height
+    ix0, iy0 = max(left, box[0]), max(top, box[1])
+    ix1, iy1 = min(right, box[2]), min(bottom, box[3])
+    if ix1 <= ix0 or iy1 <= iy0:
+        return Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
-
-def _top_glow(
-    size: tuple[int, int], bright: tuple[int, int, int], dark: tuple[int, int, int]
-) -> Image.Image:
-    """光柱顶部的亮渐变：底部最亮、往上暗下去并淡出。"""
-    width, height = size
-    column = Image.new("RGBA", (1, height))
-    for y in range(height):
-        ratio = y / max(1, height - 1)
-        rgb = tuple(round(d + (b - d) * ratio) for d, b in zip(dark, bright))
-        alpha = round(255 * ratio**1.5)
-        column.putpixel((0, y), (*rgb, alpha))
-    return column.resize((width, height), Image.BILINEAR)
-
-
-def _sparkles(size: tuple[int, int], conf: dict) -> Image.Image:
-    """光柱里的随机小亮条。固定种子：同一张图每次出得一样，方便截图对比。"""
-    width, height = size
-    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
-    rng = random.Random(conf["seed"])
-    for _ in range(conf["count"]):
-        bar_w = rng.randint(*conf["bar_width"])
-        bar_h = rng.randint(*conf["bar_height"])
-        x = rng.randint(0, max(1, width - bar_w))
-        y = rng.randint(0, max(1, height - bar_h))
-        draw.rectangle([x, y, x + bar_w, y + bar_h], fill=(255, 255, 255, rng.randint(*conf["alpha"])))
-    return layer.filter(ImageFilter.GaussianBlur(0.6))
-
-
-def _vignette(size: tuple[int, int], conf: dict) -> Image.Image:
-    """椭圆暗角：中心不压暗，向外羽化到最暗。"""
-    width, height = size
     mask = Image.new("L", (width, height), 0)
-    draw = ImageDraw.Draw(mask)
-    ellipse_w, ellipse_h = conf["size"]
-    draw.ellipse(
-        [
-            width / 2 - ellipse_w / 2,
-            height / 2 - ellipse_h / 2,
-            width / 2 + ellipse_w / 2,
-            height / 2 + ellipse_h / 2,
-        ],
-        fill=255,
-    )
-    mask = mask.filter(ImageFilter.GaussianBlur(min(width, height) * conf["feather"]))
-    mask = mask.point(lambda value: int((255 - value) * conf["darkness"]))
-    layer = Image.new("RGBA", (width, height), (0, 0, 0, 255))
-    layer.putalpha(mask)
-    return layer
-
-
-def _bottom_fade(size: tuple[int, int], conf: dict) -> Image.Image:
-    """底部三段式渐变：纯黑段 + 向上渐隐段。"""
-    width, height = size
-    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
-    solid = conf["solid_height"]
-    fade = conf["fade_height"]
-    total = solid + fade
-    for offset in range(total):
-        y = height - total + offset
-        if y < 0:
-            continue
-        if offset < solid:
-            alpha = conf["max_alpha"]
-        else:
-            ratio = (offset - solid) / max(1, fade)
-            alpha = int(conf["max_alpha"] * (1 - ratio))
-        draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
-    return layer
-
-
-def _beam(width: int, height: int, color: tuple[int, int, int], opacity: float) -> Image.Image:
-    """一道细长的柔光，用于装饰星的拖尾。"""
-    height = max(1, int(height))
-    column = Image.new("RGBA", (1, height))
-    for y in range(height):
-        ratio = y / max(1, height - 1)
-        alpha = int(255 * opacity * math.sin(math.pi * ratio) ** 0.8)
-        column.putpixel((0, y), (*color, alpha))
-    return column.resize((max(1, width), height), Image.BILINEAR)
+    mask.paste(255, (ix0 - left, iy0 - top, ix1 - left, iy1 - top))
+    red, green, blue, alpha = layer.split()
+    alpha = ImageChops.multiply(alpha, mask)
+    return Image.merge("RGBA", (red, green, blue, alpha))
