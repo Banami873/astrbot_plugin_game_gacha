@@ -33,6 +33,9 @@ PORTRAIT_CROP_SIDE = 9
 
 # 星级条与职业图标都是**独立层**：星级条压在卡顶外面，职业图标从卡底溢出去。
 STAR_STRIP_TOP = -10
+# 星级条素材是照「卡宽 112」画的（1★ 36px、6★ 132px），肉眼偏大；用户 2026-11-17 要求
+# 缩到一半。只缩星级条，职业图标与卡背不动。
+STAR_STRIP_SCALE = 0.5
 PROFESSION_SIZE = 82
 PROFESSION_BOTTOM = -32
 
@@ -134,34 +137,38 @@ SPARKLES = {
 #
 # 坐标相对【画布中心】，size 是素材原始尺寸的百分比（100 = 原样）。层级越小越靠上，
 # 与参考实现一致——这种反直觉的约定只在这里出现一次，绘制侧照做即可。
+#
+# **下面的数值整段照搬参考实现的 `SP3_ELEMENTS`（即用户说的「v3」版式）
+# （2026-11-17 用户复审：我自己调小的那版「元素散架、星级与阵营太远太小」，退回 v3）。**
+# 别按观感再缩小：camp logo 337px 之所以不遮人，是因为立绘（layer 40）画在它上面（41）。
 
-SINGLE_PORTRAIT_FILL = 1.2  # 精一立绘高 = 画布高 × 该值（下半身出画是正常的）
-SINGLE_PORTRAIT_OFFSET = (150, 80)
+SINGLE_PORTRAIT_FILL = 1.2  # 精一立绘高 = 画布高 × 1.2（下半身出画是正常的）
+SINGLE_PORTRAIT_OFFSET = (130, 85)
 
 SINGLE_ELEMENTS: dict[str, dict[str, Any]] = {
     "background": {"file": BACKGROUND_SINGLE, "layer": 100, "size": 100},
     "deco_beijing05": {"file": "beijing_05.png", "layer": 90, "pos": (66, -20), "size": 155},
-    # 阵营 logo 的源图是 510×510，52% 会有 265px 宽、把立绘左肩盖住；20% ≈ 102px
-    # 才是游戏内左上角那个大小。
-    "camp_logo": {"layer": 41, "pos": (-186, -104), "size": 20},
+    # 阵营 logo 源图 510×510，66% ≈ 337px。它会盖到画面左中部，但立绘压在它上面，
+    # 所以实际看到的只是从人像左侧露出的那一角。
+    "camp_logo": {"layer": 41, "pos": (-112, -50), "size": 66},
     "skip": {"file": "btn_skip.png", "layer": 1, "pos": (450, -240), "size": 80,
              "above_vignette": True},
-    # 五角星源图 256×256，14% ≈ 36px；gap 同为负值让六颗星连成一排。
-    "stars": {"file": "wujiaoxing_01.png", "layer": 19, "pos": (-150, 60),
-              "size": 14, "gap": -14},
-    "profession": {"layer": 24, "pos": (-86, 145), "size": 72},
-    "name_cn": {"layer": 21, "pos": (26, 145), "font_size": 52,
+    # 五角星源图 256×256，47% ≈ 120px/颗；gap −51 让六颗星叠着连成一排（总宽 465px）。
+    "stars": {"file": "wujiaoxing_01.png", "layer": 19, "pos": (-147, 72),
+              "size": 47, "gap": -51},
+    "profession": {"layer": 24, "pos": (-70, 143), "size": 83},
+    "name_cn": {"layer": 21, "pos": (8, 143), "font_size": 59,
                 "fill": (255, 255, 255, 255), "stroke_fill": (0, 0, 0, 80)},
-    "name_en": {"layer": 22, "pos": (26, 191), "font_size": 23,
+    "name_en": {"layer": 22, "pos": (8, 186), "font_size": 25,
                 "fill": (255, 255, 255, 255), "stroke_fill": (0, 0, 0, 80)},
 }
 
-# 装饰星：随机摆几颗，搅一点暖橙色，带一道程序绘制的拖尾光柱。
+# 装饰星：随机摆几颗，搅一点暖橙色，带一道程序绘制的拖尾光柱。size 同 v3 的 random_size (60,80)。
 SINGLE_DECO_STARS: tuple[dict[str, Any], ...] = (
-    {"file": "star_04.png", "count": 3, "layer": 51, "size": (34, 48)},
-    {"file": "star_24.png", "count": 3, "layer": 72, "size": (34, 48)},
-    {"file": "star_25.png", "count": 3, "layer": 53, "size": (34, 48)},
-    {"file": "star_26.png", "count": 8, "layer": 54, "size": (34, 48)},
+    {"file": "star_04.png", "count": 3, "layer": 51, "size": (60, 80)},
+    {"file": "star_24.png", "count": 3, "layer": 72, "size": (60, 80)},
+    {"file": "star_25.png", "count": 3, "layer": 53, "size": (60, 80)},
+    {"file": "star_26.png", "count": 8, "layer": 54, "size": (60, 80)},
 )
 DECO_AREA = {"x": (-512, 512), "y": (-100, 280)}
 DECO_TINT = (235, 150, 105)
@@ -275,8 +282,12 @@ def portrait_anchor(card: Rect) -> tuple[int, int]:
 
 
 def star_strip_rect(card: Rect, size: tuple[int, int]) -> Rect:
-    """星级条：水平居中，压在卡顶上方 10px。独立层，可以超出卡宽。"""
-    width, height = size
+    """星级条：水平居中，压在卡顶上方 10px。独立层，可以超出卡宽。
+
+    `size` 是素材原生尺寸，这里按 `STAR_STRIP_SCALE` 缩半后再算。
+    """
+    width = max(1, round(size[0] * STAR_STRIP_SCALE))
+    height = max(1, round(size[1] * STAR_STRIP_SCALE))
     left = card.x + (card.w - width) // 2
     return Rect(left, card.y + STAR_STRIP_TOP, width, height)
 

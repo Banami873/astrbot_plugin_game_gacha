@@ -67,11 +67,14 @@ class Renderer:
     def render_single(self, item: CardItem) -> Image.Image:
         """单抽：右立绘，左侧阵营 logo / 星级 / 带文字职业图标 / 中英文名，右上 SKIP。
 
-        文字与图标画在暗角、底部渐变**之后**：英文名的位置正落在渐变带上，先画就会被
-        吃掉一半（第一版就是这个错）。
+        顺序照参考实现 v3 的层级：阵营 logo（layer 41）在立绘（40）**之下**，所以 337px 的
+        logo 只会从人像左侧露出一角，不会糊在脸上；文字与职业图标画在暗角、底部渐变
+        **之后**（渐变 layer 12 比名字 21 小、本该盖住名字，这里刻意反过来，否则英文名被吃
+        掉一半——第一版就是这个错）。
         """
         canvas = self._canvas(layout.BACKGROUND_SINGLE)
         self._draw_single_deco(canvas, item.char_id)
+        self._draw_single_logo(canvas, item)
         self._draw_single_portrait(canvas, item)
         canvas.alpha_composite(self._vignette(canvas.size, layout.SINGLE_VIGNETTE))
         canvas.alpha_composite(self._bottom_fade(canvas.size, layout.SINGLE_BOTTOM_FADE))
@@ -317,13 +320,16 @@ class Renderer:
             (left, top),
         )
 
-    def _draw_single_side(self, canvas: Image.Image, item: CardItem) -> None:
-        """左侧文字区：阵营 logo、职业图标、星级五角星、中英文名。"""
+    def _draw_single_logo(self, canvas: Image.Image, item: CardItem) -> None:
+        """阵营 logo：画在立绘**之前**（下层），人像会压住它右半边。"""
         logo = self.assets.camp_logo(item.camp)
-        if logo is not None:
-            box = layout.element_rect("camp_logo", logo.size)
-            canvas.alpha_composite(logo.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y))
+        if logo is None:
+            return
+        box = layout.element_rect("camp_logo", logo.size)
+        canvas.alpha_composite(logo.resize((box.w, box.h), Image.LANCZOS), (box.x, box.y))
 
+    def _draw_single_side(self, canvas: Image.Image, item: CardItem) -> None:
+        """左侧文字区：带文字职业图标、星级五角星、中英文名（在立绘之上）。"""
         icon = self.assets.profession(item.profession, labeled=True)
         if icon is not None:
             box = layout.element_rect("profession", icon.size)

@@ -75,8 +75,11 @@ class TestTenLayout:
         strip = layout_mod.star_strip_rect(card, (132, 36))
         assert strip.y == card.y + layout_mod.STAR_STRIP_TOP
         assert abs(strip.center[0] - card.center[0]) <= 1
-        # 六星星级条比卡宽，是独立层，不该被卡片裁掉。
-        assert strip.w > card.w
+        # 星级条按 STAR_STRIP_SCALE 缩过（用户 2026-11-17 要求缩到一半），
+        # 所以六星那条（素材 132 宽）现在比卡窄，仍然是独立层、不被卡片裁切。
+        assert strip.w == round(132 * layout_mod.STAR_STRIP_SCALE)
+        assert strip.h == round(36 * layout_mod.STAR_STRIP_SCALE)
+        assert strip.w < card.w
 
     def test_profession_icon_straddles_card_bottom(self, layout_mod):
         card = layout_mod.card_rects(10)[0]
@@ -95,6 +98,42 @@ class TestTenLayout:
         box = layout_mod.single_portrait_box((800, 800))
         assert box.h > layout_mod.CANVAS_HEIGHT
         assert box.x > 0, "立绘应偏右，给左侧文字区留位置"
+
+
+class TestSingleLayout:
+    """单抽元素表的下限：数值取自参考实现的 v3（`SP3_ELEMENTS`）。
+
+    用户 2026-11-17 复审时明确「星级、阵营、职业太远太小，退回 v3」——这里写成下限断言，
+    以后再有人凭观感把它们缩小，测试会先红。上界只防出画，不管审美。
+    """
+
+    def test_camp_logo_is_v3_sized(self, layout_mod):
+        size = (510, 510)  # ui_camp_logo_0 的原生素材尺寸
+        box = layout_mod.element_rect("camp_logo", size)
+        assert box.w == round(510 * 66 / 100)
+        assert box.w >= 300, "v3 的阵营 logo 就是这么大，别缩"
+        assert box.inside_canvas()
+
+    def test_stars_are_v3_sized(self, layout_mod):
+        conf = layout_mod.SINGLE_ELEMENTS["stars"]
+        star = round(256 * conf["size"] / 100)
+        total = 6 * star + 5 * conf["gap"]
+        assert star >= 110, "单颗五角星约 120px"
+        assert 0 < total <= layout_mod.CANVAS_WIDTH, "六颗星叠成一排但不出画"
+
+    def test_profession_icon_is_v3_sized(self, layout_mod):
+        conf = layout_mod.SINGLE_ELEMENTS["profession"]
+        box = layout_mod.element_rect("profession", (192, 84))
+        assert conf["size"] == 83
+        assert box.w >= 150
+        assert box.inside_canvas()
+
+    def test_names_are_v3_sized(self, layout_mod):
+        cn = layout_mod.SINGLE_ELEMENTS["name_cn"]
+        en = layout_mod.SINGLE_ELEMENTS["name_en"]
+        assert cn["font_size"] == 59
+        assert en["font_size"] == 25
+        assert en["pos"][1] > cn["pos"][1], "英文名在中文名下面"
 
 
 class TestAssets:
