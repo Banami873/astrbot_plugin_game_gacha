@@ -28,6 +28,7 @@ from .core import pools as pool_module
 from .core.store import LimitedDelta, PullCommit, Store
 from .games.arknights import banners as banner_module
 from .games.arknights import engine as ark_engine
+from .games.arknights import exchange as exchange_module
 from .games.arknights import limited as limited_module
 from .games.arknights import linkage as linkage_module
 from .games.arknights import select as select_module
@@ -36,6 +37,12 @@ from .games.arknights.help import render_help
 from .games.arknights.views import (
     render_adjust,
     render_contract_line,
+    render_exchange_candidates,
+    render_exchange_closed,
+    render_exchange_insufficient,
+    render_exchange_ok,
+    render_exchange_unavailable,
+    render_exchange_usage,
     render_guarantee_note,
     render_gift_note,
     render_newbie_notice,
@@ -56,6 +63,7 @@ CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
 BANNER_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
 RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
 PITY_RULES_PATH = PLUGIN_DIR / "resources" / "pity_groups.json"
+LIMITS_PATH = PLUGIN_DIR / "resources" / "limits.json"
 
 # 契约失效提醒的提前量（R-08）：池剩余不到 3 天时结果页带失效时刻。
 CONTRACT_WARN_SECONDS = 3 * 86400
@@ -100,6 +108,7 @@ class GameGachaPlugin(Star):
         self.reward_rules = pool_module.LimitedRewardRules()
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
         self.limited: limited_module.LimitedIndex = limited_module.LimitedIndex()
+        self.discounts: limited_module.DiscountBoard = limited_module.DiscountBoard()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._load_error = ""
         self._roster_error = ""
@@ -177,6 +186,19 @@ class GameGachaPlugin(Star):
         else:
             logger.info(
                 f"[{PLUGIN_NAME}] 已装载 {len(self.roster)} 名可抽取干员"
+            )
+
+        # 200 档兑换要知道「往期限定从哪天起降价」，这份表由 tools/build_limits.py 生成。
+        # 读不出来只影响这一档：200 档会明说换不了，75 与 300 照常。
+        self.discounts = limited_module.load_discounts(LIMITS_PATH)
+        if len(self.discounts):
+            logger.info(
+                f"[{PLUGIN_NAME}] 已装载往期限定降价表 {len(self.discounts)} 条"
+                f"（{self.discounts.generated_at or '时间未知'}）"
+            )
+        else:
+            logger.warning(
+                f"[{PLUGIN_NAME}] 没有读到 {LIMITS_PATH.name}，200 档契约兑换不可用"
             )
 
         self._setup_renderer(Path(data_dir))
@@ -511,6 +533,144 @@ class GameGachaPlugin(Star):
             )
             return
         yield event.plain_result(text + notice)
+
+    @filter.command("契约兑换")
+    async def cmd_contract_exchange(self, event: AstrMessageEvent):
+        """用寻访数据契约换干员。用法：/契约兑换 <75|200|300> [干员名]"""
+        notice = self._register(event)
+        if self.store is None or self.snapshot is None or self.roster is None:
+            yield event.plain_result(self._not_ready_text())
+            return
+
+        now = pool_module.timestamp_of()
+        uid, platform = self._identity(event)
+        parts = event.message_str.strip().split()
+        tier = exchange_module.parse_tier(parts[1]) if len(parts) > 1 else None
+
+        # 先把过期池结算掉：池结束后契约作废（R-08），留着行会让「有契约」的判断失真。
+        self._purge_finished_limited(uid, platform, now)
+        found = self._exchange_pool(uid, platform, now)
+        if found is None:
+            yield event.plain_result(render_exchange_closed() + notice)
+            return
+        pool, contracts = found
+
+        if tier is None:
+            yield event.plain_result(render_exchange_usage(contracts))
+            return
+        # 余额先于目标判断：契约不够时连「换谁」都没意义，先报缺口省一轮对话。
+        if contracts < tier:
+            yield event.plain_result(render_exchange_insufficient(tier, contracts))
+            return
+
+        offer = self._exchange_offer(pool, tier, now)
+        if not offer.ok:
+            yield event.plain_result(render_exchange_unavailable(tier, offer.reason))
+            return
+
+        text = " ".join(parts[2:]) if len(parts) > 2 else ""
+        match = exchange_module.resolve(text, offer.candidates, self.roster.name_of)
+        if not match.ok:
+            # 没对上人时列出全部候选；对上多个时只列那几个，让玩家补字有的放矢。
+            options = match.options or offer.candidates
+            yield event.plain_result(
+                render_exchange_candidates(
+                    tier,
+                    [self.roster.name_of(char_id) for char_id in options],
+                    label=offer.label,
+                    estimated=[
+                        self.roster.name_of(char_id) for char_id in offer.estimated
+                    ],
+                    query=text,
+                )
+            )
+            return
+
+        name = self.roster.name_of(match.char_id)
+        # 与抽卡共用一把锁：兑换与抽卡都会改这一个用户的存档，交错执行会让契约数对不上。
+        async with self._lock_for(uid, platform):
+            result = self.store.exchange_contracts(
+                uid,
+                platform,
+                pool_id=pool.pool_id,
+                cost=tier,
+                char_id=match.char_id,
+                when=economy.now_iso(),
+            )
+        if not result.ok:
+            if result.reason == "missing":
+                yield event.plain_result(render_exchange_closed())
+            else:
+                yield event.plain_result(
+                    render_exchange_insufficient(tier, result.contracts)
+                )
+            return
+        yield event.plain_result(
+            render_exchange_ok(name, tier, result.contracts, result.count, offer.label)
+            + notice
+        )
+
+    def _exchange_pool(self, uid: str, platform: str, now: int):
+        """挑一个能兑换的限定池，返回 `(pool, 契约数)`；一个进行中的限定池都没有时返回 None。
+
+        契约按池记、池结束作废，所以只能落在**进行中**的那一个上。候选池来自快照而不是
+        用户已有的存档行：池开着但一次都没抽过时，要报「你只有 0 份」，与「一个限定池都
+        没开」是两种回复。同时开两个限定池时取契约多的那个——回复里会写明换了谁，换错
+        能立刻发现。
+        """
+        if self.store is None or self.snapshot is None:
+            return None
+        best = None
+        for pool in self.snapshot.pools:
+            if not pool.is_active(now) or self._contracts_for(pool) <= 0:
+                continue
+            contracts = self.store.contracts_of(uid, platform, pool.pool_id)
+            if best is None or contracts > best[1]:
+                best = (pool, contracts)
+        return best
+
+    def _exchange_offer(self, pool, tier: int, now: int) -> exchange_module.Offer:
+        """组装某一档的候选名单（R-09）。
+
+        三档的目标来源不同：75 与 300 来自 PRTS 名单，200 来自本系列、已解限且已到年限的
+        往期限定（`limits.json`）。所以这里只把原料备齐，筛选规则全在 `exchange.offer_for`。
+        """
+        banners = getattr(self, "banners", None)
+        banner = banners.get(pool.pool_id) if banners is not None else None
+        up6 = banner.up6 if banner is not None else ()
+        up5 = banner.up5 if banner is not None else ()
+
+        old: tuple[exchange_module.OldCandidate, ...] = ()
+        discounted: tuple[str, ...] = ()
+        if tier in (exchange_module.TIER_OLD, exchange_module.TIER_CURRENT):
+            board = getattr(self, "discounts", None)
+            if board is not None:
+                series = limited_module.series_of(pool.open_time)
+                rows = board.eligible_at(now, series=series)
+                discounted = tuple(entry.char_id for entry in rows)
+                if tier == exchange_module.TIER_OLD:
+                    old = tuple(
+                        exchange_module.OldCandidate(
+                            char_id=entry.char_id, estimated=entry.estimated
+                        )
+                        for entry in rows
+                    )
+
+        limited_scope: tuple[str, ...] = ()
+        if tier == exchange_module.TIER_CURRENT:
+            # 本池允许出现的限定 = 同系列 + 已解限 + 当期 UP。已降价的那些由 discounted
+            # 剔除——他们在 200 档，300 档不该重复出现（官方交换所就是这么列的）。
+            scope = self.limited.scope_for(pool, up_ids=up6)
+            limited_scope = tuple(sorted(scope.available))
+
+        return exchange_module.offer_for(
+            tier,
+            up6=up6,
+            up5=up5,
+            limited_scope=limited_scope,
+            old=old,
+            discounted=discounted,
+        )
 
     def _contract_display(
         self, pool, contracts: int, now: int

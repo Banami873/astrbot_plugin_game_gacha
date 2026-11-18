@@ -93,6 +93,14 @@ def build_data_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def build_limits_mod() -> ModuleType:
+    """200 档降价表的生成脚本。测试拿它核对仓库里的 `limits.json` 是否过期。"""
+    return load_module(
+        "gacha_under_test_build_limits", PLUGIN_DIR / "tools" / "build_limits.py"
+    )
+
+
+@pytest.fixture(scope="session")
 def plugin_dir() -> Path:
     return PLUGIN_DIR
 
@@ -155,6 +163,12 @@ def linkage_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def exchange_mod() -> ModuleType:
+    """契约兑换三档：档位解析、候选组装与名字解析。"""
+    return package_module("games.arknights.exchange")
+
+
+@pytest.fixture(scope="session")
 def render_mod() -> ModuleType:
     """出图包：Assets / PortraitStore / Renderer / CardItem。"""
     return package_module("games.arknights.render")
@@ -200,6 +214,12 @@ def real_banners(banners_mod):
     return banners_mod.load_banners(
         PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
     )
+
+
+@pytest.fixture(scope="session")
+def real_discounts(limited_mod):
+    """仓库里那份往期限定降价表（200 档用）。"""
+    return limited_mod.load_discounts(PLUGIN_DIR / "resources" / "limits.json")
 
 
 @pytest.fixture(scope="session")

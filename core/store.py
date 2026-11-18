@@ -172,6 +172,21 @@ class LimitedDelta:
 
 
 @dataclass(frozen=True)
+class ExchangeResult:
+    """一次契约兑换事务的结果。
+
+    `reason` 为空表示成功。`insufficient` 是契约不够（`contracts` 带当前余额）；
+    `missing` 是这一池压根没有契约行——池已结束被惰性清理，或者从没抽过。
+    `count` 是该干员兑换之后在库里的累计获得次数，展示层拿它算潜能。
+    """
+
+    ok: bool
+    reason: str = ""
+    contracts: int = 0
+    count: int = 0
+
+
+@dataclass(frozen=True)
 class PullCommit:
     """一次抽卡事务的结果。
 
@@ -579,6 +594,74 @@ class Store:
         except _Abort as abort:
             return PullCommit(committed=False, tickets=abort.tickets, counts={})
         return PullCommit(committed=True, tickets=tickets_after, counts=counts)
+
+    def contracts_of(self, uid: str, platform: str, pool_id: str) -> int:
+        """这一池的寻访数据契约份数。没有行时是 0，不抛异常。
+
+        单独一个读法而不是复用 `read_pull_state`：兑换入口只需要契约数，顺手读余额、
+        水位、选调进度纯属浪费，也容易让调用方误以为兑换会用到它们。
+        """
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT contracts FROM limited_state "
+                "WHERE uid = ? AND platform = ? AND pool_id = ?",
+                (uid, platform, pool_id),
+            ).fetchone()
+        return int(row["contracts"]) if row else 0
+
+    def exchange_contracts(
+        self, uid: str, platform: str, *, pool_id: str, cost: int, char_id: str, when: str
+    ) -> ExchangeResult:
+        """用一个档位的契约换一名干员（R-09）。
+
+        兑换只动两处：`limited_state.contracts` 减掉成本、`inventory` 加一次获得。
+        刻意**不**推进水位、不写 `pool_state`、不产新契约——兑换不是抽卡，让它影响水位
+        等于变相降低下一个 6★ 的门槛，而官方交换所并不改变寻访保底。
+
+        `contracts >= cost` 写在 UPDATE 的 WHERE 里：先读再扣的话，两次并发兑换可能都
+        读到「够用」，于是扣出负数（列上虽有 CHECK，那会变成一条异常而不是一句提示）。
+        """
+        if cost <= 0:
+            raise ValueError(f"兑换成本必须为正，收到 {cost}")
+        with self._session() as conn:
+            cursor = conn.execute(
+                "UPDATE limited_state SET contracts = contracts - ? "
+                "WHERE uid = ? AND platform = ? AND pool_id = ? AND contracts >= ?",
+                (cost, uid, platform, pool_id, cost),
+            )
+            if cursor.rowcount != 1:
+                row = conn.execute(
+                    "SELECT contracts FROM limited_state "
+                    "WHERE uid = ? AND platform = ? AND pool_id = ?",
+                    (uid, platform, pool_id),
+                ).fetchone()
+                if row is None:
+                    return ExchangeResult(ok=False, reason="missing")
+                return ExchangeResult(
+                    ok=False, reason="insufficient", contracts=int(row["contracts"])
+                )
+
+            conn.execute(
+                "INSERT INTO inventory (uid, platform, char_id, count, first_at) "
+                "VALUES (?, ?, ?, 1, ?) "
+                "ON CONFLICT(uid, platform, char_id) DO UPDATE SET count = count + 1",
+                (uid, platform, char_id, when),
+            )
+            count_row = conn.execute(
+                "SELECT count FROM inventory "
+                "WHERE uid = ? AND platform = ? AND char_id = ?",
+                (uid, platform, char_id),
+            ).fetchone()
+            left = conn.execute(
+                "SELECT contracts FROM limited_state "
+                "WHERE uid = ? AND platform = ? AND pool_id = ?",
+                (uid, platform, pool_id),
+            ).fetchone()
+        return ExchangeResult(
+            ok=True,
+            contracts=int(left["contracts"]) if left else 0,
+            count=int(count_row["count"]) if count_row else 1,
+        )
 
     def inventory_of(self, uid: str, platform: str) -> dict[str, int]:
         """整个仓库：`{char_id: count}`。给 `/潜能仓库` 与测试用。"""

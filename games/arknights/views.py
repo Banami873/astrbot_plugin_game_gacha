@@ -332,6 +332,95 @@ def render_pull_brief(
     return "\n".join(lines)
 
 
+# ---- 契约兑换 ------------------------------------------------------------
+
+def render_exchange_usage(contracts: int | None = None) -> str:
+    """用法说明。`contracts` 非空时在末尾报一句当前持有量，省一次查询。"""
+    lines = [
+        "【寻访数据契约 · 兑换】",
+        "用法：/契约兑换 <75|200|300> [干员名]",
+        DIVIDER,
+        "· 75：换当期 5★ UP，不用写名字",
+        "· 200：换本系列到年限的往期限定 6★，要写名字",
+        "· 300：换本期 6★，要写名字",
+        "兑换不推进水位、不产生新契约；契约随池结束作废。",
+    ]
+    if contracts is not None:
+        lines.append(f"你当前有 {contracts} 份契约。")
+    return "\n".join(lines)
+
+
+def render_exchange_closed() -> str:
+    """没有可兑换的限定池时说什么。
+
+    这同时覆盖「从没抽过限定池」与「池已结束、契约刚被惰性清掉」两种情形——对用户来说
+    结果一样：手上没有可用的契约。
+    """
+    return (
+        "当前没有进行中的限定寻访，也就没有可用的契约。\n"
+        "契约随池结束作废，下一期重新累积。"
+    )
+
+
+def render_exchange_ok(
+    name: str, tier: int, contracts: int, count: int = 1, label: str = ""
+) -> str:
+    """兑换成功。重复兑换同一人时挂潜能，与抽卡结果里的写法一致。
+
+    `label` 是档位的人话说明（「当期 5★ UP」之类）：只写数字 75 时，玩家看不出这一档
+    换的是什么。
+    """
+    head = f"【契约兑换 · {tier}】{label}".rstrip()
+    lines = [
+        head,
+        DIVIDER,
+        f"获得 {name}{_potential_suffix(count)}",
+        f"剩余寻访数据契约 {contracts} 份",
+    ]
+    return "\n".join(lines)
+
+
+def render_exchange_insufficient(tier: int, have: int) -> str:
+    """契约不够。明确给出「需要多少、有多少」，别只说失败。"""
+    return (
+        f"契约不够：这一档需要 {tier} 份，你有 {have} 份。\n"
+        "契约只能从限定寻访累积，池结束后作废。"
+    )
+
+
+def render_exchange_unavailable(tier: int, reason: str) -> str:
+    """这一档现在换不了（名单未获取、本系列还没人到年限）。"""
+    return f"{tier} 档现在换不了：{reason}。"
+
+
+def render_exchange_candidates(
+    tier: int,
+    names: Sequence[str],
+    *,
+    label: str = "",
+    estimated: Sequence[str] = (),
+    query: str = "",
+) -> str:
+    """要求补名字时列出候选。
+
+    `estimated` 是降价日靠估算的那几位：不标出来，玩家会以为官方就是这个日期。
+    `query` 非空表示用户写了名字但没对上一个（或对上多个），要把原因说清——只说
+    「请补名字」会让人以为自己的输入被忽略了。
+    """
+    head = f"【契约兑换 · {tier}】{label}".rstrip()
+    lines = [head, DIVIDER]
+    if query:
+        lines.append(f"没有唯一匹配「{query}」的目标，可选：")
+    else:
+        lines.append(f"候选 {len(names)} 名，在指令后面写上名字：")
+    guessed = set(estimated)
+    for name in names:
+        lines.append(f"· {name}（按估算日期）" if name in guessed else f"· {name}")
+    if names:
+        lines.append(f"例：/契约兑换 {tier} {names[0]}")
+    return "\n".join(lines)
+
+
 def render_pool_problem(
     reason: str,
     query: str,

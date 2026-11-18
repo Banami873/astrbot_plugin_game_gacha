@@ -22,8 +22,10 @@
 from __future__ import annotations
 
 import calendar
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Collection, Iterable, Sequence
 
 from ...core.characters import CHANNEL_LIMITED, Character
@@ -169,6 +171,115 @@ def build_index(pools: Iterable[object]) -> LimitedIndex:
             char_id=char_id, series=series, debut=pool.open_time, unlock=unlock
         )
     return LimitedIndex(tuple(sorted(seen.values(), key=lambda m: (m.debut, m.char_id))))
+
+
+# ---- 200 档降价日（R-09） -------------------------------------------------
+#
+# 「往期限定什么时候从 300 档降到 200 档」不是公式能算的：官方逐期逐个点名，同一期里
+# 登场不满 4 年的百炼嘉维尔已经在 200 档，登场更早的缄默德克萨斯还留在 300 档。所以
+# 这份数据是 `tools/build_limits.py` 生成的显式表（估算 + 公告修正），这里只负责读。
+
+
+@dataclass(frozen=True)
+class Discount:
+    """一名限定干员的降价信息。`discount_from` 之后可以从 200 档换。"""
+
+    char_id: str
+    name: str
+    series: str
+    debut: int
+    unlock: int
+    discount_from: int
+    estimated: bool = False
+
+    def discounted_at(self, moment: int) -> bool:
+        """这一刻能不能从 200 档换。
+
+        两个条件都要：已解除限定（进得了交换所）且已到年限（降了价）。少了前者会让
+        刚登场的人出现在 200 档，少了后者会让原价的人被半价换走。
+        """
+        return self.unlock <= moment and self.discount_from <= moment
+
+
+@dataclass(frozen=True)
+class DiscountBoard:
+    """全量降价表。读不出来时为空表，200 档随之不可用——不会算错，只是少一档。"""
+
+    entries: tuple[Discount, ...] = ()
+    generated_at: str = ""
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def of_series(self, series: str) -> tuple[Discount, ...]:
+        """某系列的降价表，按登场时间升序（老干员在前）。"""
+        found = [d for d in self.entries if d.series == series]
+        return tuple(sorted(found, key=lambda d: (d.debut, d.char_id)))
+
+    def eligible_at(self, moment: int, series: str = "") -> tuple[Discount, ...]:
+        """这一刻能从 200 档换的人。`series` 为空时不按系列筛。
+
+        **按系列筛是必须的**：2026-05-01 庆典交换所的 200 档只列了 5 名庆典限定，
+        同年夏天池的 200 档才有百炼嘉维尔；两个系列从不同期出现。不筛会让春节限定
+        混进庆典池的兑换名单。
+        """
+        rows = self.of_series(series) if series else self.entries
+        return tuple(d for d in rows if d.discounted_at(moment))
+
+    def get(self, char_id: str) -> Discount | None:
+        for entry in self.entries:
+            if entry.char_id == char_id:
+                return entry
+        return None
+
+
+def _parse_day(text: str) -> int:
+    """把 `YYYY-MM-DD` 读成游戏时间当天 00:00 的 unix 秒；读不出来返回 0。"""
+    try:
+        moment = datetime.strptime(str(text), "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return 0
+    return int(moment.replace(tzinfo=CST).timestamp())
+
+
+def load_discounts(path: Path | str) -> DiscountBoard:
+    """读 `resources/limits.json`。
+
+    单条坏数据只丢这一条：一名干员的日期写坏，不该让整张 200 档表消失。文件缺失或不是
+    合法 JSON 时返回空表，兑换指令会明说「200 档不可用」而不是崩掉。
+    """
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return DiscountBoard()
+    if not isinstance(payload, dict):
+        return DiscountBoard()
+
+    entries: list[Discount] = []
+    for raw in payload.get("entries") or ():
+        if not isinstance(raw, dict):
+            continue
+        char_id = str(raw.get("char_id") or "")
+        series = str(raw.get("series") or "")
+        discount_from = _parse_day(raw.get("discount_from"))
+        debut = _parse_day(raw.get("debut"))
+        if not char_id or series not in ALL_SERIES or not discount_from or not debut:
+            continue
+        unlock = _parse_day(raw.get("unlock"))
+        entries.append(
+            Discount(
+                char_id=char_id,
+                name=str(raw.get("name") or char_id),
+                series=series,
+                debut=debut,
+                unlock=unlock or debut,
+                discount_from=discount_from,
+                estimated=bool(raw.get("estimated", False)),
+            )
+        )
+    return DiscountBoard(
+        entries=tuple(entries), generated_at=str(payload.get("generated_at") or "")
+    )
 
 
 def is_limited_channel(character: Character) -> bool:

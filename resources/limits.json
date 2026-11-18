@@ -1,0 +1,249 @@
+{
+  "source": "由 tools/build_limits.py 从卡池快照推导，叠加官方交换所公告的观测点",
+  "generated_at": "2026-11-19",
+  "entries": [
+    {
+      "char_id": "char_113_cqbw",
+      "name": "W",
+      "series": "庆典",
+      "debut": "2020-05-01",
+      "unlock": "2021-04-15",
+      "discount_from": "2024-05-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_391_rosmon",
+      "name": "迷迭香",
+      "series": "庆典",
+      "debut": "2020-11-01",
+      "unlock": "2021-10-15",
+      "discount_from": "2024-11-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_2014_nian",
+      "name": "年",
+      "series": "春节",
+      "debut": "2021-01-19",
+      "unlock": "2022-01-02",
+      "discount_from": "2026-01-19",
+      "estimated": true
+    },
+    {
+      "char_id": "char_2015_dusk",
+      "name": "夕",
+      "series": "春节",
+      "debut": "2021-02-05",
+      "unlock": "2022-01-19",
+      "discount_from": "2026-02-05",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1012_skadi2",
+      "name": "浊心斯卡蒂",
+      "series": "庆典",
+      "debut": "2021-05-01",
+      "unlock": "2022-04-15",
+      "discount_from": "2025-05-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_1013_chen2",
+      "name": "假日威龙陈",
+      "series": "夏季",
+      "debut": "2021-08-03",
+      "unlock": "2022-07-17",
+      "discount_from": "2025-08-03",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1014_nearl2",
+      "name": "耀骑士临光",
+      "series": "庆典",
+      "debut": "2021-11-01",
+      "unlock": "2022-10-15",
+      "discount_from": "2025-11-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_2023_ling",
+      "name": "令",
+      "series": "春节",
+      "debut": "2022-01-25",
+      "unlock": "2023-01-08",
+      "discount_from": "2027-01-25",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1023_ghost2",
+      "name": "归溟幽灵鲨",
+      "series": "庆典",
+      "debut": "2022-05-01",
+      "unlock": "2023-04-15",
+      "discount_from": "2026-05-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_1026_gvial2",
+      "name": "百炼嘉维尔",
+      "series": "夏季",
+      "debut": "2022-08-11",
+      "unlock": "2023-07-25",
+      "discount_from": "2026-08-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_1028_texas2",
+      "name": "缄默德克萨斯",
+      "series": "庆典",
+      "debut": "2022-11-01",
+      "unlock": "2023-10-15",
+      "discount_from": "2026-11-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_2024_chyue",
+      "name": "重岳",
+      "series": "春节",
+      "debut": "2023-01-17",
+      "unlock": "2023-12-31",
+      "discount_from": "2028-01-17",
+      "estimated": true
+    },
+    {
+      "char_id": "char_249_mlyss",
+      "name": "缪尔赛思",
+      "series": "庆典",
+      "debut": "2023-05-01",
+      "unlock": "2024-04-15",
+      "discount_from": "2027-05-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_1016_agoat2",
+      "name": "纯烬艾雅法拉",
+      "series": "夏季",
+      "debut": "2023-08-01",
+      "unlock": "2024-07-15",
+      "discount_from": "2027-08-01",
+      "estimated": true
+    },
+    {
+      "char_id": "char_245_cello",
+      "name": "塑心",
+      "series": "庆典",
+      "debut": "2023-11-01",
+      "unlock": "2024-10-15",
+      "discount_from": "2027-11-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_2025_shu",
+      "name": "黍",
+      "series": "春节",
+      "debut": "2024-02-01",
+      "unlock": "2025-01-15",
+      "discount_from": "2029-02-01",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1035_wisdel",
+      "name": "维什戴尔",
+      "series": "庆典",
+      "debut": "2024-05-01",
+      "unlock": "2025-04-15",
+      "discount_from": "2028-05-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_4058_pepe",
+      "name": "佩佩",
+      "series": "夏季",
+      "debut": "2024-08-01",
+      "unlock": "2025-07-15",
+      "discount_from": "2028-08-01",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1038_whitw2",
+      "name": "荒芜拉普兰德",
+      "series": "庆典",
+      "debut": "2024-11-01",
+      "unlock": "2025-10-15",
+      "discount_from": "2028-11-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_2026_yu",
+      "name": "余",
+      "series": "春节",
+      "debut": "2025-01-22",
+      "unlock": "2026-01-05",
+      "discount_from": "2030-01-22",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1041_angel2",
+      "name": "新约能天使",
+      "series": "庆典",
+      "debut": "2025-05-01",
+      "unlock": "2026-04-15",
+      "discount_from": "2029-05-01",
+      "estimated": false
+    },
+    {
+      "char_id": "char_1044_hsgma2",
+      "name": "斩业星熊",
+      "series": "夏季",
+      "debut": "2025-08-02",
+      "unlock": "2026-07-16",
+      "discount_from": "2029-08-02",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1045_svash2",
+      "name": "凛御银灰",
+      "series": "庆典",
+      "debut": "2025-11-01",
+      "unlock": "2026-10-15",
+      "discount_from": "2029-11-01",
+      "estimated": true
+    },
+    {
+      "char_id": "char_2027_wang",
+      "name": "望",
+      "series": "春节",
+      "debut": "2026-02-10",
+      "unlock": "2027-01-24",
+      "discount_from": "2031-02-10",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1052_kalts2",
+      "name": "凯尔希·思衡托",
+      "series": "庆典",
+      "debut": "2026-05-01",
+      "unlock": "2027-04-15",
+      "discount_from": "2030-05-01",
+      "estimated": true
+    },
+    {
+      "char_id": "char_1015_aglna2",
+      "name": "予愿安洁莉娜",
+      "series": "夏季",
+      "debut": "2026-08-01",
+      "unlock": "2027-07-15",
+      "discount_from": "2030-08-01",
+      "estimated": true
+    },
+    {
+      "char_id": "char_4247_oxi",
+      "name": "塔露拉",
+      "series": "庆典",
+      "debut": "2026-11-01",
+      "unlock": "2027-10-15",
+      "discount_from": "2030-11-01",
+      "estimated": true
+    }
+  ]
+}
