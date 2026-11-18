@@ -8,8 +8,8 @@
 
 已接：水位分组、新池前 10 抽必出 5★、UP 名额与份额（R-11）、限定池的 6★ 范围与
 5 倍权重（R-11 剩余 30% 那部分）、选调（R-05 累计 / R-06 连续，判定与计数在 `select.py`）、
-联动保底（R-10，判定与计数在 `linkage.py`）。
-未接：300 井与契约（07，在 `main.py` 与存档层）、契约兑换（08）。
+联动保底（R-10，判定与计数在 `linkage.py`）、限定池 300 井（R-07，赠送不进结果条数）。
+未接：寻访数据契约的兑换（R-09，issue 08）——契约本身已按 R-08 在存档层记账。
 """
 
 from __future__ import annotations
@@ -62,6 +62,8 @@ class Batch:
     `first10_hit` 表示本池的 5★ 保底已经达成——出过一次 5★ 以上就置真，之后不再强制。
     `select_state` 是选调存档（哪几档用过、锁过谁），由调用方随抽卡事务一起写回。
     `linkage_state` 是联动保底进度（连续未出 UP 的抽数、旧代是否已达成、UP 5★ 是否已获得）。
+    `gift` 是 300 井赠送的干员：它**不在这批结果里**——抽卡事务要求「结果条数 == 扣的抽数」，
+    把礼物塞进 `drafts` 会让整批被拒。渲染层要单独把它说出来，否则玩家不知道多了一个人。
     """
 
     drafts: tuple[Draft, ...]
@@ -70,6 +72,7 @@ class Batch:
     first10_hit: bool = False
     select_state: select_module.SelectState = select_module.SelectState()
     linkage_state: linkage_module.LinkageState = linkage_module.LinkageState()
+    gift: Draft | None = None
 
     def star_counts(self) -> dict[int, int]:
         """按星级统计本批各出了几个，给文案用。"""
@@ -259,6 +262,9 @@ def draw_batch(
     select_state: select_module.SelectState | None = None,
     linkage: linkage_module.LinkageBook | None = None,
     linkage_state: linkage_module.LinkageState | None = None,
+    well_at: int = 0,
+    well_target: str = "",
+    well_claimed: bool = False,
 ) -> Batch:
     """连抽 `times` 次，返回结果与抽完之后要写回存档的计数。
 
@@ -286,6 +292,11 @@ def draw_batch(
     `linkage` 是联动池的保底（R-10），`linkage_state` 是它的进度。它比其他规则都强：
     **先改星级**（直接抬到 6★），再谈锁谁。旧代「前 N 抽必得」与新代「每 N 抽必得」
     的判定时点在 `LinkageState.miss` 里区分，本函数只负责照结果执行。
+
+    `well_at` / `well_target` / `well_claimed` 是 300 井（R-07）：`well_at` 为 0 表示本池
+    没有井。判定用「本池累计抽数走到 `well_at` 的那一刻」而不是「这一抽是不是第 300 抽
+    ——十连从 295 抽到 305 时，中间那一次就跨过去了。赠送**不进 `drafts`**：它不是抽出来的，
+    塞进去会让「结果条数 == 扣的抽数」的校验把整批拒掉；它单独放在 `gift` 里入库。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
@@ -302,6 +313,8 @@ def draw_batch(
     link = linkage
     linked = linkage_state or linkage_module.LinkageState()
     drafts: list[Draft] = []
+    claimed = well_claimed
+    gift: Draft | None = None
     for _ in range(times):
         table = core_engine.weights(
             current,
@@ -403,7 +416,19 @@ def draw_batch(
         if link is not None:
             linked = link.note(linked, star, chosen.char_id)
         current = core_engine.advance(star, current)
-    return Batch(tuple(drafts), current, pulls, hit, picked, linked)
+        # 300 井：本池累计抽数走到阈值那一刻赠送。与这一抽本身无关——它不产契约、不动水位，
+        # 只是多进仓库一个人。目标不在干员表里（数据缺失）时不赠送也不置位，下次还能补。
+        if well_at and not claimed and pulls == well_at and well_target:
+            member = roster.get(well_target)
+            if member is not None:
+                gift = Draft(
+                    char_id=member.char_id,
+                    name=member.name,
+                    star=member.rarity,
+                    guarantee="300 井",
+                )
+                claimed = True
+    return Batch(tuple(drafts), current, pulls, hit, picked, linked, gift)
 
 
 def distance_text(counter: int) -> str:

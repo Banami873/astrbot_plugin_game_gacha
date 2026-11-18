@@ -318,6 +318,61 @@ def load_select_rules(rules_path: Path | str) -> SelectRules:
     return SelectRules(cumulative=cumulative, consecutive=consecutive)
 
 
+@dataclass(frozen=True)
+class LimitedRewardRules:
+    """限定池的两件赠品：300 井阈值与每抽契约数（R-07 / R-08）。
+
+    两者都按池型登记：`well` 是「累计多少抽赠送当期限定」（300），`contracts` 是「每抽
+    产几份寻访数据契约」（1）。未登记即没有——常驻池既没有井也不产契约，代码里因此
+    不需要出现 `if rule_type == "LIMITED"` 这种判断。
+    """
+
+    well: Mapping[str, int] = field(default_factory=dict)
+    contracts: Mapping[str, int] = field(default_factory=dict)
+
+    def well_for(self, pool: "Pool") -> int:
+        """本池的井阈值；0 表示没有井。"""
+        return self.well.get(pool.rule_type, 0)
+
+    def contracts_for(self, pool: "Pool") -> int:
+        """本池每抽产几份契约；0 表示不产。"""
+        return self.contracts.get(pool.rule_type, 0)
+
+
+def _read_count_map(raw: Any) -> dict[str, int]:
+    """把 `{"LIMITED": 300}` 读成非负整数映射；读不出来的条目直接丢掉。
+
+    丢掉而不是退回默认值：把 300 写成 `"300"` 时，退回 300 只会让错误更难发现；丢掉
+    等于「这个池型没有这项机制」——少一个保底，不会算错。
+    """
+    if not isinstance(raw, dict):
+        return {}
+    table: dict[str, int] = {}
+    for rule_type, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            continue
+        table[str(rule_type)] = value
+    return table
+
+
+def load_limited_rewards(rules_path: Path | str) -> LimitedRewardRules:
+    """读出「池型 → 井阈值 / 契约速率」。
+
+    失败（文件缺失、JSON 损坏、两段都缺）：返回空规则，等于没有井也不产契约——抽卡
+    照常，只是这两件赠品不生效。与选调同一取舍：赠品读不出来不该让抽卡不可用。
+    """
+    try:
+        raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return LimitedRewardRules()
+    if not isinstance(raw, dict):
+        return LimitedRewardRules()
+    return LimitedRewardRules(
+        well=_read_count_map(raw.get("well_by_rule_type")),
+        contracts=_read_count_map(raw.get("contracts_by_rule_type")),
+    )
+
+
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:
     """把 gachaRuleType 归入五大类之一。
 

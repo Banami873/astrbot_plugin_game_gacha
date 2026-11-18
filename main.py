@@ -13,6 +13,7 @@ import asyncio
 import random
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from astrbot.api import AstrBotConfig, logger
@@ -34,7 +35,9 @@ from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.help import render_help
 from .games.arknights.views import (
     render_adjust,
+    render_contract_line,
     render_guarantee_note,
+    render_gift_note,
     render_newbie_notice,
     render_pool_list,
     render_pool_problem,
@@ -54,14 +57,22 @@ BANNER_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
 RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
 PITY_RULES_PATH = PLUGIN_DIR / "resources" / "pity_groups.json"
 
+# 契约失效提醒的提前量（R-08）：池剩余不到 3 天时结果页带失效时刻。
+CONTRACT_WARN_SECONDS = 3 * 86400
+
 
 @dataclass(frozen=True)
 class PullOutcome:
-    """一次抽卡的结果：要么一条给用户看的错误文案，要么「这批结果 + 入账回执」。"""
+    """一次抽卡的结果：要么一条给用户看的错误文案，要么「这批结果 + 入账回执」。
+
+    `contracts` 是本批落库之后的寻访数据契约数（非限定池恒为 0）。它在事务里累加，
+    所以只能由这里带出来——再查一次库会读到别人刚写进去的值。
+    """
 
     error: str = ""
     batch: Batch | None = None
     commit: PullCommit | None = None
+    contracts: int = 0
 
     @property
     def ok(self) -> bool:
@@ -86,6 +97,7 @@ class GameGachaPlugin(Star):
         self.pity_groups: pity_module.PityGroups = pity_module.PityGroups()
         self.up_rules = pool_module.UpShareRules({})
         self.select_rules = pool_module.SelectRules()
+        self.reward_rules = pool_module.LimitedRewardRules()
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
         self.limited: limited_module.LimitedIndex = limited_module.LimitedIndex()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
@@ -120,6 +132,7 @@ class GameGachaPlugin(Star):
         self.pity_groups = pity_module.load_pity_groups(PITY_RULES_PATH)
         self.up_rules = pool_module.load_up_share(RULES_PATH)
         self.select_rules = pool_module.load_select_rules(RULES_PATH)
+        self.reward_rules = pool_module.load_limited_rewards(RULES_PATH)
         # 名单先装、再套到卡池上：池名与类别都以 PRTS 为准（R-14），没名单的池保持原样。
         self.banners = banner_module.load_banners(BANNER_SNAPSHOT_PATH)
         try:
@@ -451,11 +464,13 @@ class GameGachaPlugin(Star):
         # 网络发送期间一直占着这个用户的锁。
         async with self._lock_for(uid, platform):
             self._purge_expired_pity(uid, platform, now)
+            self._purge_finished_limited(uid, platform, now)
             outcome = self._draw_and_commit(uid, platform, pool, times, group_key)
         if outcome.error:
             yield event.plain_result(outcome.error)
             return
 
+        contracts, expiry = self._contract_display(pool, outcome.contracts, now)
         text = render_pulls(
             pool.display_name,
             outcome.batch.drafts,
@@ -465,6 +480,9 @@ class GameGachaPlugin(Star):
             six_counter=outcome.batch.six_counter,
             hard_pity=ark_engine.HARD_PITY,
             up_missing=self.banners.get(pool.pool_id) is None,
+            contracts=contracts,
+            contract_expiry=expiry,
+            gift=outcome.batch.gift,
         )
         # 事务已经提交（R-15）：出图成功发图 + 一行水位，失败就把完整文字发出去。
         image_path = await self._render_image(
@@ -482,11 +500,36 @@ class GameGachaPlugin(Star):
                     up_missing=self.banners.get(pool.pool_id) is None,
                     select_note=render_select_note(outcome.batch.drafts),
                     guarantee_note=render_guarantee_note(outcome.batch.drafts),
+                    gift_note=render_gift_note(outcome.batch.gift),
+                    contract_line=(
+                        render_contract_line(contracts, expiry)
+                        if contracts is not None
+                        else ""
+                    ),
                 )
                 + notice
             )
             return
         yield event.plain_result(text + notice)
+
+    def _contract_display(
+        self, pool, contracts: int, now: int
+    ) -> tuple[int | None, str]:
+        """限定池返回（契约数, 失效时刻），其他池返回 (None, "")。
+
+        非限定池用 `None` 而不是 0：`render_pulls` 据此决定加不加契约行。传 0 会让每个
+        常驻池的结果底部都挂一句「寻访数据契约 0 份」，读起来像功能坏了。
+        失效时刻只在池剩余 ≤3 天时给——离得远的时候提前喊也没人记得住（R-08）。
+        """
+        if self._contracts_for(pool) <= 0:
+            return None, ""
+        left = pool.end_time - now
+        expiry = ""
+        if 0 < left <= CONTRACT_WARN_SECONDS:
+            expiry = datetime.fromtimestamp(pool.end_time, pool_module.CST).strftime(
+                "%m-%d %H:%M"
+            )
+        return contracts, expiry
 
     def _purge_expired_pity(self, uid: str, platform: str, now: int) -> None:
         """抽卡前清掉这个用户手上已结束的限定/联动/跨年水位组。
@@ -508,6 +551,35 @@ class GameGachaPlugin(Star):
             return
         if dirt:
             logger.info(f"[{PLUGIN_NAME}] 已清理过期水位组：{dirt}")
+
+    def _purge_finished_limited(self, uid: str, platform: str, now: int) -> None:
+        """池结束惰性结算：删掉已结束池的 `limited_state` 行（剩余契约作废，R-08）。
+
+        为什么删行而不是把 `contracts` 写成 0：池 id 不复用，删掉之后这一期的契约再也
+        读不回来，等价于归零；而「写 0」还得再留一个「已作废」的标记，否则下一次抽卡
+        又读到同一条记录。只处理这个用户名下真有的池，不做全表扫描。
+        失败只告警：清理失败最多让过期契约多显示一次，不该挡住这次抽卡。
+        """
+        if self.store is None or self.snapshot is None:
+            return
+        try:
+            owned = self.store.limited_pool_ids(uid, platform)
+            if not owned:
+                return
+            dead = [
+                pool_id
+                for pool_id in owned
+                if (found := self.snapshot.by_id(pool_id)) is None
+                or found.end_time <= now
+            ]
+            if not dead:
+                return
+            removed = self.store.delete_limited_pools(uid, platform, dead)
+        except sqlite3.Error as exc:
+            logger.warning(f"[{PLUGIN_NAME}] 结算过期契约失败：{exc}")
+            return
+        if removed:
+            logger.info(f"[{PLUGIN_NAME}] 已作废 {removed} 个池的剩余契约：{dead}")
 
     def _draw_and_commit(
         self, uid: str, platform: str, pool, times: int, group_key: str
@@ -546,6 +618,9 @@ class GameGachaPlugin(Star):
                     used=state.linkage_used,
                     up5_obtained=state.up5_obtained,
                 ),
+                well_at=self._well_at(pool),
+                well_target=self._well_target(pool),
+                well_claimed=state.well_claimed,
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
@@ -565,7 +640,7 @@ class GameGachaPlugin(Star):
                 select_used=batch.select_state.used,
                 select_locked=batch.select_state.locked,
                 up_miss=batch.select_state.up_miss,
-                limited=self._limited_delta(pool, batch),
+                limited=self._limited_delta(pool, batch, times),
             )
         except (sqlite3.Error, ValueError) as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡入账失败：{exc}")
@@ -574,7 +649,11 @@ class GameGachaPlugin(Star):
         if not commit.committed:
             # 读余额与提交之间余额被改掉了：按提交时点的真实余额回报，不重算结果。
             return PullOutcome(error=f"需要 {times} 抽，你还有 {commit.tickets} 抽。")
-        return PullOutcome(batch=batch, commit=commit)
+        return PullOutcome(
+            batch=batch,
+            commit=commit,
+            contracts=state.contracts + self._contracts_for(pool) * times,
+        )
 
     def _up_targets(self, pool) -> UpTargets:
         """本池的 UP 名单、份额与往期加权（R-11）。
@@ -644,21 +723,49 @@ class GameGachaPlugin(Star):
             up5=banner.up5 if banner is not None else (),
         )
 
-    def _limited_delta(self, pool, batch: Batch) -> LimitedDelta | None:
-        """本批要写的限定/联动增量；普通池返回 None（不给它建 0 值行）。
+    def _limited_delta(self, pool, batch: Batch, times: int) -> LimitedDelta | None:
+        """本批要写的限定/联动增量；与这两者都不沾的池返回 None（不给它建 0 值行）。
 
-        契约（R-08）与 300 井（R-07）由 issue 07 补在这里；此刻只写联动保底的三个计数。
-        为什么不是「有值就写」：抽一次常驻池也会产生三个 0，那样 `limited_state` 会为
-        每个池留一行垃圾，池结束时还得逐个清理。
+        契约（R-08）按抽数累加；井（R-07）只有赠送那批才置位；联动保底（R-10）三个计数
+        各按自己的方向写。为什么不是「有值就写」：抽一次常驻池也会产生一串 0，那样
+        `limited_state` 会为每个池留一行垃圾，池结束时还得逐个清理。
         """
-        if linkage_module.rule_of(pool) is None:
+        contracts = self._contracts_for(pool) * times
+        if not contracts and linkage_module.rule_of(pool) is None and batch.gift is None:
             return None
         state = batch.linkage_state
         return LimitedDelta(
+            contracts=contracts,
+            well_claimed=batch.gift is not None,
+            gift_ids=(batch.gift.char_id,) if batch.gift is not None else (),
             linkage_miss=state.miss,
             linkage_used=state.used,
             up5_obtained=state.up5_obtained,
         )
+
+    def _contracts_for(self, pool) -> int:
+        """本池每抽产几份契约；0 表示这池不产（常驻、联动都不产）。"""
+        rewards = getattr(self, "reward_rules", None)
+        return rewards.contracts_for(pool) if rewards is not None else 0
+
+    def _well_at(self, pool) -> int:
+        """本池的 300 井阈值；0 表示没有井。"""
+        rewards = getattr(self, "reward_rules", None)
+        return rewards.well_for(pool) if rewards is not None else 0
+
+    def _well_target(self, pool) -> str:
+        """井赠送谁：官方 `limitedCharId`，缺了退到 UP 6★ 第一名，都没有就是空。
+
+        「缺了就退到 UP 第一名」而不是「不赠」：`limitedCharId` 是官方标的当期限定，
+        UP 名单是 PRTS 的二手数据，后者更可能缺失；两个都有时以官方字段为准。
+        """
+        char_id = str(getattr(pool, "limited_char_id", "") or "")
+        if char_id:
+            return char_id
+        banners = getattr(self, "banners", None)
+        banner = banners.get(pool.pool_id) if banners is not None else None
+        up6 = banner.up6 if banner is not None else ()
+        return up6[0] if up6 else ""
 
     def _scope(self, pool) -> limited_module.PoolScope | None:
         """限定池的 6★ 范围与 5 倍名单；其他池型返回 None。

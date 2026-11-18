@@ -207,6 +207,30 @@ def render_guarantee_note(drafts: Sequence[object]) -> str:
     )
 
 
+def render_gift_note(gift: object | None) -> str:
+    """300 井赠送那一行。
+
+    礼物**不在这批结果里**（抽卡事务要求结果条数 == 扣的抽数），也不在结果图上，所以
+    这句是唯一告知途径。没有赠送时返回空串。
+    """
+    if gift is None:
+        return ""
+    label = getattr(gift, "guarantee", "") or "300 井"
+    return f"{label}：额外获得 {getattr(gift, 'name', '')}（已入库，不占抽数）"
+
+
+def render_contract_line(contracts: int, expiry: str = "") -> str:
+    """寻访数据契约那一行。`expiry` 非空时追加「将于 X 失效」。
+
+    单独一行而不是塞进「剩余 N 抽」：契约按池作废，跟着池的结束时间走，和抽数余额
+    是两回事，混在一行里读者会以为契约也跟着余额一起用。
+    """
+    line = f"寻访数据契约 {contracts} 份"
+    if expiry:
+        line += f" · 本池剩余不多，将于 {expiry} 失效"
+    return line
+
+
 def render_pulls(
     pool_name: str,
     drafts: Sequence[DraftLike],
@@ -217,6 +241,9 @@ def render_pulls(
     six_counter: int | None = None,
     hard_pity: int = 99,
     up_missing: bool = False,
+    contracts: int | None = None,
+    contract_expiry: str = "",
+    gift: object | None = None,
 ) -> str:
     """一次（或一次十连）的结果。
 
@@ -224,6 +251,8 @@ def render_pulls(
     保证：星级按实际结果升序展示（低星在前，与游戏列表一致），末尾一定带余额。
     `up_missing` 为真时补一句「UP 名单未获取」：这一批是按均分概率出的，与公告不一致，
     不说明的话玩家会以为插件算错了概率。
+    `contracts` 为 None 表示本池不产契约（非限定池），此时不出现契约行；传 0 会显示
+    「0 份」——只有限定池才会这样，且那是真实状态（刚抽完刚好兑换过）。
     """
     title = TITLE_TEN if len(drafts) > 1 else TITLE_SINGLE
     lines = [f"{title}{pool_name}", DIVIDER]
@@ -251,10 +280,15 @@ def render_pulls(
     guarantee_note = render_guarantee_note(drafts)
     if guarantee_note:
         lines.append(guarantee_note)
+    gift_note = render_gift_note(gift)
+    if gift_note:
+        lines.append(gift_note)
     tail = f"剩余 {tickets} 抽"
     if six_counter is not None:
         tail += f" · 距 6★ 硬保底还有 {max(1, hard_pity - six_counter)} 抽"
     lines.append(tail)
+    if contracts is not None:
+        lines.append(render_contract_line(contracts, contract_expiry))
     if up_missing:
         lines.append("（UP 名单未获取，本批按同星级均分概率）")
     return "\n".join(lines)
@@ -270,13 +304,15 @@ def render_pull_brief(
     up_missing: bool = False,
     select_note: str = "",
     guarantee_note: str = "",
+    gift_note: str = "",
+    contract_line: str = "",
 ) -> str:
     """出图成功时配的那一行文字。
 
     结果本身在图里，文字只补图上没有的信息：池名、剩余抽数、离硬保底还差多少。
     不重复列抽到了谁——那就和图的内容打架了。
-    `select_note` / `guarantee_note` 是 `render_select_note` / `render_guarantee_note`
-    的结果：图上不画这些标记，这两句是唯一的告知途径，命中时不能省。
+    `select_note` / `guarantee_note` / `gift_note` / `contract_line` 分别是选调、保底、
+    井赠送与契约那几句：图上都不画，这里是唯一的告知途径，命中时不能省。
     """
     lines = [f"【寻访结果】{pool_name} · {cost} 抽"]
     tail = f"剩余 {tickets} 抽"
@@ -287,6 +323,10 @@ def render_pull_brief(
         lines.append(select_note)
     if guarantee_note:
         lines.append(guarantee_note)
+    if gift_note:
+        lines.append(gift_note)
+    if contract_line:
+        lines.append(contract_line)
     if up_missing:
         lines.append("（UP 名单未获取，本批按同星级均分概率）")
     return "\n".join(lines)
