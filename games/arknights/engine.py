@@ -7,8 +7,9 @@
 本模块不判断「这是不是限定池」——它只接收调用方算好的 `group_key`。
 
 已接：水位分组、新池前 10 抽必出 5★、UP 名额与份额（R-11）、限定池的 6★ 范围与
-5 倍权重（R-11 剩余 30% 那部分）、选调（R-05 累计 / R-06 连续，判定与计数在 `select.py`）。
-未接：井与契约（07/08）、联动（09）。
+5 倍权重（R-11 剩余 30% 那部分）、选调（R-05 累计 / R-06 连续，判定与计数在 `select.py`）、
+联动保底（R-10，判定与计数在 `linkage.py`）。
+未接：300 井与契约（07，在 `main.py` 与存档层）、契约兑换（08）。
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import Collection, Mapping, Sequence
 
 from ...core import engine as core_engine
 from ...core.characters import Character, Roster
+from . import linkage as linkage_module
 from . import select as select_module
 from .limited import PoolScope, filter_members
 
@@ -39,13 +41,16 @@ class Draft:
     """一次抽取的结果。名字在这里定下来，渲染层就不用再去查干员字典。
 
     `select_threshold` 非 0 表示这一抽是**选调锁定的**，值是命中的档位阈值（如 150）。
-    文案据此标注「选调」；渲染层不画这个标记，图上只看出的是谁。
+    `guarantee` 非空表示这一抽是被**保底机制强制**出来的，值是来源标签（如「联动保底」）。
+    两者分开是因为来源不同：选调改的是「6★ 里是谁」，联动保底连星级都改。文案各自
+    标注；渲染层不画这些标记，图上只看出的是谁。
     """
 
     char_id: str
     name: str
     star: int
     select_threshold: int = 0
+    guarantee: str = ""
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,7 @@ class Batch:
     池内抽数只属于这一个池，用来判断前 N 抽保底还剩几次机会。
     `first10_hit` 表示本池的 5★ 保底已经达成——出过一次 5★ 以上就置真，之后不再强制。
     `select_state` 是选调存档（哪几档用过、锁过谁），由调用方随抽卡事务一起写回。
+    `linkage_state` 是联动保底进度（连续未出 UP 的抽数、旧代是否已达成、UP 5★ 是否已获得）。
     """
 
     drafts: tuple[Draft, ...]
@@ -63,6 +69,7 @@ class Batch:
     pool_pulls: int = 0
     first10_hit: bool = False
     select_state: select_module.SelectState = select_module.SelectState()
+    linkage_state: linkage_module.LinkageState = linkage_module.LinkageState()
 
     def star_counts(self) -> dict[int, int]:
         """按星级统计本批各出了几个，给文案用。"""
@@ -250,6 +257,8 @@ def draw_batch(
     scope: PoolScope | None = None,
     select: select_module.SelectBook | None = None,
     select_state: select_module.SelectState | None = None,
+    linkage: linkage_module.LinkageBook | None = None,
+    linkage_state: linkage_module.LinkageState | None = None,
 ) -> Batch:
     """连抽 `times` 次，返回结果与抽完之后要写回存档的计数。
 
@@ -273,6 +282,10 @@ def draw_batch(
     选调进度。只有**摇出 6★ 之后**才问选调：它改的是「6★ 里是谁」，不改 6★ 出率。命中时
     直接落锁定目标，不再走 UP 份额那套权重——否则 150 抽后仍有 50% 抽到非 UP，规则就失效了。
     连续口径还要在**每抽末尾**推进计数（`note`）：数的是寻访次数，所以 3★ 也 +1。
+
+    `linkage` 是联动池的保底（R-10），`linkage_state` 是它的进度。它比其他规则都强：
+    **先改星级**（直接抬到 6★），再谈锁谁。旧代「前 N 抽必得」与新代「每 N 抽必得」
+    的判定时点在 `LinkageState.miss` 里区分，本函数只负责照结果执行。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
@@ -286,6 +299,8 @@ def draw_batch(
     hit = first10_hit
     book = select
     picked = select_state or select_module.SelectState()
+    link = linkage
+    linked = linkage_state or linkage_module.LinkageState()
     drafts: list[Draft] = []
     for _ in range(times):
         table = core_engine.weights(
@@ -299,14 +314,43 @@ def draw_batch(
         # 否则一个前 N 抽没记账的旧存档会在之后每一抽都白送 5★。
         if not hit and guarantee and pulls + 1 == guarantee:
             star = _force_five_star(star, table, rng)
+
+        # 联动保底：把星级直接抬到 6★，比「前 N 抽必出 5★」更强，所以排在它之后。
+        # 它改的是星级本身，与选调（只改 6★ 里是谁）不是一回事。
+        force, forced_target = (
+            link.force_six(linked, pulls) if link is not None else (False, "")
+        )
+        if force:
+            star = 6
+
         pool_chars = candidates(roster, pool, star, channels=channels, scope=scope)
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
 
+        # 锁定目标必须在本池候选里。不在（名单与本池基础池不交叉）就当作没锁，但星级仍然
+        # 是 6★——规则要的是「必得联动 6★」，不是「必得一个不在池里的人」。
+        if forced_target and not any(c.char_id == forced_target for c in pool_chars):
+            forced_target = ""
+        if force and not forced_target:
+            # 旧代不点名：从 UP 名单里挑一个。挑不到说明名单与本池不交叉，
+            # 这一抽就不标保底了，否则文案会写「联动保底」却没落在任何人身上。
+            wanted = set(targets.six)
+            picks = [c for c in pool_chars if c.char_id in wanted]
+            if picks:
+                forced_target = picks[rng.randrange(len(picks))].char_id
+            else:
+                force = False
+
+        # 5★ 选调（只有新代有）：与出没出 5★ 无关，先取候选。
+        five_lock: tuple[str, ...] = ()
+        five_locked = False
+        if star == 5 and link is not None:
+            five_lock = link.five_targets(linked, pulls)
+
         # 选调：本抽之前已经累计够档，这一抽的 6★ 就必须是锁定目标。
         locked_id = ""
         threshold = 0
-        if star >= 6 and book is not None:
+        if star >= 6 and not forced_target and book is not None:
             outcome = book.hit(picked, pulls, rng)
             if outcome is not None:
                 hit_info, advanced = outcome
@@ -319,21 +363,35 @@ def draw_batch(
 
         if locked_id:
             chosen = next(c for c in pool_chars if c.char_id == locked_id)
+        elif forced_target:
+            chosen = next(c for c in pool_chars if c.char_id == forced_target)
         else:
-            chosen = _choose_member(
-                pool_chars,
-                targets.ids_of(star),
-                targets.share_of(star),
-                rng,
-                boost_ids=targets.boost_of(star),
-                boost_factor=targets.boost_factor,
+            five_picks = (
+                [c for c in pool_chars if c.char_id in set(five_lock)] if five_lock else []
             )
+            if five_picks:
+                chosen = five_picks[rng.randrange(len(five_picks))]
+                five_locked = True
+            else:
+                chosen = _choose_member(
+                    pool_chars,
+                    targets.ids_of(star),
+                    targets.share_of(star),
+                    rng,
+                    boost_ids=targets.boost_of(star),
+                    boost_factor=targets.boost_factor,
+                )
         drafts.append(
             Draft(
                 char_id=chosen.char_id,
                 name=chosen.name,
                 star=star,
                 select_threshold=threshold,
+                guarantee=(
+                    "联动保底"
+                    if forced_target
+                    else ("联动 5★ 选调" if five_locked else "")
+                ),
             )
         )
         if star >= FIRST10_MIN_STAR:
@@ -342,8 +400,10 @@ def draw_batch(
         if book is not None:
             # 连续口径的计数：每抽一次推进一步（UP 归零、其余 +1），与出没出 6★ 无关。
             picked = book.note(picked, star, chosen.char_id)
+        if link is not None:
+            linked = link.note(linked, star, chosen.char_id)
         current = core_engine.advance(star, current)
-    return Batch(tuple(drafts), current, pulls, hit, picked)
+    return Batch(tuple(drafts), current, pulls, hit, picked, linked)
 
 
 def distance_text(counter: int) -> str:

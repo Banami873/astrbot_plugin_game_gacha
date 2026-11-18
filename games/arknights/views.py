@@ -183,6 +183,30 @@ def render_select_note(drafts: Sequence[object]) -> str:
     )
 
 
+def _guarantee_label(draft: object) -> str:
+    """这一条是不是被保底机制强制出来的；是就返回来源标签（如「联动保底」）。
+
+    与选调分开：选调只改 6★ 里是谁，联动保底连星级都改。两件事在文案上必须能分开，
+    否则玩家会以为「抽到了 UP」和「保底给的 UP」是一回事。
+    """
+    value = getattr(draft, "guarantee", "")
+    return value if isinstance(value, str) else ""
+
+
+def render_guarantee_note(drafts: Sequence[object]) -> str:
+    """保底生效时单独一行说明，形如「联动保底生效：锁定 灰烬」。
+
+    行内标记只说「这一抽是保底给的」，看不出是哪种保底，也看不出这一批里有没有别的。
+    没有命中时返回空串。
+    """
+    hits = [draft for draft in drafts if _guarantee_label(draft)]
+    if not hits:
+        return ""
+    return " · ".join(
+        f"{_guarantee_label(draft)}生效：{getattr(draft, 'name', '')}" for draft in hits
+    )
+
+
 def render_pulls(
     pool_name: str,
     drafts: Sequence[DraftLike],
@@ -208,6 +232,9 @@ def render_pulls(
         suffix = _potential_suffix(counts.get(draft.char_id, 1))
         if _select_threshold(draft):
             suffix += SELECT_MARK
+        label = _guarantee_label(draft)
+        if label:
+            suffix += f"（{label}）"
         lines.append(f"{mark} {draft.name}{suffix}")
     lines.append(DIVIDER)
 
@@ -221,6 +248,9 @@ def render_pulls(
     select_note = render_select_note(drafts)
     if select_note:
         lines.append(select_note)
+    guarantee_note = render_guarantee_note(drafts)
+    if guarantee_note:
+        lines.append(guarantee_note)
     tail = f"剩余 {tickets} 抽"
     if six_counter is not None:
         tail += f" · 距 6★ 硬保底还有 {max(1, hard_pity - six_counter)} 抽"
@@ -239,13 +269,14 @@ def render_pull_brief(
     hard_pity: int = 99,
     up_missing: bool = False,
     select_note: str = "",
+    guarantee_note: str = "",
 ) -> str:
     """出图成功时配的那一行文字。
 
     结果本身在图里，文字只补图上没有的信息：池名、剩余抽数、离硬保底还差多少。
     不重复列抽到了谁——那就和图的内容打架了。
-    `select_note` 是 `render_select_note` 的结果：图上不画「选调」标记，这一句是唯一
-    的告知途径，命中时不能省。
+    `select_note` / `guarantee_note` 是 `render_select_note` / `render_guarantee_note`
+    的结果：图上不画这些标记，这两句是唯一的告知途径，命中时不能省。
     """
     lines = [f"【寻访结果】{pool_name} · {cost} 抽"]
     tail = f"剩余 {tickets} 抽"
@@ -254,6 +285,8 @@ def render_pull_brief(
     lines.append(tail)
     if select_note:
         lines.append(select_note)
+    if guarantee_note:
+        lines.append(guarantee_note)
     if up_missing:
         lines.append("（UP 名单未获取，本批按同星级均分概率）")
     return "\n".join(lines)

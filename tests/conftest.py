@@ -149,6 +149,12 @@ def select_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def linkage_mod() -> ModuleType:
+    """联动保底：`linkageParam` → 两代规则、阈值与锁定目标。"""
+    return package_module("games.arknights.linkage")
+
+
+@pytest.fixture(scope="session")
 def render_mod() -> ModuleType:
     """出图包：Assets / PortraitStore / Renderer / CardItem。"""
     return package_module("games.arknights.render")

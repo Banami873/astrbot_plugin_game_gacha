@@ -91,6 +91,28 @@ _SCHEMA: tuple[str, ...] = (
         PRIMARY KEY (uid, platform, pool_id)
     )
     """,
+    # 限定/联动专有的池级计数。与 pool_select 分开是因为它们属于不同池型：一张表里塞
+    # 「选调档位」与「契约份数」，读写时都得先判断这一池到底用哪一半。
+    # `contracts` 是 R-08 的寻访数据契约，按抽数累加；池结束时整行删掉（等价于归零），
+    # 因为池 id 不复用，删行不会误伤下一期。
+    # `well_claimed` 是 R-07 的 300 井「已赠送」标记，只进不退——取 MAX 而不是覆盖，
+    # 否则一次没跨过 300 的批次会把它擦掉，同一期能反复领。
+    # `linkage_miss` 是 R-10 新代的连续未出 UP 抽数，**直接覆盖**（它会归零）；
+    # `linkage_used` 是旧代「前 N 抽必得」已达成，`up5_obtained` 是本池已获得 UP 5★，
+    # 两个都只进不退。
+    """
+    CREATE TABLE IF NOT EXISTS limited_state (
+        uid           TEXT    NOT NULL,
+        platform      TEXT    NOT NULL,
+        pool_id       TEXT    NOT NULL,
+        contracts     INTEGER NOT NULL DEFAULT 0 CHECK (contracts >= 0),
+        well_claimed  INTEGER NOT NULL DEFAULT 0,
+        linkage_miss  INTEGER NOT NULL DEFAULT 0 CHECK (linkage_miss >= 0),
+        linkage_used  INTEGER NOT NULL DEFAULT 0,
+        up5_obtained  INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (uid, platform, pool_id)
+    )
+    """,
 )
 
 
@@ -121,6 +143,32 @@ class PullState:
     select_used: tuple[bool, ...] = ()
     select_locked: str = ""
     up_miss: int = 0
+    contracts: int = 0
+    well_claimed: bool = False
+    linkage_miss: int = 0
+    linkage_used: bool = False
+    up5_obtained: bool = False
+
+
+@dataclass(frozen=True)
+class LimitedDelta:
+    """限定/联动池在一批抽卡里产生的增量。
+
+    `None` 表示「这一池不记这些」，于是库里不会为普通池建一行 0 值——常驻池抽一百次
+    也不该往 `limited_state` 里塞东西。
+
+    `contracts` 按抽数累加（R-08）；`well_claimed` / `linkage_used` / `up5_obtained`
+    只进不退（取 `MAX`）；`linkage_miss` 直接覆盖，因为它会在抽到 UP 时归零。
+    `gift_ids` 是 300 井赠送的干员：单独入仓库，**不**参与「结果条数 == 扣的抽数」的
+    校验——它本来就不是抽出来的。
+    """
+
+    contracts: int = 0
+    well_claimed: bool = False
+    gift_ids: tuple[str, ...] = ()
+    linkage_miss: int = 0
+    linkage_used: bool = False
+    up5_obtained: bool = False
 
 
 @dataclass(frozen=True)
@@ -329,6 +377,11 @@ class Store:
                 "FROM pool_select WHERE uid = ? AND platform = ? AND pool_id = ?",
                 (uid, platform, pool_id),
             ).fetchone()
+            lim = conn.execute(
+                "SELECT contracts, well_claimed, linkage_miss, linkage_used, up5_obtained "
+                "FROM limited_state WHERE uid = ? AND platform = ? AND pool_id = ?",
+                (uid, platform, pool_id),
+            ).fetchone()
         return PullState(
             tickets=int(user["tickets"]) if user else 0,
             six_counter=int(pity["six_counter"]) if pity else 0,
@@ -341,7 +394,48 @@ class Store:
             ),
             select_locked=str(sel["target6_locked"]) if sel else "",
             up_miss=int(sel["up_miss_counter"]) if sel else 0,
+            contracts=int(lim["contracts"]) if lim else 0,
+            well_claimed=bool(lim["well_claimed"]) if lim else False,
+            linkage_miss=int(lim["linkage_miss"]) if lim else 0,
+            linkage_used=bool(lim["linkage_used"]) if lim else False,
+            up5_obtained=bool(lim["up5_obtained"]) if lim else False,
         )
+
+    def limited_pool_ids(self, uid: str, platform: str) -> tuple[str, ...]:
+        """这个用户名下已有 `limited_state` 行的池 id。
+
+        给「池结束惰性结算」用：调用方拿它和快照里的结束时间比对，只删真正过期的那几个。
+        直接按时间拼一条 `DELETE ... WHERE pool_id IN (几百个 id)` 也能做，但那要把
+        462 个池 id 全塞进 SQL 参数，且用户可能一个都没抽过。
+        """
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT pool_id FROM limited_state WHERE uid = ? AND platform = ? "
+                "ORDER BY pool_id",
+                (uid, platform),
+            ).fetchall()
+        return tuple(str(row["pool_id"]) for row in rows)
+
+    def delete_limited_pools(
+        self, uid: str, platform: str, pool_ids: Iterable[str]
+    ) -> int:
+        """删掉这些池的 `limited_state` 行，返回实际删掉的行数。
+
+        池结束后剩余契约作废（R-08）就靠这一步：池 id 不复用，删行之后这一期的契约
+        再也读不回来，等价于归零，而不用维护一个「是否已作废」的标记。
+        空列表直接返回 0，不拼非法的 `IN ()`。
+        """
+        keys = [str(key) for key in pool_ids]
+        if not keys:
+            return 0
+        placeholders = ",".join("?" for _ in keys)
+        with self._session() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM limited_state WHERE uid = ? AND platform = ? "
+                f"AND pool_id IN ({placeholders})",
+                (uid, platform, *keys),
+            )
+            return cursor.rowcount
 
     def commit_pulls(
         self,
@@ -358,8 +452,9 @@ class Store:
         select_used: tuple[bool, ...] = (),
         select_locked: str = "",
         up_miss: int = 0,
+        limited: LimitedDelta | None = None,
     ) -> PullCommit:
-        """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数、写选调。
+        """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数、写选调/契约。
 
         保证：要么这几件事全成立，要么一件都不成立。抽数不足、或 `char_ids` 的条数与
         `cost` 不一致（结果算漏了一条）时回滚，返回 `committed=False`。
@@ -370,6 +465,8 @@ class Store:
         `up_miss` 是**本批抽完之后**的连续计数（R-06），直接覆盖而不是取 MAX——它本来
         就会在抽到 UP 时归零，取最大会让计数只涨不落，保底从此再也攒不出来。累计口径的
         池传 0，这个列对它们没有意义。
+        `limited` 是限定/联动池的增量；传 None 表示这一池不记这些，于是**不会**为普通池
+        建一行 0 值。`gift_ids`（300 井赠送）不入 `cost` 校验，但仍进仓库与 `counts`。
         失败：库打不开等 `sqlite3.Error` 让异常冒出去，由调用方提示用户——静默当成
         「没抽过」会让扣掉的抽数凭空消失。
         """
@@ -377,6 +474,7 @@ class Store:
             raise ValueError(f"抽数必须为正，收到 {cost}")
         if len(char_ids) != cost:
             raise ValueError(f"结果 {len(char_ids)} 条与抽数 {cost} 不一致，拒绝入账")
+        gifts = tuple(limited.gift_ids) if limited is not None else ()
         try:
             with self._session() as conn:
                 cursor = conn.execute(
@@ -430,7 +528,7 @@ class Store:
                         select_locked,
                     ),
                 )
-                for char_id in char_ids:
+                for char_id in (*char_ids, *gifts):
                     conn.execute(
                         "INSERT INTO inventory (uid, platform, char_id, count, first_at) "
                         "VALUES (?, ?, ?, 1, ?) "
@@ -439,8 +537,33 @@ class Store:
                         (uid, platform, char_id, when),
                     )
 
+                if limited is not None:
+                    # 契约累加；三个「已达成」只进不退；linkage_miss 直接覆盖（它会归零）。
+                    conn.execute(
+                        "INSERT INTO limited_state "
+                        "(uid, platform, pool_id, contracts, well_claimed, "
+                        "linkage_miss, linkage_used, up5_obtained) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(uid, platform, pool_id) DO UPDATE SET "
+                        "contracts = contracts + excluded.contracts, "
+                        "well_claimed = MAX(well_claimed, excluded.well_claimed), "
+                        "linkage_miss = excluded.linkage_miss, "
+                        "linkage_used = MAX(linkage_used, excluded.linkage_used), "
+                        "up5_obtained = MAX(up5_obtained, excluded.up5_obtained)",
+                        (
+                            uid,
+                            platform,
+                            pool_id,
+                            max(0, limited.contracts),
+                            1 if limited.well_claimed else 0,
+                            max(0, limited.linkage_miss),
+                            1 if limited.linkage_used else 0,
+                            1 if limited.up5_obtained else 0,
+                        ),
+                    )
+
                 counts: dict[str, int] = {}
-                for char_id in char_ids:
+                for char_id in (*char_ids, *gifts):
                     row = conn.execute(
                         "SELECT count FROM inventory "
                         "WHERE uid = ? AND platform = ? AND char_id = ?",

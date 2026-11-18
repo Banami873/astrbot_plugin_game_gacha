@@ -24,15 +24,17 @@ from .core import characters as char_module
 from .core import economy
 from .core import pity as pity_module
 from .core import pools as pool_module
-from .core.store import PullCommit, Store
+from .core.store import LimitedDelta, PullCommit, Store
 from .games.arknights import banners as banner_module
 from .games.arknights import engine as ark_engine
 from .games.arknights import limited as limited_module
+from .games.arknights import linkage as linkage_module
 from .games.arknights import select as select_module
 from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.help import render_help
 from .games.arknights.views import (
     render_adjust,
+    render_guarantee_note,
     render_newbie_notice,
     render_pool_list,
     render_pool_problem,
@@ -479,6 +481,7 @@ class GameGachaPlugin(Star):
                     hard_pity=ark_engine.HARD_PITY,
                     up_missing=self.banners.get(pool.pool_id) is None,
                     select_note=render_select_note(outcome.batch.drafts),
+                    guarantee_note=render_guarantee_note(outcome.batch.drafts),
                 )
                 + notice
             )
@@ -537,6 +540,12 @@ class GameGachaPlugin(Star):
                     locked=state.select_locked,
                     up_miss=state.up_miss,
                 ),
+                linkage=self._linkage_book(pool),
+                linkage_state=linkage_module.LinkageState(
+                    miss=state.linkage_miss,
+                    used=state.linkage_used,
+                    up5_obtained=state.up5_obtained,
+                ),
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
@@ -556,6 +565,7 @@ class GameGachaPlugin(Star):
                 select_used=batch.select_state.used,
                 select_locked=batch.select_state.locked,
                 up_miss=batch.select_state.up_miss,
+                limited=self._limited_delta(pool, batch),
             )
         except (sqlite3.Error, ValueError) as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡入账失败：{exc}")
@@ -616,6 +626,39 @@ class GameGachaPlugin(Star):
         banner = banners.get(pool.pool_id) if banners is not None else None
         up6 = banner.up6 if banner is not None else ()
         return select_module.SelectBook(thresholds=thresholds, up6=up6, kind=kind)
+
+    def _linkage_book(self, pool) -> linkage_module.LinkageBook:
+        """本池的联动保底（R-10）：参数来自池骨架，名单来自 banners.json。
+
+        非联动池返回空 book（`enabled` 为假），`draw_batch` 就完全跳过这条规则。
+        参数判定在 `linkage.rule_of` 里：`loopTarget6Count` 有就是新代，只有
+        `guaranteeTarget6Count` 就是旧代——两代口径相反，判定只能有一个来源。
+        """
+        if getattr(pool, "rule_type", "") != linkage_module.LINKAGE_RULE_TYPE:
+            return linkage_module.LinkageBook()
+        banners = getattr(self, "banners", None)
+        banner = banners.get(pool.pool_id) if banners is not None else None
+        return linkage_module.book_for(
+            pool,
+            up6=banner.up6 if banner is not None else (),
+            up5=banner.up5 if banner is not None else (),
+        )
+
+    def _limited_delta(self, pool, batch: Batch) -> LimitedDelta | None:
+        """本批要写的限定/联动增量；普通池返回 None（不给它建 0 值行）。
+
+        契约（R-08）与 300 井（R-07）由 issue 07 补在这里；此刻只写联动保底的三个计数。
+        为什么不是「有值就写」：抽一次常驻池也会产生三个 0，那样 `limited_state` 会为
+        每个池留一行垃圾，池结束时还得逐个清理。
+        """
+        if linkage_module.rule_of(pool) is None:
+            return None
+        state = batch.linkage_state
+        return LimitedDelta(
+            linkage_miss=state.miss,
+            linkage_used=state.used,
+            up5_obtained=state.up5_obtained,
+        )
 
     def _scope(self, pool) -> limited_module.PoolScope | None:
         """限定池的 6★ 范围与 5 倍名单；其他池型返回 None。
