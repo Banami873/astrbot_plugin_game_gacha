@@ -421,6 +421,60 @@ def render_exchange_candidates(
     return "\n".join(lines)
 
 
+# ---- 潜能仓库 ------------------------------------------------------------
+
+def _warehouse_suffix(count: int) -> str:
+    """仓库里挂在名字后面的潜能说明。
+
+    与抽卡结果的 `_potential_suffix` 分开：那边是「这一抽又抽到一个」，说潜能就够；
+    仓库是查阅，要连获得次数一起说（「潜能 3（获得 4 次）」），否则看不出离满潜还差几次。
+    """
+    if count <= 1:
+        return ""
+    potential = min(count - 1, MAX_POTENTIAL)
+    full = "，满潜" if count - 1 >= MAX_POTENTIAL else ""
+    return f"  潜能 {potential}（获得 {count} 次{full}）"
+
+
+def render_warehouse(page: Any) -> str:
+    """潜能仓库的一页。
+
+    按星级分段（段头只在换星级时出现），段内顺序由 `warehouse.build` 定好。空仓库不画
+    表头——一屏「共 0 名」不如一句「还没抽到」有用。
+    """
+    if getattr(page, "empty", False):
+        return (
+            "【潜能仓库】\n"
+            "还没有获得任何干员。先 /单抽 或 /十连 抽几次，抽到的干员会自动入库。"
+        )
+
+    lines = [
+        f"【潜能仓库】第 {page.number}/{page.total_pages} 页 · 共 {page.total} 名",
+        DIVIDER,
+    ]
+    blocks: list[str] = []
+    body: list[str] = []
+    current: int | None = None
+    for entry in page.entries:
+        if entry.star != current:
+            if body:
+                blocks.append("\n".join(body))
+            current = entry.star
+            body = [f"{entry.star}★" if entry.star else "星级未知"]
+        body.append(f"· {entry.name}{_warehouse_suffix(entry.count)}")
+    if body:
+        blocks.append("\n".join(body))
+
+    if getattr(page, "adjusted", False):
+        blocks.append(
+            f"没有第 {page.requested} 页（共 {page.total_pages} 页），已回到第 1 页。"
+        )
+    if page.total_pages > 1 and not getattr(page, "adjusted", False):
+        blocks.append(f"翻页：/潜能仓库 {min(page.number + 1, page.total_pages)}")
+
+    return "\n".join(lines) + "\n" + "\n\n".join(blocks)
+
+
 def render_pool_problem(
     reason: str,
     query: str,

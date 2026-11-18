@@ -169,6 +169,12 @@ def exchange_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def warehouse_mod() -> ModuleType:
+    """潜能仓库的排序与分页。"""
+    return package_module("games.arknights.warehouse")
+
+
+@pytest.fixture(scope="session")
 def render_mod() -> ModuleType:
     """出图包：Assets / PortraitStore / Renderer / CardItem。"""
     return package_module("games.arknights.render")

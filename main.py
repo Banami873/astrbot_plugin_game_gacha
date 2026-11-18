@@ -32,6 +32,7 @@ from .games.arknights import exchange as exchange_module
 from .games.arknights import limited as limited_module
 from .games.arknights import linkage as linkage_module
 from .games.arknights import select as select_module
+from .games.arknights import warehouse as warehouse_module
 from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.help import render_help
 from .games.arknights.views import (
@@ -52,6 +53,7 @@ from .games.arknights.views import (
     render_pulls,
     render_select_note,
     render_signin,
+    render_warehouse,
 )
 
 PLUGIN_NAME = "astrbot_plugin_game_gacha"
@@ -377,6 +379,29 @@ class GameGachaPlugin(Star):
             up_text=self._up_text_map(),
             boost_text=self._boost_text_map(),
         )
+        yield event.plain_result(text + notice)
+
+    @filter.command("潜能仓库")
+    async def cmd_inventory(self, event: AstrMessageEvent):
+        """看自己已获得的干员与潜能。用法：/潜能仓库 [页码]"""
+        notice = self._register(event)
+        if self.store is None or self.roster is None:
+            yield event.plain_result(self._not_ready_text())
+            return
+
+        parts = event.message_str.strip().split()
+        wanted = parts[1] if len(parts) > 1 else ""
+        if wanted and not wanted.lstrip("+-").isdigit():
+            # 直接把非数字当第 1 页会让人以为「输入被吞了」，先说清格式。
+            yield event.plain_result("页码得是整数。用法：/潜能仓库 [页码]")
+            return
+        page = int(wanted) if wanted else 1
+
+        uid, platform = self._identity(event)
+        entries = warehouse_module.build(
+            self.store.inventory_of(uid, platform), self.roster.get
+        )
+        text = render_warehouse(warehouse_module.paginate(entries, page))
         yield event.plain_result(text + notice)
 
     @filter.command("抽卡签到")
