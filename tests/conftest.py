@@ -143,6 +143,12 @@ def limited_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def select_mod() -> ModuleType:
+    """常驻/中坚选调：阈值 + UP 名单 → 这一抽的 6★ 该不该锁定。"""
+    return package_module("games.arknights.select")
+
+
+@pytest.fixture(scope="session")
 def render_mod() -> ModuleType:
     """出图包：Assets / PortraitStore / Renderer / CardItem。"""
     return package_module("games.arknights.render")

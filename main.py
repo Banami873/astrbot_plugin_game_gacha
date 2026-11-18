@@ -28,6 +28,7 @@ from .core.store import PullCommit, Store
 from .games.arknights import banners as banner_module
 from .games.arknights import engine as ark_engine
 from .games.arknights import limited as limited_module
+from .games.arknights import select as select_module
 from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.help import render_help
 from .games.arknights.views import (
@@ -37,6 +38,7 @@ from .games.arknights.views import (
     render_pool_problem,
     render_pull_brief,
     render_pulls,
+    render_select_note,
     render_signin,
 )
 
@@ -81,6 +83,7 @@ class GameGachaPlugin(Star):
         )
         self.pity_groups: pity_module.PityGroups = pity_module.PityGroups()
         self.up_rules = pool_module.UpShareRules({})
+        self.select_rules = pool_module.SelectRules({})
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
         self.limited: limited_module.LimitedIndex = limited_module.LimitedIndex()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
@@ -114,6 +117,7 @@ class GameGachaPlugin(Star):
             )
         self.pity_groups = pity_module.load_pity_groups(PITY_RULES_PATH)
         self.up_rules = pool_module.load_up_share(RULES_PATH)
+        self.select_rules = pool_module.load_select_rules(RULES_PATH)
         # 名单先装、再套到卡池上：池名与类别都以 PRTS 为准（R-14），没名单的池保持原样。
         self.banners = banner_module.load_banners(BANNER_SNAPSHOT_PATH)
         try:
@@ -474,6 +478,7 @@ class GameGachaPlugin(Star):
                     six_counter=outcome.batch.six_counter,
                     hard_pity=ark_engine.HARD_PITY,
                     up_missing=self.banners.get(pool.pool_id) is None,
+                    select_note=render_select_note(outcome.batch.drafts),
                 )
                 + notice
             )
@@ -526,6 +531,10 @@ class GameGachaPlugin(Star):
                 first10_hit=state.first10_hit,
                 up=self._up_targets(pool),
                 scope=self._scope(pool),
+                select=self._select_book(pool),
+                select_state=select_module.SelectState(
+                    used=state.select_used, locked=state.select_locked
+                ),
             )
         except ValueError as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡失败：{exc}")
@@ -542,6 +551,8 @@ class GameGachaPlugin(Star):
                 char_ids=ark_engine.draft_ids(batch),
                 when=economy.now_iso(),
                 first10_hit=batch.first10_hit,
+                select_used=batch.select_state.used,
+                select_locked=batch.select_state.locked,
             )
         except (sqlite3.Error, ValueError) as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡入账失败：{exc}")
@@ -574,6 +585,24 @@ class GameGachaPlugin(Star):
             boost=boost,
             boost_factor=limited_module.BOOST_FACTOR,
         )
+
+    def _select_book(self, pool) -> select_module.SelectBook:
+        """本池的选调规则（R-05）：阈值来自 pool_rules.json，名单来自 banners.json。
+
+        限定池、卫戍、联合行动、定向甄选、联动都没登记阈值，于是这里返回一个空的
+        `SelectBook`，`draw_batch` 会直接跳过选调。名单缺失的池同理——锁不到人就不能
+        假装锁了（R-14 降级链的同一取舍）。
+
+        `select_rules` 用 `getattr` 取：测试会用 `__new__` 绕过 `__init__` 直接驱动指令，
+        没有这一层会抛 AttributeError，把「没初始化」变成「抽卡功能坏了」。
+        """
+        rules = getattr(self, "select_rules", None)
+        thresholds = rules.thresholds_for(pool) if rules is not None else ()
+        if not thresholds:
+            return select_module.SelectBook()
+        banner = self.banners.get(pool.pool_id)
+        up6 = banner.up6 if banner is not None else ()
+        return select_module.SelectBook(thresholds=thresholds, up6=up6)
 
     def _scope(self, pool) -> limited_module.PoolScope | None:
         """限定池的 6★ 范围与 5 倍名单；其他池型返回 None。

@@ -74,6 +74,23 @@ _SCHEMA: tuple[str, ...] = (
         PRIMARY KEY (uid, platform, pool_id)
     )
     """,
+    # 选调进度（R-05）：一行对应一个池，换期天然从零开始——官方池 id 不复用，所以不清表
+    # 也不会串期。两档「已用」只进不退（写入取 MAX）：一次没命中的批次不能把之前的记录
+    # 擦掉，否则同一档会反复生效，等于每 50 抽白送一个 UP。
+    # `target6_locked` 存 150 档锁定的 char_id，300 档据此避开同一人；空串表示还没锁过人。
+    # `up_miss_counter` 是 R-06（限时连续 150）的计数，issue 14 才写，这里先建列免得改表。
+    """
+    CREATE TABLE IF NOT EXISTS pool_select (
+        uid            TEXT    NOT NULL,
+        platform       TEXT    NOT NULL,
+        pool_id        TEXT    NOT NULL,
+        up_miss_counter INTEGER NOT NULL DEFAULT 0 CHECK (up_miss_counter >= 0),
+        select150_used INTEGER NOT NULL DEFAULT 0,
+        select300_used INTEGER NOT NULL DEFAULT 0,
+        target6_locked TEXT    NOT NULL DEFAULT '',
+        PRIMARY KEY (uid, platform, pool_id)
+    )
+    """,
 )
 
 
@@ -89,12 +106,18 @@ def table_names() -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class PullState:
-    """抽卡前要读的全部计数。用户没建档时全为 0，而不是抛异常。"""
+    """抽卡前要读的全部计数。用户没建档时全为 0，而不是抛异常。
+
+    `select_used` 与 `pool_rules.json` 的阈值表对齐（`select_used[0]` 是 150 档），
+    `select_locked` 是 150 档锁过的那名干员——300 档靠它避开同一人。
+    """
 
     tickets: int = 0
     six_counter: int = 0
     pool_pulls: int = 0
     first10_hit: bool = False
+    select_used: tuple[bool, ...] = ()
+    select_locked: str = ""
 
 
 @dataclass(frozen=True)
@@ -298,11 +321,22 @@ class Store:
                 "WHERE uid = ? AND platform = ? AND pool_id = ?",
                 (uid, platform, pool_id),
             ).fetchone()
+            sel = conn.execute(
+                "SELECT select150_used, select300_used, target6_locked "
+                "FROM pool_select WHERE uid = ? AND platform = ? AND pool_id = ?",
+                (uid, platform, pool_id),
+            ).fetchone()
         return PullState(
             tickets=int(user["tickets"]) if user else 0,
             six_counter=int(pity["six_counter"]) if pity else 0,
             pool_pulls=int(pool["pulls"]) if pool else 0,
             first10_hit=bool(pool["first10_hit"]) if pool else False,
+            select_used=(
+                (bool(sel["select150_used"]), bool(sel["select300_used"]))
+                if sel
+                else ()
+            ),
+            select_locked=str(sel["target6_locked"]) if sel else "",
         )
 
     def commit_pulls(
@@ -317,13 +351,17 @@ class Store:
         char_ids: Sequence[str],
         when: str,
         first10_hit: bool = False,
+        select_used: tuple[bool, ...] = (),
+        select_locked: str = "",
     ) -> PullCommit:
-        """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数。
+        """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数、写选调。
 
-        保证：要么四件事全成立，要么一件都不成立。抽数不足、或 `char_ids` 的条数与
+        保证：要么这几件事全成立，要么一件都不成立。抽数不足、或 `char_ids` 的条数与
         `cost` 不一致（结果算漏了一条）时回滚，返回 `committed=False`。
         `first10_hit` 是「本池前 N 抽保底是否已达成」，只进不退：库里已有真值时不写回
         假——否则一次「这批没出 5★」会把之前达成的记录擦掉，保底就会重复触发。
+        `select_used` / `select_locked` 同理只进不退：选调一旦生效就该永久生效，
+        一次没命中的批次把它写回「未用」会让同一档反复触发。
         失败：库打不开等 `sqlite3.Error` 让异常冒出去，由调用方提示用户——静默当成
         「没抽过」会让扣掉的抽数凭空消失。
         """
@@ -360,6 +398,26 @@ class Store:
                     "pulls = pulls + excluded.pulls, "
                     "first10_hit = MAX(first10_hit, excluded.first10_hit)",
                     (uid, platform, pool_id, cost, 1 if first10_hit else 0),
+                )
+                # 选调两档只进不退；`target6_locked` 已有值时不让空串覆盖它——第二批抽卡
+                # 传进来的 locked 可能还是空（这一批没触发），写回去会把 150 档锁的人忘了。
+                conn.execute(
+                    "INSERT INTO pool_select "
+                    "(uid, platform, pool_id, select150_used, select300_used, "
+                    "target6_locked) VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(uid, platform, pool_id) DO UPDATE SET "
+                    "select150_used = MAX(select150_used, excluded.select150_used), "
+                    "select300_used = MAX(select300_used, excluded.select300_used), "
+                    "target6_locked = CASE WHEN excluded.target6_locked <> '' "
+                    "THEN excluded.target6_locked ELSE target6_locked END",
+                    (
+                        uid,
+                        platform,
+                        pool_id,
+                        1 if select_used and select_used[0] else 0,
+                        1 if len(select_used) > 1 and select_used[1] else 0,
+                        select_locked,
+                    ),
                 )
                 for char_id in char_ids:
                     conn.execute(

@@ -237,6 +237,62 @@ def load_up_share(rules_path: Path | str) -> UpShareRules:
     return UpShareRules(by_rule_type, fallback)
 
 
+@dataclass(frozen=True)
+class SelectRules:
+    """池型 → 选调阈值，如 `(150, 300)`。未登记的池型即「本池没有选调」。
+
+    阈值是**累计抽数**口径的（R-05）。限时单 UP 池的「连续 150」是另一套计数，走
+    `up_miss_counter`（issue 14），不在这张表里——把两者塞进同一份配置迟早会互相写错。
+    """
+
+    by_rule_type: Mapping[str, tuple[int, ...]]
+
+    def thresholds_for(self, pool: "Pool") -> tuple[int, ...]:
+        """这个池的选调档位；没有选调时返回空元组（调用方据此完全不启用）。"""
+        return self.by_rule_type.get(pool.rule_type, ())
+
+
+def _parse_thresholds(raw: Any) -> tuple[int, ...]:
+    """把 `[150, 300]` 读成递增的正整数元组；读不出来时返回空元组（= 不做选调）。
+
+    失败即关闭而不是退回默认值：阈值写成 1500 或 `[300, 150]` 时，退回 150/300 只会让
+    错误更难发现；关掉选调至少是「少一个保底」，不会锁错人。
+    """
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    numbers: list[int] = []
+    for item in raw:
+        if isinstance(item, bool) or not isinstance(item, int) or item <= 0:
+            return ()
+        numbers.append(item)
+    if any(later <= earlier for earlier, later in zip(numbers, numbers[1:])):
+        return ()
+    return tuple(numbers)
+
+
+def load_select_rules(rules_path: Path | str) -> SelectRules:
+    """读出「池型 → 选调阈值」。
+
+    保证：任何池型都能查（未登记或读不出来时为空元组）。文件缺失、JSON 损坏都只让选调
+    不生效，不影响抽卡——选调是额外的保底，不该成为插件起不来的原因。
+    """
+    try:
+        raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return SelectRules({})
+    if not isinstance(raw, dict):
+        return SelectRules({})
+    table = raw.get("select_by_rule_type")
+    if not isinstance(table, dict):
+        return SelectRules({})
+    by_rule_type: dict[str, tuple[int, ...]] = {}
+    for rule_type, value in table.items():
+        thresholds = _parse_thresholds(value)
+        if thresholds:
+            by_rule_type[str(rule_type)] = thresholds
+    return SelectRules(by_rule_type)
+
+
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:
     """把 gachaRuleType 归入五大类之一。
 

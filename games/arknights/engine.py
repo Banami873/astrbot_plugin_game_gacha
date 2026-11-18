@@ -7,7 +7,8 @@
 本模块不判断「这是不是限定池」——它只接收调用方算好的 `group_key`。
 
 已接：水位分组、新池前 10 抽必出 5★、UP 名额与份额（R-11）、限定池的 6★ 范围与
-5 倍权重（R-11 剩余 30% 那部分）。选调（06）、井与契约（07/08）、联动（09）未接。
+5 倍权重（R-11 剩余 30% 那部分）、常驻/中坚选调（R-05，判定在 `select.py`）。
+未接：限时单 UP 池的连续 150（R-06，issue 14）、井与契约（07/08）、联动（09）。
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import Collection, Mapping, Sequence
 
 from ...core import engine as core_engine
 from ...core.characters import Character, Roster
+from . import select as select_module
 from .limited import PoolScope, filter_members
 
 # R-01 基础概率：6★ 2%、5★ 8%、4★ 50%、3★ 40%。
@@ -34,26 +36,33 @@ FIRST10_MIN_STAR = 5
 
 @dataclass(frozen=True)
 class Draft:
-    """一次抽取的结果。名字在这里定下来，渲染层就不用再去查干员字典。"""
+    """一次抽取的结果。名字在这里定下来，渲染层就不用再去查干员字典。
+
+    `select_threshold` 非 0 表示这一抽是**选调锁定的**，值是命中的档位阈值（如 150）。
+    文案据此标注「选调」；渲染层不画这个标记，图上只看出的是谁。
+    """
 
     char_id: str
     name: str
     star: int
+    select_threshold: int = 0
 
 
 @dataclass(frozen=True)
 class Batch:
-    """一批抽取的结果，以及抽完之后要写回存档的三个计数。
+    """一批抽取的结果，以及抽完之后要写回存档的计数。
 
     `pool_pulls` 是**本池**累计抽数（含本批），与水位不同：水位按池类分组跨池继承，
     池内抽数只属于这一个池，用来判断前 N 抽保底还剩几次机会。
     `first10_hit` 表示本池的 5★ 保底已经达成——出过一次 5★ 以上就置真，之后不再强制。
+    `select_state` 是选调存档（哪几档用过、锁过谁），由调用方随抽卡事务一起写回。
     """
 
     drafts: tuple[Draft, ...]
     six_counter: int
     pool_pulls: int = 0
     first10_hit: bool = False
+    select_state: select_module.SelectState = select_module.SelectState()
 
     def star_counts(self) -> dict[int, int]:
         """按星级统计本批各出了几个，给文案用。"""
@@ -239,6 +248,8 @@ def draw_batch(
     first10_hit: bool = False,
     up: UpTargets | None = None,
     scope: PoolScope | None = None,
+    select: select_module.SelectBook | None = None,
+    select_state: select_module.SelectState | None = None,
 ) -> Batch:
     """连抽 `times` 次，返回结果与抽完之后要写回存档的计数。
 
@@ -257,6 +268,10 @@ def draw_batch(
 
     `scope` 是限定池的 6★ 范围（同系列 + 已解限），由 `limited.py` 算好传进来；
     其他池型传 None。它只收窄「限定」基础池，标准/中坚/联动的人不受影响。
+
+    `select` 是常驻/中坚的选调规则（R-05），`select_state` 是这份存档里的选调进度。
+    只有**摇出 6★ 之后**才问选调：它改的是「6★ 里是谁」，不改 6★ 出率。命中时直接落
+    锁定目标，不再走 UP 份额那套权重——否则 150 抽后仍有 50% 抽到非 UP，规则就失效了。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
@@ -268,6 +283,8 @@ def draw_batch(
     current = max(0, counter)
     pulls = max(0, pool_pulls)
     hit = first10_hit
+    book = select
+    picked = select_state or select_module.SelectState()
     drafts: list[Draft] = []
     for _ in range(times):
         table = core_engine.weights(
@@ -284,20 +301,45 @@ def draw_batch(
         pool_chars = candidates(roster, pool, star, channels=channels, scope=scope)
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
-        chosen = _choose_member(
-            pool_chars,
-            targets.ids_of(star),
-            targets.share_of(star),
-            rng,
-            boost_ids=targets.boost_of(star),
-            boost_factor=targets.boost_factor,
+
+        # 选调：本抽之前已经累计够档，这一抽的 6★ 就必须是锁定目标。
+        locked_id = ""
+        threshold = 0
+        if star >= 6 and book is not None:
+            outcome = book.hit(picked, pulls, rng)
+            if outcome is not None:
+                hit_info, advanced = outcome
+                if any(c.char_id == hit_info.char_id for c in pool_chars):
+                    locked_id = hit_info.char_id
+                    threshold = hit_info.threshold
+                    picked = advanced
+                # 锁的人不在本池候选里（名单与本池基础池不交叉）时什么都不做：
+                # 存档不置位，这一抽按正常权重走，下个 6★ 还会再试一次。
+
+        if locked_id:
+            chosen = next(c for c in pool_chars if c.char_id == locked_id)
+        else:
+            chosen = _choose_member(
+                pool_chars,
+                targets.ids_of(star),
+                targets.share_of(star),
+                rng,
+                boost_ids=targets.boost_of(star),
+                boost_factor=targets.boost_factor,
+            )
+        drafts.append(
+            Draft(
+                char_id=chosen.char_id,
+                name=chosen.name,
+                star=star,
+                select_threshold=threshold,
+            )
         )
-        drafts.append(Draft(char_id=chosen.char_id, name=chosen.name, star=star))
         if star >= FIRST10_MIN_STAR:
             hit = True
         pulls += 1
         current = core_engine.advance(star, current)
-    return Batch(tuple(drafts), current, pulls, hit)
+    return Batch(tuple(drafts), current, pulls, hit, picked)
 
 
 def distance_text(counter: int) -> str:
