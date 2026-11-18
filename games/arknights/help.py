@@ -1,0 +1,96 @@
+"""指令清单与 `/抽卡帮助` 的文案。
+
+清单是唯一真相源：帮助由它渲染，`tools/selfcheck.py` 拿它核对 `main.py` 里实际注册的
+指令。加一条指令 = 这里加一行 + `main.py` 注册一个同名指令，两边名字必须完全一致，
+否则自检直接报出来。
+
+**分期**：`/潜能仓库`（issue 10）与 `/契约兑换`（issue 08）尚未实现，等做出来时各加一行，
+帮助与自检自动跟上。这里不要预留「暂未开放」的空条目——那会让自检以为插件已经有它。
+"""
+
+from __future__ import annotations
+
+import unicodedata
+from dataclasses import dataclass
+
+# 帮助里指令名的对齐宽度（按终端显示列数算，一个汉字两列）。
+_NAME_WIDTH = 26
+
+
+@dataclass(frozen=True)
+class CommandDoc:
+    """一条指令：名字（不带斜杠）、用法、一句话说明、是否限管理员。"""
+
+    name: str
+    usage: str
+    summary: str
+    admin_only: bool = False
+
+
+COMMANDS: tuple[CommandDoc, ...] = (
+    CommandDoc("抽卡帮助", "/抽卡帮助", "看这份说明"),
+    CommandDoc("抽卡签到", "/抽卡签到", "每天领一次抽数"),
+    CommandDoc("单抽", "/单抽 [类别] [池名前缀]", "抽 1 次"),
+    CommandDoc("十连", "/十连 [类别] [池名前缀]", "抽 10 次"),
+    CommandDoc(
+        "卡池查询", "/卡池查询 [类别|全部]", "看正在开的池子、UP 名单与结束时间"
+    ),
+    CommandDoc(
+        "抽数修改",
+        "/抽数修改 <整数> [@成员]",
+        "管理员给成员增减抽数，可写负数",
+        admin_only=True,
+    ),
+)
+
+
+def command_names() -> tuple[str, ...]:
+    """清单里的指令名，供自检与测试比对。"""
+    return tuple(doc.name for doc in COMMANDS)
+
+
+def _width(text: str) -> int:
+    """字符串在等宽终端里占几列：全角字符算两列。"""
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+
+def _pad(text: str, width: int = _NAME_WIDTH) -> str:
+    """按显示列数右补空格，让说明文字对齐。"""
+    return text + " " * max(1, width - _width(text))
+
+
+def render_help(*, signin_reward: int = 10, newbie_bonus: int = 30) -> str:
+    """一屏说明：指令、抽数来源、怎么指定池子、水位与保底、出图。
+
+    只描述**已经能用的行为**。数值从配置传进来，避免面板改了奖励后帮助还写旧数。
+    """
+    lines = ["【明日方舟 · 抽卡模拟器】", "", "■ 指令"]
+    for doc in COMMANDS:
+        lines.append(_pad(doc.usage) + doc.summary)
+    lines += [
+        "",
+        "■ 抽数从哪来",
+        f"· 每天一次 /抽卡签到，+{signin_reward}",
+        f"· 第一次和插件交互，一次性 +{newbie_bonus}",
+        "· 抽数最低扣到 0，不会变成负数",
+        "",
+        "■ 怎么指定池子",
+        "· 类别只认五个词：限定 / 常驻 / 限时 / 中坚 / 联动，写在最前面",
+        "· 想精确到某个池，在类别后面写池名前几个字，例如 /十连 限定 庆典",
+        "· 什么都不写：有正在开的限定池就抽最新的限定池，否则抽最新的池子",
+        "· 名字有歧义时会把候选列出来让你重打，不会替你挑一个",
+        "",
+        "■ 水位与保底",
+        "· 3★ 40% / 4★ 50% / 5★ 8% / 6★ 2%；第 50 抽起每抽 +2%，第 99 抽必出 6★",
+        "· 每个池子的前 10 抽内必出一个 5★（只保本池第一次；中途出过就不再兜底）",
+        "· 水位：标准与限时类共用一组、中坚单独一组，跨池继承；限定与联动每池一组，",
+        "  池结束即清零",
+        "",
+        "■ 结果图",
+        "· 默认把结果画成游戏内的寻访结果图；管理员关掉出图后回落到文字",
+        "· 立绘首次使用会自动下载并缓存，缺图时用占位块，不影响抽卡结果",
+        "",
+        "池名与 UP 名单来自 PRTS，概率与池型来自官方表。",
+        "素材版权归鹰角，仅供同人非商业使用。",
+    ]
+    return "\n".join(lines)

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -74,6 +75,16 @@ _SCHEMA: tuple[str, ...] = (
     )
     """,
 )
+
+
+def table_names() -> tuple[str, ...]:
+    """`_SCHEMA` 里声明了哪些表。
+
+    只给自检与测试用：`tools/selfcheck.py` 拿它核对「声明的表」与「库里真建出来的表」。
+    表数随 issue 增长，所以任何地方都不该写死 5 或 7。
+    """
+    pattern = r"CREATE TABLE IF NOT EXISTS\s+(\w+)"
+    return tuple(re.findall(pattern, "\n".join(_SCHEMA), re.IGNORECASE))
 
 
 @dataclass(frozen=True)

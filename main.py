@@ -29,6 +29,7 @@ from .games.arknights import banners as banner_module
 from .games.arknights import engine as ark_engine
 from .games.arknights import limited as limited_module
 from .games.arknights.engine import Batch, UpTargets
+from .games.arknights.help import render_help
 from .games.arknights.views import (
     render_adjust,
     render_newbie_notice,
@@ -301,6 +302,16 @@ class GameGachaPlugin(Star):
         return render_newbie_notice(result.bonus) if result.created else ""
 
     # ---- 指令 ------------------------------------------------------------
+
+    @filter.command("抽卡帮助")
+    async def cmd_help(self, event: AstrMessageEvent):
+        """看指令与规则说明。用法：/抽卡帮助"""
+        notice = self._register(event)
+        text = render_help(
+            signin_reward=self.signin_reward, newbie_bonus=self.newbie_bonus
+        )
+        # 帮助最后一行是版权声明，新人礼提示另起一行，别糊在句号后面。
+        yield event.plain_result(f"{text}\n{notice}" if notice else text)
 
     @filter.command("卡池查询")
     async def cmd_pool_query(self, event: AstrMessageEvent):

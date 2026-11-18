@@ -1,0 +1,49 @@
+{
+  "enable_image": {
+    "description": "把抽卡结果画成图",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后一律返回文字，并且不装载素材、立绘与字体（省内存）。立绘第一次用到时会自动下载，关掉出图就不会下载。"
+  },
+  "image_quality": {
+    "description": "单抽立绘的画质档位",
+    "type": "string",
+    "default": "中",
+    "options": [
+      "高",
+      "中",
+      "低"
+    ],
+    "hint": "只影响单抽那张精一立绘的缓存尺寸（高 1024px / 中 800px / 低 640px），只降采样不放大。十连半身像固定 180×360。改档位后已缓存的图不会自动重下，删掉缓存目录即可。"
+  },
+  "signin_reward": {
+    "description": "每日签到送多少抽",
+    "type": "int",
+    "default": 10,
+    "hint": "每人每天一次 /抽卡签到，重复签到不再加。"
+  },
+  "newbie_bonus": {
+    "description": "新人一次性送多少抽",
+    "type": "int",
+    "default": 30,
+    "hint": "用户第一次和插件交互时发放，只发一次。"
+  },
+  "data_refresh_hours": {
+    "description": "官方数据检查间隔（小时）",
+    "type": "int",
+    "default": 6,
+    "hint": "目前快照由管理员手动执行 tools/build_data.py 构建，此项保留给后续的定时刷新，暂不生效。"
+  },
+  "prts_refresh_hours": {
+    "description": "PRTS 卡池一览抓取间隔（小时）",
+    "type": "int",
+    "default": 24,
+    "hint": "同上，目前随 build_data.py 一起手动跑。"
+  },
+  "allow_network": {
+    "description": "允许联网",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后只用随包快照，并且不下载立绘（缺图一律画占位块）。离线环境下应当关掉，否则抽卡会卡在等网络。"
+  }
+}

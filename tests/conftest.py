@@ -171,6 +171,18 @@ def banner_data_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def help_mod() -> ModuleType:
+    """指令清单与 `/抽卡帮助` 文案。清单是帮助与自检的共同真相源。"""
+    return package_module("games.arknights.help")
+
+
+@pytest.fixture(scope="session")
+def selfcheck_mod() -> ModuleType:
+    """`tools/selfcheck.py`。它按 `data.plugins.<插件>` 导入，与 `package_module` 同一份。"""
+    return load_module("gacha_under_test_selfcheck", PLUGIN_DIR / "tools" / "selfcheck.py")
+
+
+@pytest.fixture(scope="session")
 def real_banners(banners_mod):
     """仓库里那份名单快照（池名与 UP 干员）。"""
     return banners_mod.load_banners(
