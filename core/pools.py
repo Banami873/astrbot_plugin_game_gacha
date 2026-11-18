@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -241,15 +241,25 @@ def load_up_share(rules_path: Path | str) -> UpShareRules:
 class SelectRules:
     """池型 → 选调阈值，如 `(150, 300)`。未登记的池型即「本池没有选调」。
 
-    阈值是**累计抽数**口径的（R-05）。限时单 UP 池的「连续 150」是另一套计数，走
-    `up_miss_counter`（issue 14），不在这张表里——把两者塞进同一份配置迟早会互相写错。
+    两张表，两种口径，刻意不合并：
+
+    - `cumulative`（R-05，累计抽数）：常驻标准寻访与中坚寻访，到档后锁 UP 之一。
+    - `consecutive`（R-06，连续未出 UP 的抽数）：限时单 6★ UP 池，中途抽到 UP 就清零。
+
+    把两者塞进同一份表，读的时候还得再查一次「这是哪种口径」——而口径写错的后果是保底
+    早到或晚到几十抽，抽起来看不出。分开之后，「表在哪」本身就说明了口径。
     """
 
-    by_rule_type: Mapping[str, tuple[int, ...]]
+    cumulative: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
+    consecutive: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
 
     def thresholds_for(self, pool: "Pool") -> tuple[int, ...]:
-        """这个池的选调档位；没有选调时返回空元组（调用方据此完全不启用）。"""
-        return self.by_rule_type.get(pool.rule_type, ())
+        """累计口径的选调档位；没有时返回空元组（调用方据此完全不启用）。"""
+        return self.cumulative.get(pool.rule_type, ())
+
+    def consecutive_thresholds_for(self, pool: "Pool") -> tuple[int, ...]:
+        """连续口径的选调阈值；没有时返回空元组。"""
+        return self.consecutive.get(pool.rule_type, ())
 
 
 def _parse_thresholds(raw: Any) -> tuple[int, ...]:
@@ -270,27 +280,42 @@ def _parse_thresholds(raw: Any) -> tuple[int, ...]:
     return tuple(numbers)
 
 
+def _read_threshold_map(raw: Any) -> dict[str, tuple[int, ...]]:
+    """把一段「池型 → 阈值数组」的对象读成字典，读不出来的条目直接丢掉。"""
+    if not isinstance(raw, dict):
+        return {}
+    parsed: dict[str, tuple[int, ...]] = {}
+    for rule_type, value in raw.items():
+        thresholds = _parse_thresholds(value)
+        if thresholds:
+            parsed[str(rule_type)] = thresholds
+    return parsed
+
+
 def load_select_rules(rules_path: Path | str) -> SelectRules:
-    """读出「池型 → 选调阈值」。
+    """读出两张选调阈值表（累计 / 连续）。
 
     保证：任何池型都能查（未登记或读不出来时为空元组）。文件缺失、JSON 损坏都只让选调
     不生效，不影响抽卡——选调是额外的保底，不该成为插件起不来的原因。
+
+    同一个池型同时出现在两张表里时**只认累计口径**，并把它从连续表里剔掉：一个池不可能
+    既是「累计 150」又是「连续 150」，配置写重了要让行为可预测，而不是看读取顺序。
     """
     try:
         raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return SelectRules({})
+        return SelectRules()
     if not isinstance(raw, dict):
-        return SelectRules({})
-    table = raw.get("select_by_rule_type")
-    if not isinstance(table, dict):
-        return SelectRules({})
-    by_rule_type: dict[str, tuple[int, ...]] = {}
-    for rule_type, value in table.items():
-        thresholds = _parse_thresholds(value)
-        if thresholds:
-            by_rule_type[str(rule_type)] = thresholds
-    return SelectRules(by_rule_type)
+        return SelectRules()
+    cumulative = _read_threshold_map(raw.get("select_by_rule_type"))
+    consecutive = {
+        rule_type: thresholds
+        for rule_type, thresholds in _read_threshold_map(
+            raw.get("consecutive_select_by_rule_type")
+        ).items()
+        if rule_type not in cumulative
+    }
+    return SelectRules(cumulative=cumulative, consecutive=consecutive)
 
 
 def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> str:

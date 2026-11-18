@@ -7,8 +7,8 @@
 本模块不判断「这是不是限定池」——它只接收调用方算好的 `group_key`。
 
 已接：水位分组、新池前 10 抽必出 5★、UP 名额与份额（R-11）、限定池的 6★ 范围与
-5 倍权重（R-11 剩余 30% 那部分）、常驻/中坚选调（R-05，判定在 `select.py`）。
-未接：限时单 UP 池的连续 150（R-06，issue 14）、井与契约（07/08）、联动（09）。
+5 倍权重（R-11 剩余 30% 那部分）、选调（R-05 累计 / R-06 连续，判定与计数在 `select.py`）。
+未接：井与契约（07/08）、联动（09）。
 """
 
 from __future__ import annotations
@@ -269,9 +269,10 @@ def draw_batch(
     `scope` 是限定池的 6★ 范围（同系列 + 已解限），由 `limited.py` 算好传进来；
     其他池型传 None。它只收窄「限定」基础池，标准/中坚/联动的人不受影响。
 
-    `select` 是常驻/中坚的选调规则（R-05），`select_state` 是这份存档里的选调进度。
-    只有**摇出 6★ 之后**才问选调：它改的是「6★ 里是谁」，不改 6★ 出率。命中时直接落
-    锁定目标，不再走 UP 份额那套权重——否则 150 抽后仍有 50% 抽到非 UP，规则就失效了。
+    `select` 是选调规则（R-05 累计口径 / R-06 连续口径），`select_state` 是这份存档里的
+    选调进度。只有**摇出 6★ 之后**才问选调：它改的是「6★ 里是谁」，不改 6★ 出率。命中时
+    直接落锁定目标，不再走 UP 份额那套权重——否则 150 抽后仍有 50% 抽到非 UP，规则就失效了。
+    连续口径还要在**每抽末尾**推进计数（`note`）：数的是寻访次数，所以 3★ 也 +1。
     """
     if times <= 0:
         raise ValueError(f"抽数必须为正，收到 {times}")
@@ -338,6 +339,9 @@ def draw_batch(
         if star >= FIRST10_MIN_STAR:
             hit = True
         pulls += 1
+        if book is not None:
+            # 连续口径的计数：每抽一次推进一步（UP 归零、其余 +1），与出没出 6★ 无关。
+            picked = book.note(picked, star, chosen.char_id)
         current = core_engine.advance(star, current)
     return Batch(tuple(drafts), current, pulls, hit, picked)
 

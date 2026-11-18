@@ -1,5 +1,5 @@
 {
-  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用。注意官方命名与直觉相反：DOUBLE 是常驻标准寻访（双 6★ UP，每两周 04:00 轮换），NORMAL 是联合行动（16:00 开、池内 6★ 只有名单上那 4 名）——依据是 PRTS 卡池一览里 23 期常驻标准与 6 期联合行动的时间对齐，见 games/arknights/data.py。unimplemented_rule_types 里的池型在解析时整条丢弃。channels_by_category / channels_by_rule_type 决定一个池能抽出哪几类基础池的干员（取值见 core/characters.py），rule_type 的个别覆盖优先于类别默认值。up_share_by_rule_type 是「UP 占该星级总出率的比例」：1.0 表示该星级只出名单内的人（联合行动、卫戍、甄选、跨年欢庆），0.5 表示两名 UP 各占四分之一。select_by_rule_type 是「池型 → 选调档位阈值」（SPEC R-05）：累计抽数到档后，下一次 6★ 必为 UP 之一，后一档避开前一档锁定的人；未登记的池型即没有选调——限定池、卫戍、联合行动、定向甄选、联动都不登记（R-06b/R-10）。限时单 UP 的「连续 150」是另一套计数，不走这张表（issue 14）。",
+  "_comment": "池型规则。categories 是「指令里的类别 → gachaRuleType」映射，供 /卡池查询 与抽卡参数解析共用。注意官方命名与直觉相反：DOUBLE 是常驻标准寻访（双 6★ UP，每两周 04:00 轮换），NORMAL 是联合行动（16:00 开、池内 6★ 只有名单上那 4 名）——依据是 PRTS 卡池一览里 23 期常驻标准与 6 期联合行动的时间对齐，见 games/arknights/data.py。unimplemented_rule_types 里的池型在解析时整条丢弃。channels_by_category / channels_by_rule_type 决定一个池能抽出哪几类基础池的干员（取值见 core/characters.py），rule_type 的个别覆盖优先于类别默认值。up_share_by_rule_type 是「UP 占该星级总出率的比例」：1.0 表示该星级只出名单内的人（联合行动、卫戍、甄选、跨年欢庆），0.5 表示两名 UP 各占四分之一。select_by_rule_type 是「池型 → 选调档位阈值」（SPEC R-05）：累计抽数到档后，下一次 6★ 必为 UP 之一，后一档避开前一档锁定的人；未登记的池型即没有选调——限定池、卫戍、联合行动、定向甄选、联动都不登记（R-06b/R-10）。限时单 UP 的「连续 150」走另一张表 consecutive_select_by_rule_type（SPEC R-06）：按「连续多少次寻访没出这个 UP」计数，中途抽到 UP 就清零、且不算选调用过，所以必须与累计表分开——同一份表混两种口径，读的时候还得再查一次「这是哪种」，迟早写错。一个池型同时出现在两张表里时只认累计口径。",
   "categories": {
     "限定": ["LIMITED"],
     "常驻": ["DOUBLE"],
@@ -37,5 +37,8 @@
     "DOUBLE": [150, 300],
     "CLASSIC": [150, 300],
     "CLASSIC_DOUBLE": [150, 300]
+  },
+  "consecutive_select_by_rule_type": {
+    "SINGLE": [150]
   }
 }

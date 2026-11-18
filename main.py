@@ -83,7 +83,7 @@ class GameGachaPlugin(Star):
         )
         self.pity_groups: pity_module.PityGroups = pity_module.PityGroups()
         self.up_rules = pool_module.UpShareRules({})
-        self.select_rules = pool_module.SelectRules({})
+        self.select_rules = pool_module.SelectRules()
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
         self.limited: limited_module.LimitedIndex = limited_module.LimitedIndex()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
@@ -533,7 +533,9 @@ class GameGachaPlugin(Star):
                 scope=self._scope(pool),
                 select=self._select_book(pool),
                 select_state=select_module.SelectState(
-                    used=state.select_used, locked=state.select_locked
+                    used=state.select_used,
+                    locked=state.select_locked,
+                    up_miss=state.up_miss,
                 ),
             )
         except ValueError as exc:
@@ -553,6 +555,7 @@ class GameGachaPlugin(Star):
                 first10_hit=batch.first10_hit,
                 select_used=batch.select_state.used,
                 select_locked=batch.select_state.locked,
+                up_miss=batch.select_state.up_miss,
             )
         except (sqlite3.Error, ValueError) as exc:
             logger.error(f"[{PLUGIN_NAME}] 抽卡入账失败：{exc}")
@@ -587,22 +590,32 @@ class GameGachaPlugin(Star):
         )
 
     def _select_book(self, pool) -> select_module.SelectBook:
-        """本池的选调规则（R-05）：阈值来自 pool_rules.json，名单来自 banners.json。
+        """本池的选调规则：阈值来自 pool_rules.json，名单来自 banners.json，口径看登记在哪张表。
 
-        限定池、卫戍、联合行动、定向甄选、联动都没登记阈值，于是这里返回一个空的
-        `SelectBook`，`draw_batch` 会直接跳过选调。名单缺失的池同理——锁不到人就不能
-        假装锁了（R-14 降级链的同一取舍）。
+        常驻/中坚登记在 `select_by_rule_type`（累计抽数口径，R-05），限时单 UP 池登记在
+        `consecutive_select_by_rule_type`（连续未出 UP 的抽数口径，R-06）。两张表都查不到
+        池型时返回空 `SelectBook`，`draw_batch` 就完全跳过选调——限定池、卫戍、联合行动、
+        定向甄选、联动都是这样。名单缺失的池同理：锁不到人就不能假装锁了（R-14 降级链的
+        同一取舍）。
 
-        `select_rules` 用 `getattr` 取：测试会用 `__new__` 绕过 `__init__` 直接驱动指令，
-        没有这一层会抛 AttributeError，把「没初始化」变成「抽卡功能坏了」。
+        `select_rules` 与 `banners` 都用 `getattr` 取：测试会用 `__new__` 绕过 `__init__`
+        直接驱动指令，没有这一层会抛 AttributeError，把「没初始化」变成「抽卡功能坏了」。
         """
         rules = getattr(self, "select_rules", None)
-        thresholds = rules.thresholds_for(pool) if rules is not None else ()
+        if rules is None:
+            return select_module.SelectBook()
+        thresholds = rules.thresholds_for(pool)
+        kind = select_module.KIND_CUMULATIVE
+        if not thresholds:
+            # 一个池型只会登记在两张表之一（loader 保证），所以依次查不会有歧义。
+            thresholds = rules.consecutive_thresholds_for(pool)
+            kind = select_module.KIND_CONSECUTIVE
         if not thresholds:
             return select_module.SelectBook()
-        banner = self.banners.get(pool.pool_id)
+        banners = getattr(self, "banners", None)
+        banner = banners.get(pool.pool_id) if banners is not None else None
         up6 = banner.up6 if banner is not None else ()
-        return select_module.SelectBook(thresholds=thresholds, up6=up6)
+        return select_module.SelectBook(thresholds=thresholds, up6=up6, kind=kind)
 
     def _scope(self, pool) -> limited_module.PoolScope | None:
         """限定池的 6★ 范围与 5 倍名单；其他池型返回 None。

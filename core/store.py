@@ -110,6 +110,8 @@ class PullState:
 
     `select_used` 与 `pool_rules.json` 的阈值表对齐（`select_used[0]` 是 150 档），
     `select_locked` 是 150 档锁过的那名干员——300 档靠它避开同一人。
+    `up_miss_counter` 是限时单 UP 池的「连续多少次寻访没出 UP」（R-06），累计口径的池
+    永远读到 0。
     """
 
     tickets: int = 0
@@ -118,6 +120,7 @@ class PullState:
     first10_hit: bool = False
     select_used: tuple[bool, ...] = ()
     select_locked: str = ""
+    up_miss: int = 0
 
 
 @dataclass(frozen=True)
@@ -322,7 +325,7 @@ class Store:
                 (uid, platform, pool_id),
             ).fetchone()
             sel = conn.execute(
-                "SELECT select150_used, select300_used, target6_locked "
+                "SELECT up_miss_counter, select150_used, select300_used, target6_locked "
                 "FROM pool_select WHERE uid = ? AND platform = ? AND pool_id = ?",
                 (uid, platform, pool_id),
             ).fetchone()
@@ -337,6 +340,7 @@ class Store:
                 else ()
             ),
             select_locked=str(sel["target6_locked"]) if sel else "",
+            up_miss=int(sel["up_miss_counter"]) if sel else 0,
         )
 
     def commit_pulls(
@@ -353,6 +357,7 @@ class Store:
         first10_hit: bool = False,
         select_used: tuple[bool, ...] = (),
         select_locked: str = "",
+        up_miss: int = 0,
     ) -> PullCommit:
         """把一批抽卡结果一次性落库：扣抽数、推进水位、累加仓库、记池内抽数、写选调。
 
@@ -362,6 +367,9 @@ class Store:
         假——否则一次「这批没出 5★」会把之前达成的记录擦掉，保底就会重复触发。
         `select_used` / `select_locked` 同理只进不退：选调一旦生效就该永久生效，
         一次没命中的批次把它写回「未用」会让同一档反复触发。
+        `up_miss` 是**本批抽完之后**的连续计数（R-06），直接覆盖而不是取 MAX——它本来
+        就会在抽到 UP 时归零，取最大会让计数只涨不落，保底从此再也攒不出来。累计口径的
+        池传 0，这个列对它们没有意义。
         失败：库打不开等 `sqlite3.Error` 让异常冒出去，由调用方提示用户——静默当成
         「没抽过」会让扣掉的抽数凭空消失。
         """
@@ -401,11 +409,13 @@ class Store:
                 )
                 # 选调两档只进不退；`target6_locked` 已有值时不让空串覆盖它——第二批抽卡
                 # 传进来的 locked 可能还是空（这一批没触发），写回去会把 150 档锁的人忘了。
+                # 连续计数（up_miss_counter）相反：它该跟着最新一批走，包括归零。
                 conn.execute(
                     "INSERT INTO pool_select "
-                    "(uid, platform, pool_id, select150_used, select300_used, "
-                    "target6_locked) VALUES (?, ?, ?, ?, ?, ?) "
+                    "(uid, platform, pool_id, up_miss_counter, select150_used, "
+                    "select300_used, target6_locked) VALUES (?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(uid, platform, pool_id) DO UPDATE SET "
+                    "up_miss_counter = excluded.up_miss_counter, "
                     "select150_used = MAX(select150_used, excluded.select150_used), "
                     "select300_used = MAX(select300_used, excluded.select300_used), "
                     "target6_locked = CASE WHEN excluded.target6_locked <> '' "
@@ -414,6 +424,7 @@ class Store:
                         uid,
                         platform,
                         pool_id,
+                        max(0, up_miss),
                         1 if select_used and select_used[0] else 0,
                         1 if len(select_used) > 1 and select_used[1] else 0,
                         select_locked,
