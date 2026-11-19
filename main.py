@@ -335,14 +335,20 @@ class GameGachaPlugin(Star):
         return event.get_sender_id(), event.get_platform_name() or "unknown"
 
     def _register(self, event: AstrMessageEvent) -> str:
-        """保证用户已建档，返回需要追加到回复里的新人礼提示（无需提示时为空串）。"""
+        """保证用户已建档，返回需要追加到回复里的新人礼提示（无需提示时为空串）。
+
+        返回值自带前导换行：各指令都是「正文 + notice」直接拼，正文末行（可能是 UP
+        名单）不能和横幅黏成一行。
+        """
         if self.store is None:
             return ""
         uid, platform = self._identity(event)
         result = economy.ensure_user(
             self.store, uid, platform, bonus=self.newbie_bonus
         )
-        return render_newbie_notice(result.bonus) if result.created else ""
+        if not result.created:
+            return ""
+        return "\n" + render_newbie_notice(result.bonus)
 
     # ---- 指令 ------------------------------------------------------------
 
@@ -353,8 +359,8 @@ class GameGachaPlugin(Star):
         text = render_help(
             signin_reward=self.signin_reward, newbie_bonus=self.newbie_bonus
         )
-        # 帮助最后一行是版权声明，新人礼提示另起一行，别糊在句号后面。
-        yield event.plain_result(f"{text}\n{notice}" if notice else text)
+        # 帮助最后一行是版权声明；notice 自带换行，不再手动加。
+        yield event.plain_result(text + notice)
 
     @filter.command("卡池查询")
     async def cmd_pool_query(self, event: AstrMessageEvent):
