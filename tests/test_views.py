@@ -125,13 +125,15 @@ def test_roster_status_shown(pools_mod, views_mod):
     assert "UP 名单未获取（按均分概率）" in text
 
 
-def test_placeholder_name_shows_pool_id(pools_mod, views_mod):
+def test_placeholder_name_never_reaches_the_screen(pools_mod, views_mod):
+    """池名抓不到时显示官方固定叫法，占位串与内部 id 都不许出现——id 念不出来也搜不到。"""
     snapshot = _snapshot(
         pools_mod,
         [_record("NORM_79_0_3", "GACHAWITHSPECIFIED6", -DAY, DAY, name="适合多种场合的强力干员")],
     )
     text = views_mod.render_pool_list(snapshot, NOW)
-    assert "NORM_79_0_3" in text
+    assert "卫戍寻访" in text
+    assert "NORM_79_0_3" not in text
     assert "适合多种场合的强力干员" not in text
 
 

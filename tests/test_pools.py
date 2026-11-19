@@ -221,13 +221,56 @@ class TestGrouped:
 
 
 class TestParsing:
-    def test_placeholder_name_falls_back_to_pool_id(self, pools_mod):
+    def test_placeholder_name_is_not_a_name(self, pools_mod):
+        """占位串不能当池名收下来——它会被原样念给玩家听。"""
         records = [_pool(gachaPoolId="NORM_79_0_3", gachaPoolName="适合多种场合的强力干员")]
         snapshot = _snapshot(pools_mod, records)
         pool = snapshot.by_id("NORM_79_0_3")
         assert pool is not None
         assert pool.name == ""
-        assert pool.display_name == "NORM_79_0_3"
+
+    def test_double_without_name_shows_the_official_title(self, pools_mod):
+        """常驻标准每期的池名是一张图，抓不到就得用官方固定叫法，绝不能露内部 id。"""
+        records = [_pool(gachaPoolId="DOUBLE_79_0_5", gachaRuleType="DOUBLE", gachaPoolName="")]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("DOUBLE_79_0_5")
+        assert pool is not None
+        assert pool.name == ""
+        assert pool.display_name == "常驻标准寻访"
+
+    def test_fesclassic_name_gets_the_official_prefix(self, pools_mod):
+        """PRTS 写「甄选15」，游戏里的全称是「中坚甄选15」。"""
+        records = [
+            _pool(
+                gachaPoolId="FESCLASSIC_79_0_1",
+                gachaRuleType="FESCLASSIC",
+                gachaPoolName="甄选15",
+            )
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("FESCLASSIC_79_0_1")
+        assert pool is not None
+        assert pool.display_name == "中坚甄选15"
+
+    def test_prefix_already_present_is_not_doubled(self, pools_mod):
+        records = [
+            _pool(
+                gachaPoolId="FESCLASSIC_X",
+                gachaRuleType="FESCLASSIC",
+                gachaPoolName="中坚甄选7",
+            )
+        ]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("FESCLASSIC_X")
+        assert pool is not None
+        assert pool.display_name == "中坚甄选7"
+
+    def test_category_is_the_last_resort_before_the_id(self, pools_mod):
+        records = [_pool(gachaPoolId="SINGLE_79_0_9", gachaRuleType="SINGLE", gachaPoolName="")]
+        snapshot = _snapshot(pools_mod, records)
+        pool = snapshot.by_id("SINGLE_79_0_9")
+        assert pool is not None
+        assert pool.display_name == "限时寻访"
 
     def test_real_name_kept(self, pools_mod):
         snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="L", gachaPoolName="将雪投火")])
@@ -397,6 +440,21 @@ class TestChoosePool:
             ],
         )
         assert pools_mod.choose_pool(snapshot, NOW, ["海渊"]).pool.pool_id == "S1"
+
+    def test_search_still_accepts_the_unprefixed_name(self, pools_mod):
+        """显示补成「中坚甄选15」，但原文「甄选15」是玩家在公告里看到的写法，按它也得选中。"""
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(
+                    gachaPoolId="F",
+                    gachaRuleType="FESCLASSIC",
+                    gachaPoolName="甄选15",
+                ),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW, ["中坚", "甄选15"]).pool.pool_id == "F"
+        assert pools_mod.choose_pool(snapshot, NOW, ["甄选15"]).pool.pool_id == "F"
 
     def test_unknown_prefix_reports_current_pools(self, pools_mod):
         snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="S1", gachaPoolName="沉向海渊")])

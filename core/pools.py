@@ -24,6 +24,20 @@ OTHER_CATEGORY = "其他"
 # 官方表把未公布的池名写成这句占位串（460 池里 315 个），它不是名字。
 PLACEHOLDER_NAMES: frozenset[str] = frozenset({"适合多种场合的强力干员"})
 
+# 池骨架没有可用名字时的对外名。两种来源会导致没名字：官方写占位串、或该期在 PRTS
+# 卡池一览里没对上（常驻标准每期池名是一张图，文字只有序号）。**内部 id 不能见人**——
+# `DOUBLE_79_0_5` 既念不出来也搜不到，玩家只会以为插件坏了。只给官方有固定叫法的
+# 池型写死；其余落到「<类别>寻访」，仍比露 id 强。
+RULE_DISPLAY_NAMES: dict[str, str] = {
+    "DOUBLE": "常驻标准寻访",
+    "GACHAWITHSPECIFIED6": "卫戍寻访",
+    "FESCLASSIC": "中坚甄选",
+}
+
+# PRTS 池名常省掉限定词：「甄选15」在游戏里全称是「中坚甄选15」。这里补的是同义的
+# 官方前缀，不改池名本体；补过之后仍按原名可搜（见 `_prefix_matches`）。
+RULE_NAME_PREFIX: dict[str, str] = {"FESCLASSIC": "中坚"}
+
 # 与 resources/pool_rules.json 的 categories 段同构；配置文件缺失或损坏时用它兜底，
 # 免得整个插件因为一个 JSON 读不出来就查不到池。
 #
@@ -411,8 +425,22 @@ class Pool:
 
     @property
     def display_name(self) -> str:
-        """给人看的名字：官方名可用就用，是占位串就退回池 id。"""
-        return self.name or self.pool_id
+        """给人看的名字，保证**永远不是内部 id**（除非连类别都判不出来）。
+
+        三级回落：PRTS/官方真名 → 池型规范名（`DOUBLE` 是「常驻标准寻访」）→
+        「<类别>寻访」。真名缺限定词时补上官方前缀（「甄选15」→「中坚甄选15」）。
+        """
+        if self.name:
+            prefix = RULE_NAME_PREFIX.get(self.rule_type, "")
+            if prefix and not self.name.startswith(prefix):
+                return prefix + self.name
+            return self.name
+        canonical = RULE_DISPLAY_NAMES.get(self.rule_type, "")
+        if canonical:
+            return canonical
+        if self.category and self.category != OTHER_CATEGORY:
+            return f"{self.category}寻访"
+        return self.pool_id
 
     @property
     def limited_char_id(self) -> str:
@@ -623,11 +651,20 @@ def _prefix_matches(pools: Sequence[Pool], prefix: str) -> list[Pool]:
 
     降级是必要的：用户记住的常常是池名中间那几个字（「海渊」对
     「海渊之下的回声」是前缀，对「沉向海渊」就不是）。
+
+    两条名字都试：`display_name` 补过官方前缀（「中坚甄选15」），而 PRTS 原名
+    （「甄选15」）仍是玩家在游戏里、在公告里看到的写法，按它搜也得命中。
     """
-    direct = [p for p in pools if p.display_name.startswith(prefix)]
+
+    def names(pool: Pool) -> tuple[str, ...]:
+        if pool.name and pool.name != pool.display_name:
+            return (pool.display_name, pool.name)
+        return (pool.display_name,)
+
+    direct = [p for p in pools if any(n.startswith(prefix) for n in names(p))]
     if direct:
         return direct
-    return [p for p in pools if prefix in p.display_name]
+    return [p for p in pools if any(prefix in n for n in names(p))]
 
 
 def choose_pool(
