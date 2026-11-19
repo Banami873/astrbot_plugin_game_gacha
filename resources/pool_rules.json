@@ -46,5 +46,9 @@
   },
   "contracts_by_rule_type": {
     "LIMITED": 1
+  },
+  "pick_by_rule_type": {
+    "FESCLASSIC": {"six": 2, "five": 3, "six_per": 0.25, "five_per": 0.1666625},
+    "SPECIAL": {"six": 3, "five": 3, "six_per": 0.3333333, "five_per": 0.2}
   }
 }

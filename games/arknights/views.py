@@ -86,6 +86,7 @@ def render_pool_list(
     known_categories: Sequence[str] = CATEGORY_ORDER,
     up_text: Mapping[str, str] | None = None,
     boost_text: Mapping[str, str] | None = None,
+    choice_text: Mapping[str, str] | None = None,
 ) -> str:
     """把当前可抽的卡池渲染成一段文本。
 
@@ -97,6 +98,8 @@ def render_pool_list(
     `boost_text` 是池 id → 「往期 5 倍 A、B、C」：限定池剩余 30% 里加权的那三名往期限定。
     只对有限定加权的池出现，所以和 `up_text` 分开传而不是拼成一行——这两条信息各自
     独立，任何一条缺失都不该影响另一条显示。
+    `choice_text` 是自选池的池 id → 「自选 6★ A、B · 5★ C、D、E」，未选定时是
+    「自选未选定（/自选 选人）」。只有自选池有这一行；其它池不传键。
     """
     grouped = snapshot.grouped(now)
     header = ["[明日方舟 · 当前卡池]", f"数据：{snapshot.fetched_text()} 快照", DIVIDER]
@@ -125,6 +128,9 @@ def render_pool_list(
             lines.append(f"  {start} → {end} · {tail}")
             listing = up_text.get(getattr(pool, "pool_id", ""), "")
             lines.append(f"  {listing}" if listing else "  UP 名单未获取（按均分概率）")
+            chosen = (choice_text or {}).get(getattr(pool, "pool_id", ""), "")
+            if chosen:
+                lines.append(f"  {chosen}")
             boosted = boost_text.get(getattr(pool, "pool_id", ""), "")
             if boosted:
                 lines.append(f"  {boosted}")
@@ -244,6 +250,7 @@ def render_pulls(
     contracts: int | None = None,
     contract_expiry: str = "",
     gift: object | None = None,
+    choice_note: str = "",
 ) -> str:
     """一次（或一次十连）的结果。
 
@@ -253,9 +260,12 @@ def render_pulls(
     不说明的话玩家会以为插件算错了概率。
     `contracts` 为 None 表示本池不产契约（非限定池），此时不出现契约行；传 0 会显示
     「0 份」——只有限定池才会这样，且那是真实状态（刚抽完刚好兑换过）。
+    `choice_note` 是自选池的「本池自选：6★ A、B · 5★ C、D」，非自选池传空串。
     """
     title = TITLE_TEN if len(drafts) > 1 else TITLE_SINGLE
     lines = [f"{title}{pool_name}", DIVIDER]
+    if choice_note:
+        lines.append(choice_note)
     for draft in drafts:
         mark = STAR_MARK * max(1, min(6, draft.star))
         suffix = _potential_suffix(counts.get(draft.char_id, 1))
@@ -306,6 +316,7 @@ def render_pull_brief(
     guarantee_note: str = "",
     gift_note: str = "",
     contract_line: str = "",
+    choice_note: str = "",
 ) -> str:
     """出图成功时配的那一行文字。
 
@@ -315,6 +326,8 @@ def render_pull_brief(
     井赠送与契约那几句：图上都不画，这里是唯一的告知途径，命中时不能省。
     """
     lines = [f"【寻访结果】{pool_name} · {cost} 抽"]
+    if choice_note:
+        lines.append(choice_note)
     tail = f"剩余 {tickets} 抽"
     if six_counter is not None:
         tail += f" · 距 6★ 硬保底还有 {max(1, hard_pity - six_counter)} 抽"
@@ -473,6 +486,123 @@ def render_warehouse(page: Any) -> str:
         blocks.append(f"翻页：/潜能仓库 {min(page.number + 1, page.total_pages)}")
 
     return "\n".join(lines) + "\n" + "\n\n".join(blocks)
+
+
+# ---- 自选池 --------------------------------------------------------------
+
+def _choice_names(ids: Sequence[str], name_of: Any) -> str:
+    """把 id 串成「安洁莉娜、夜莺」。空名单给「（无）」，避免出现「6★ 」半句。"""
+    names = [name_of(char_id) for char_id in ids]
+    return "、".join(names) if names else "（无）"
+
+
+def choice_line(six: Sequence[str], five: Sequence[str], name_of: Any) -> str:
+    """「6★ A、B · 5★ C、D」这一段的纯内容，前缀由调用方加（列表用「自选」，
+    结果页用「本池自选：」）——两处措辞不同，硬把前缀写进这里就得再拆一次。"""
+    parts: list[str] = []
+    if six:
+        parts.append(f"6★ {_choice_names(six, name_of)}")
+    if five:
+        parts.append(f"5★ {_choice_names(five, name_of)}")
+    return " · ".join(parts) if parts else "（无）"
+
+
+def render_choice_candidates(
+    choice: Any,
+    name_of: Any,
+    six: Sequence[str] = (),
+    five: Sequence[str] = (),
+) -> str:
+    """列出候选：6★ 在前、5★ 在后，编号连续。
+
+    一行 3 个，不做列对齐——中文宽度不等，硬凑空格只会在手机上错位。
+    """
+    picked = set(six) | set(five)
+    lines = [
+        f"【{getattr(choice, 'title', '自选')} · 自选】本池要选 {choice.slots_text}",
+        DIVIDER,
+    ]
+    for star, ids in ((6, choice.six_range), (5, choice.five_range)):
+        if not ids:
+            continue
+        slots = choice.rule.slots(star)
+        lines.append(f"{'★' * star}（选 {slots} 名，每人 {choice.rule.per_char(star):.2%}）")
+        row: list[str] = []
+        for offset, char_id in enumerate(ids, start=1):
+            index = offset if star >= 6 else len(choice.six_range) + offset
+            mark = "*" if char_id in picked else ""
+            row.append(f"{index} {name_of(char_id)}{mark}")
+            if len(row) == 3:
+                lines.append("  " + " · ".join(row))
+                row = []
+        if row:
+            lines.append("  " + " · ".join(row))
+    if picked:
+        lines.append("")
+        lines.append(f"已选：{choice_line(six, five, name_of)}")
+    lines.append("")
+    lines.append(
+        "回复序号或名字（可混用），如「3 7 13 14 15」；名额正好才会进入确认。"
+        "带 * 的是已选。"
+    )
+    return "\n".join(lines)
+
+
+def render_choice_preview(
+    choice: Any, six: Sequence[str], five: Sequence[str], name_of: Any
+) -> str:
+    """提交后的预览。**这里还没有写库**，要等玩家回「确认」。"""
+    lines = [
+        f"【{getattr(choice, 'title', '自选')} · 确认】",
+        DIVIDER,
+        "自选 " + choice_line(six, five, name_of),
+        "",
+        "确认后本池的 UP 不可变更（与游戏内一致）。",
+        "回复「确认」锁定；回复「取消」放弃，或重新发一次名单。",
+    ]
+    return "\n".join(lines)
+
+
+def render_choice_locked(
+    choice: Any, six: Sequence[str], five: Sequence[str], name_of: Any
+) -> str:
+    lines = [
+        f"【{getattr(choice, 'title', '自选')} · 已锁定】",
+        DIVIDER,
+        "自选 " + choice_line(six, five, name_of),
+        "本池自选已生效，寻访结果按此分配；本期不可变更。",
+    ]
+    return "\n".join(lines)
+
+
+def render_choice_required(pool_name: str, choice: Any) -> str:
+    """未自选就抽卡时的拦截文案。"""
+    return "\n".join(
+        [
+            f"「{pool_name}」需要先自选才能寻访。",
+            f"本池要选 {choice.slots_text}，共 {choice.total} 名候选。",
+            "发 /自选 看候选并开始选择。",
+        ]
+    )
+
+
+def render_choice_locked_already(choice: Any, name_of: Any, six: Sequence[str], five: Sequence[str]) -> str:
+    return "本池自选已锁定，不可变更。\n自选 " + choice_line(six, five, name_of)
+
+
+def render_choice_problem(text: str, options: Sequence[str] = ()) -> str:
+    lines = [text]
+    if options:
+        lines.append("这几个名字都能对上，补几个字区分：" + "、".join(options))
+    return "\n".join(lines)
+
+
+def render_choice_usage() -> str:
+    """没有进行中的自选池时说什么。"""
+    return (
+        "当前没有进行中的自选池（中坚甄选 / 定向甄选）。\n"
+        "常规寻访不需要自选，直接 /单抽 或 /十连。"
+    )
 
 
 def render_pool_problem(

@@ -12,9 +12,11 @@ from __future__ import annotations
 import asyncio
 import random
 import sqlite3
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Sequence
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -27,6 +29,7 @@ from .core import pity as pity_module
 from .core import pools as pool_module
 from .core.store import LimitedDelta, PullCommit, Store
 from .games.arknights import banners as banner_module
+from .games.arknights import choice as choice_module
 from .games.arknights import engine as ark_engine
 from .games.arknights import exchange as exchange_module
 from .games.arknights import limited as limited_module
@@ -36,7 +39,15 @@ from .games.arknights import warehouse as warehouse_module
 from .games.arknights.engine import Batch, UpTargets
 from .games.arknights.help import render_help
 from .games.arknights.views import (
+    choice_line,
     render_adjust,
+    render_choice_candidates,
+    render_choice_locked,
+    render_choice_locked_already,
+    render_choice_preview,
+    render_choice_problem,
+    render_choice_required,
+    render_choice_usage,
     render_contract_line,
     render_exchange_candidates,
     render_exchange_closed,
@@ -89,6 +100,33 @@ class PullOutcome:
         return not self.error
 
 
+# 自选会话的存活时间。给 5 分钟：够玩家翻公告、对号，又不至于让一个忘了退出的会话
+# 在半小时后把「3」当成选人。
+CHOICE_TTL_SECONDS = 300.0
+
+CHOICE_COLLECT = "collect"
+CHOICE_CONFIRM = "confirm"
+
+
+@dataclass
+class ChoiceSession:
+    """一次多轮自选会话（R-19b）。
+
+    只存内存。`stage` 只有两步：`collect`（刚列完候选，等玩家发名单）与 `confirm`
+    （名单已解析，等「确认」）。**没有「已选一半」**——R-19 要求提交即锁定，中间态
+    既不能落库也不能假装存在。
+    """
+
+    pool_id: str
+    stage: str
+    six: tuple[str, ...] = ()
+    five: tuple[str, ...] = ()
+    expires: float = 0.0
+
+    def alive(self, now: float) -> bool:
+        return now < self.expires
+
+
 class GameGachaPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig = None):
         super().__init__(context)
@@ -108,10 +146,14 @@ class GameGachaPlugin(Star):
         self.up_rules = pool_module.UpShareRules({})
         self.select_rules = pool_module.SelectRules()
         self.reward_rules = pool_module.LimitedRewardRules()
+        self.pick_rules: dict[str, pool_module.PickRule] = {}
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
         self.limited: limited_module.LimitedIndex = limited_module.LimitedIndex()
         self.discounts: limited_module.DiscountBoard = limited_module.DiscountBoard()
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+        # 自选的多轮会话：只存内存，重启即失效。落库会让「预览过但没确认」变成半个状态，
+        # 而 R-19 要求「提交即锁定」——不存在「选了一半」这种存法。
+        self._choices: dict[tuple[str, str], ChoiceSession] = {}
         self._load_error = ""
         self._roster_error = ""
         # 出图三件：素材/绘制器、立绘缓存、开关。关掉出图时三者都不建，
@@ -144,6 +186,7 @@ class GameGachaPlugin(Star):
         self.up_rules = pool_module.load_up_share(RULES_PATH)
         self.select_rules = pool_module.load_select_rules(RULES_PATH)
         self.reward_rules = pool_module.load_limited_rewards(RULES_PATH)
+        self.pick_rules = pool_module.load_pick_rules(RULES_PATH)
         # 名单先装、再套到卡池上：池名与类别都以 PRTS 为准（R-14），没名单的池保持原样。
         self.banners = banner_module.load_banners(BANNER_SNAPSHOT_PATH)
         try:
@@ -377,15 +420,32 @@ class GameGachaPlugin(Star):
 
         parts = event.message_str.strip().split()
         wanted = parts[1] if len(parts) > 1 else None
+        uid, platform = self._identity(event)
+        now = pool_module.timestamp_of()
         text = render_pool_list(
             self.snapshot,
-            pool_module.timestamp_of(),
+            now,
             wanted=wanted,
             known_categories=pool_module.CATEGORY_ORDER,
             up_text=self._up_text_map(),
             boost_text=self._boost_text_map(),
+            choice_text=self._choice_text_map(uid, platform, now),
         )
         yield event.plain_result(text + notice)
+
+    def _choice_text_map(self, uid: str, platform: str, now: int) -> dict[str, str]:
+        """每个自选池一行状态，给 `/卡池查询` 用（R-19 的展示三处之一）。"""
+        if self.store is None or self.roster is None:
+            return {}
+        mapping: dict[str, str] = {}
+        for pool in self._choice_live(now):
+            picked = self.store.choice_of(uid, platform, pool.pool_id)
+            mapping[pool.pool_id] = (
+                "自选未选定（/自选 选人）"
+                if picked is None
+                else "自选 " + choice_line(picked[0], picked[1], self.roster.name_of)
+            )
+        return mapping
 
     @filter.command("潜能仓库")
     async def cmd_inventory(self, event: AstrMessageEvent):
@@ -513,17 +573,37 @@ class GameGachaPlugin(Star):
         pool = choice.pool
         uid, platform = self._identity(event)
         group_key = self.pity_groups.group_key_of(pool)
+
+        # 自选池（R-19）：没选定就不许抽。判在锁外，是因为它只读一行、也不需要和
+        # 其余抽卡串行；拒绝时连随机数都不消耗，更不会扣抽数。
+        choice_pool = self._choice_pool(pool)
+        picked = None
+        if choice_pool is not None:
+            picked = self.store.choice_of(uid, platform, pool.pool_id)
+            if picked is None:
+                yield event.plain_result(
+                    render_choice_required(pool.display_name, choice_pool)
+                )
+                return
+
         # 锁里只做读库、算结果、写库三件同步事，不发消息：把 yield 留在锁里会让一次
         # 网络发送期间一直占着这个用户的锁。
         async with self._lock_for(uid, platform):
             self._purge_expired_pity(uid, platform, now)
             self._purge_finished_limited(uid, platform, now)
-            outcome = self._draw_and_commit(uid, platform, pool, times, group_key)
+            outcome = self._draw_and_commit(
+                uid, platform, pool, times, group_key, picked=picked
+            )
         if outcome.error:
             yield event.plain_result(outcome.error)
             return
 
         contracts, expiry = self._contract_display(pool, outcome.contracts, now)
+        choice_note = (
+            f"本池自选：{choice_line(picked[0], picked[1], self.roster.name_of)}"
+            if picked is not None
+            else ""
+        )
         text = render_pulls(
             pool.display_name,
             outcome.batch.drafts,
@@ -532,10 +612,13 @@ class GameGachaPlugin(Star):
             tickets=outcome.commit.tickets,
             six_counter=outcome.batch.six_counter,
             hard_pity=ark_engine.HARD_PITY,
-            up_missing=self.banners.get(pool.pool_id) is None,
+            up_missing=(
+                self.banners.get(pool.pool_id) is None and choice_pool is None
+            ),
             contracts=contracts,
             contract_expiry=expiry,
             gift=outcome.batch.gift,
+            choice_note=choice_note,
         )
         # 事务已经提交（R-15）：出图成功发图 + 一行水位，失败就把完整文字发出去。
         image_path = await self._render_image(
@@ -550,10 +633,13 @@ class GameGachaPlugin(Star):
                     tickets=outcome.commit.tickets,
                     six_counter=outcome.batch.six_counter,
                     hard_pity=ark_engine.HARD_PITY,
-                    up_missing=self.banners.get(pool.pool_id) is None,
+                    up_missing=(
+                        self.banners.get(pool.pool_id) is None and choice_pool is None
+                    ),
                     select_note=render_select_note(outcome.batch.drafts),
                     guarantee_note=render_guarantee_note(outcome.batch.drafts),
                     gift_note=render_gift_note(outcome.batch.gift),
+                    choice_note=choice_note,
                     contract_line=(
                         render_contract_line(contracts, expiry)
                         if contracts is not None
@@ -639,6 +725,249 @@ class GameGachaPlugin(Star):
         yield event.plain_result(
             render_exchange_ok(name, tier, result.contracts, result.count, offer.label)
             + notice
+        )
+
+    # ---- 自选池（R-19 / R-19b）------------------------------------------
+
+    @filter.command("自选")
+    async def cmd_choice(self, event: AstrMessageEvent):
+        """自选本期出率提升的干员。用法：/自选 [类别] [池名] [序号或名字...]"""
+        notice = self._register(event)
+        if self.store is None or self.snapshot is None or self.roster is None:
+            yield event.plain_result(self._not_ready_text())
+            return
+
+        now = pool_module.timestamp_of()
+        uid, platform = self._identity(event)
+        words = event.message_str.strip().split()[1:]
+        text = " ".join(words)
+
+        if words and choice_module.is_cancel(text):
+            self._choices.pop((uid, platform), None)
+            yield event.plain_result("已取消本次自选，本池还没有锁定任何干员。")
+            return
+        if words and choice_module.is_confirm(text):
+            yield event.plain_result(self._choice_confirm(uid, platform) + notice)
+            return
+
+        pool, rest, problem = self._choice_target(words, now)
+        if pool is None:
+            yield event.plain_result(problem + notice)
+            return
+
+        choice = self._choice_pool(pool)
+        locked = self.store.choice_of(uid, platform, pool.pool_id)
+        if locked is not None:
+            # 提交即锁定（R-19）：已经选过就只说这件事，不再列候选，免得让人以为还能改。
+            yield event.plain_result(
+                render_choice_locked_already(
+                    choice, self.roster.name_of, locked[0], locked[1]
+                )
+                + notice
+            )
+            return
+
+        if not rest:
+            self._choices[(uid, platform)] = ChoiceSession(
+                pool_id=pool.pool_id,
+                stage=CHOICE_COLLECT,
+                expires=time.time() + CHOICE_TTL_SECONDS,
+            )
+            yield event.plain_result(
+                render_choice_candidates(choice, self.roster.name_of) + notice
+            )
+            return
+
+        yield event.plain_result(
+            self._choice_submit(
+                uid, platform, pool, choice, choice_module.split_tokens(" ".join(rest))
+            )
+            + notice
+        )
+
+    @filter.regex(r".+")
+    async def on_choice_free_text(self, event: AstrMessageEvent):
+        """接住自选会话里的裸消息（「3 7 13 14 15」「确认」「取消」）。
+
+        挂在 `.+` 上是因为玩家要能直接发数字，而 AstrBot 的正则过滤**不受唤醒前缀限制**
+        ——这意味着群里的每条消息都会进来一次。所以第一件事就是查会话：没有就立刻返回，
+        开销只是一次字典读取，不解析、不回复、不拦事件。只有确认该用户正处于会话中，
+        才 `stop_event()` 把它从 LLM 那里截下来。
+        """
+        sessions = getattr(self, "_choices", None)
+        if not sessions:
+            return
+        uid, platform = self._identity(event)
+        session = sessions.get((uid, platform))
+        if session is None:
+            return
+        text = (event.message_str or "").strip()
+        if not text or text.startswith("/"):
+            return
+        if self.store is None or self.snapshot is None or self.roster is None:
+            return
+
+        if not session.alive(time.time()):
+            sessions.pop((uid, platform), None)
+            event.stop_event()
+            event.should_call_llm(False)
+            yield event.plain_result("自选已超时，请重新 /自选。")
+            return
+
+        pool = self.snapshot.by_id(session.pool_id)
+        choice = self._choice_pool(pool) if pool is not None else None
+        if choice is None:
+            sessions.pop((uid, platform), None)
+            return
+
+        if choice_module.is_cancel(text):
+            sessions.pop((uid, platform), None)
+            event.stop_event()
+            event.should_call_llm(False)
+            yield event.plain_result("已取消本次自选。")
+            return
+        if choice_module.is_confirm(text):
+            event.stop_event()
+            event.should_call_llm(False)
+            yield event.plain_result(self._choice_confirm(uid, platform))
+            return
+        if not choice_module.looks_like_picks(text, choice, self.roster.name_of):
+            # 不像选人：放行给 LLM。宁可少接一次，也不要把正常聊天吃掉。
+            return
+        event.stop_event()
+        event.should_call_llm(False)
+        yield event.plain_result(
+            self._choice_submit(
+                uid, platform, pool, choice, choice_module.split_tokens(text)
+            )
+        )
+
+    def _choice_live(self, now: int) -> list:
+        """进行中且属于自选池的那几个。"""
+        snapshot = getattr(self, "snapshot", None)
+        if snapshot is None:
+            return []
+        return [
+            pool for pool in snapshot.active(now) if self._choice_pool(pool) is not None
+        ]
+
+    @staticmethod
+    def _choice_hits(pool, prefix: str) -> bool:
+        """池名匹配：显示名或 PRTS 原名，前缀优先，退到包含（与 `_prefix_matches` 同口径）。"""
+        names = [pool.display_name]
+        raw = getattr(pool, "name", "")
+        if raw and raw != pool.display_name:
+            names.append(raw)
+        return any(name.startswith(prefix) or prefix in name for name in names)
+
+    def _choice_ambiguous(self, pools) -> str:
+        names = "、".join(pool.display_name for pool in pools)
+        example = pools[0].display_name if pools else "中坚甄选"
+        return (
+            f"当前开着 {len(pools)} 个自选池：{names}。\n"
+            f"请带上池名，例如：/自选 {example} 3 7 13 14 15"
+        )
+
+    def _choice_target(self, tokens: Sequence[str], now: int):
+        """从参数里剥出目标池与剩下的名字/序号，返回 `(pool, rest, 错误文案)`。
+
+        剥离是**从长到短**试前缀：`/自选 中坚甄选15 3 7 13 14 15` 里，只有把
+        「中坚甄选15」整段当前缀才唯一命中，短一截就变成名字了。
+        """
+        live = self._choice_live(now)
+        if not live:
+            return None, (), render_choice_usage()
+        if len(live) == 1:
+            pool = live[0]
+            rest = list(tokens)
+            # 只有一个池时也允许写池名：玩家不会因为我们「知道只有一个」就不写。
+            # 纯数字不能当池名试——「中坚甄选15」含数字，会把「1」这个序号吞掉。
+            if rest and not rest[0].isdigit() and self._choice_hits(pool, rest[0]):
+                rest = rest[1:]
+            return pool, tuple(rest), ""
+
+        words = list(tokens)
+        category = (
+            words[0] if words and words[0] in pool_module.CATEGORY_ORDER else ""
+        )
+        rest = words[1:] if category else words
+        scoped = [pool for pool in live if not category or pool.category == category]
+        if not scoped:
+            return None, (), self._choice_ambiguous(live)
+        if not rest:
+            return None, (), self._choice_ambiguous(scoped)
+        if rest[0].isdigit():
+            # 一上来就是序号，说明没写池名。别去猜「13789」是哪个池的名字——
+            # 「中坚甄选15」里含数字，逐个缩前缀总有一次会误命中。
+            return None, (), self._choice_ambiguous(scoped)
+        for size in range(len(rest), 0, -1):
+            prefix = "".join(rest[:size])
+            hits = [pool for pool in scoped if self._choice_hits(pool, prefix)]
+            if len(hits) == 1:
+                return hits[0], tuple(rest[size:]), ""
+            if len(hits) > 1:
+                return None, (), self._choice_ambiguous(hits)
+        return None, (), self._choice_ambiguous(scoped)
+
+    def _choice_submit(
+        self, uid: str, platform: str, pool, choice, tokens: Sequence[str]
+    ) -> str:
+        """解析名单并给预览。**这里不写库**——要等玩家回「确认」。"""
+        picked = choice_module.parse(tokens, choice, self.roster.name_of)
+        if picked.options:
+            return render_choice_problem("这几个名字都能对上，补几个字区分：", picked.options)
+        if not picked.ok:
+            return render_choice_problem(picked.problem)
+        self._choices[(uid, platform)] = ChoiceSession(
+            pool_id=pool.pool_id,
+            stage=CHOICE_CONFIRM,
+            six=picked.six,
+            five=picked.five,
+            expires=time.time() + CHOICE_TTL_SECONDS,
+        )
+        return render_choice_preview(
+            choice, picked.six, picked.five, self.roster.name_of
+        )
+
+    def _choice_confirm(self, uid: str, platform: str) -> str:
+        """「确认」这一步：把预览里的名单落库。"""
+        session = self._choices.get((uid, platform))
+        if session is None:
+            return "没有待确认的自选——先 /自选 看候选并选人。"
+        if not session.alive(time.time()):
+            self._choices.pop((uid, platform), None)
+            return "自选已超时，请重新 /自选。"
+        if session.stage != CHOICE_CONFIRM:
+            return "还没收到名单——先回复序号或名字，例如「3 7 13 14 15」。"
+        return self._choice_lock(uid, platform, session)
+
+    def _choice_lock(self, uid: str, platform: str, session: ChoiceSession) -> str:
+        pool = self.snapshot.by_id(session.pool_id) if self.snapshot else None
+        choice = self._choice_pool(pool) if pool is not None else None
+        now = pool_module.timestamp_of()
+        if choice is None or not pool.is_active(now):
+            self._choices.pop((uid, platform), None)
+            return "这个池已经结束了，自选作废。"
+        wrote = self.store.lock_choice(
+            uid,
+            platform,
+            pool_id=session.pool_id,
+            six=session.six,
+            five=session.five,
+            when=economy.now_iso(),
+        )
+        self._choices.pop((uid, platform), None)
+        if not wrote:
+            # 并发下别人先写进去了：按库里的那份回，不谎报我们写成功了。
+            existing = self.store.choice_of(uid, platform, session.pool_id) or (
+                (),
+                (),
+            )
+            return render_choice_locked_already(
+                choice, self.roster.name_of, existing[0], existing[1]
+            )
+        return render_choice_locked(
+            choice, session.six, session.five, self.roster.name_of
         )
 
     def _exchange_pool(self, uid: str, platform: str, now: int):
@@ -744,36 +1073,72 @@ class GameGachaPlugin(Star):
             logger.info(f"[{PLUGIN_NAME}] 已清理过期水位组：{dirt}")
 
     def _purge_finished_limited(self, uid: str, platform: str, now: int) -> None:
-        """池结束惰性结算：删掉已结束池的 `limited_state` 行（剩余契约作废，R-08）。
+        """池结束惰性结算：删掉已结束池的 `limited_state` 与 `pool_choice` 行。
 
         为什么删行而不是把 `contracts` 写成 0：池 id 不复用，删掉之后这一期的契约再也
         读不回来，等价于归零；而「写 0」还得再留一个「已作废」的标记，否则下一次抽卡
-        又读到同一条记录。只处理这个用户名下真有的池，不做全表扫描。
+        又读到同一条记录。自选记录同理（R-19）：池结束了就没有「这一期选了谁」可言。
+        只处理这个用户名下真有的池，不做全表扫描。
         失败只告警：清理失败最多让过期契约多显示一次，不该挡住这次抽卡。
         """
         if self.store is None or self.snapshot is None:
             return
         try:
             owned = self.store.limited_pool_ids(uid, platform)
-            if not owned:
-                return
+        except sqlite3.Error as exc:
+            logger.warning(f"[{PLUGIN_NAME}] 结算过期契约失败：{exc}")
+            return
+        if owned:
             dead = [
                 pool_id
                 for pool_id in owned
                 if (found := self.snapshot.by_id(pool_id)) is None
                 or found.end_time <= now
             ]
-            if not dead:
-                return
-            removed = self.store.delete_limited_pools(uid, platform, dead)
+            if dead:
+                try:
+                    removed = self.store.delete_limited_pools(uid, platform, dead)
+                except sqlite3.Error as exc:
+                    logger.warning(f"[{PLUGIN_NAME}] 结算过期契约失败：{exc}")
+                else:
+                    if removed:
+                        logger.info(
+                            f"[{PLUGIN_NAME}] 已作废 {removed} 个池的剩余契约：{dead}"
+                        )
+
+        try:
+            chosen = self.store.choice_pool_ids(uid, platform)
         except sqlite3.Error as exc:
-            logger.warning(f"[{PLUGIN_NAME}] 结算过期契约失败：{exc}")
+            logger.warning(f"[{PLUGIN_NAME}] 结算过期自选失败：{exc}")
             return
-        if removed:
-            logger.info(f"[{PLUGIN_NAME}] 已作废 {removed} 个池的剩余契约：{dead}")
+        if not chosen:
+            return
+        dead_choices = [
+            pool_id
+            for pool_id in chosen
+            if (found := self.snapshot.by_id(pool_id)) is None or found.end_time <= now
+        ]
+        if not dead_choices:
+            return
+        try:
+            self.store.delete_choice_pools(uid, platform, dead_choices)
+        except sqlite3.Error as exc:
+            logger.warning(f"[{PLUGIN_NAME}] 结算过期自选失败：{exc}")
+            return
+        # 会话也一起扔掉：池都结束了，再「确认」也没有意义。
+        for key, session in list(getattr(self, "_choices", {}).items()):
+            if session.pool_id in dead_choices:
+                self._choices.pop(key, None)
 
     def _draw_and_commit(
-        self, uid: str, platform: str, pool, times: int, group_key: str
+        self,
+        uid: str,
+        platform: str,
+        pool,
+        times: int,
+        group_key: str,
+        *,
+        picked: tuple[tuple[str, ...], tuple[str, ...]] | None = None,
     ) -> PullOutcome:
         """一次抽卡的完整副作用：判余额、算结果、单事务入账。
 
@@ -795,7 +1160,7 @@ class GameGachaPlugin(Star):
                 channels=self.channel_rules.for_pool(pool),
                 pool_pulls=state.pool_pulls,
                 first10_hit=state.first10_hit,
-                up=self._up_targets(pool),
+                up=self._up_targets(pool, picked),
                 scope=self._scope(pool),
                 select=self._select_book(pool),
                 select_state=select_module.SelectState(
@@ -846,13 +1211,31 @@ class GameGachaPlugin(Star):
             contracts=state.contracts + self._contracts_for(pool) * times,
         )
 
-    def _up_targets(self, pool) -> UpTargets:
-        """本池的 UP 名单、份额与往期加权（R-11）。
+    def _up_targets(
+        self, pool, picked: tuple[tuple[str, ...], tuple[str, ...]] | None = None
+    ) -> UpTargets:
+        """本池的 UP 名单、份额与往期加权（R-11 / R-19）。
 
         名单独自缺失不该让池不可抽（R-14 降级链第 4 条）：少一次 UP 加成，玩家看到的
         只是「这个人怎么老歪」，而不可用会让整个池消失。所以名单缺失时只把份额置 0，
         限定范围仍照常生效——范围是从官方骨架推的，不依赖 PRTS。
+
+        自选池（`picked` 非空）走另一条路：名单是玩家锁定的那几个，份额按「人数 × 每人
+        份额」算，同时把官方范围作为 `six_range` / `five_range` 传下去——范围外的人该星级
+        不出。范围来自 `dynMeta`，与 PRTS 名单无关，所以这两类池不看 `banner`。
         """
+        choice_pool = self._choice_pool(pool)
+        if choice_pool is not None and picked is not None:
+            six, five = picked
+            return UpTargets(
+                six=six,
+                five=five,
+                six_share=choice_pool.share_of(6, six),
+                five_share=choice_pool.share_of(5, five),
+                six_range=choice_pool.six_range,
+                five_range=choice_pool.five_range,
+            )
+
         share = self.up_rules.for_pool(pool)
         banner = self.banners.get(pool.pool_id)
         scope = self._scope(pool)
@@ -868,6 +1251,14 @@ class GameGachaPlugin(Star):
             boost=boost,
             boost_factor=limited_module.BOOST_FACTOR,
         )
+
+    def _choice_pool(self, pool) -> choice_module.ChoicePool | None:
+        """本池如果是自选池就返回它的范围与名额，否则 None（R-19）。
+
+        `pick_rules` 用 `getattr` 取：测试会用 `__new__` 绕过 `__init__`，那里没有这个属性。
+        """
+        rules = getattr(self, "pick_rules", None) or {}
+        return choice_module.build(pool, rules.get(getattr(pool, "rule_type", "")))
 
     def _select_book(self, pool) -> select_module.SelectBook:
         """本池的选调规则：阈值来自 pool_rules.json，名单来自 banners.json，口径看登记在哪张表。
@@ -971,7 +1362,11 @@ class GameGachaPlugin(Star):
         return self.limited.scope_for(pool, up_ids=up)
 
     def _up_text_map(self) -> dict[str, str]:
-        """池 id → 「UP 6★ A、B · 5★ C」，给 `/卡池查询` 用。"""
+        """池 id → 「UP 6★ A、B · 5★ C」，给 `/卡池查询` 用。
+
+        自选池换成「可出范围 N 名」：那些人是**候选**，不是 UP（UP 由玩家自选，见下方
+        那行自选状态）。把 36 名候选当 UP 全列出来，既占版面又让人以为概率已经生效。
+        """
         if self.roster is None:
             return {}
         result: dict[str, str] = {}
@@ -984,6 +1379,16 @@ class GameGachaPlugin(Star):
                 parts.append(f"UP {star}★ {names}")
             if parts:
                 result[pool_id] = " · ".join(parts)
+        snapshot = getattr(self, "snapshot", None)
+        if snapshot is not None:
+            for pool in snapshot.pools:
+                choice = self._choice_pool(pool)
+                if choice is None:
+                    continue
+                result[pool.pool_id] = (
+                    f"可出范围 {len(choice.six_range)} 名 6★ · "
+                    f"{len(choice.five_range)} 名 5★（/自选 查看并选定 UP）"
+                )
         return result
 
     def _boost_text_map(self) -> dict[str, str]:

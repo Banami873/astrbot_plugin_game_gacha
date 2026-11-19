@@ -333,6 +333,80 @@ def load_select_rules(rules_path: Path | str) -> SelectRules:
 
 
 @dataclass(frozen=True)
+class PickRule:
+    """自选池的名额与**每人**份额（R-19）。
+
+    存「每人占该星级的多少」而不是「选中者合计占多少」，因为官方给的就是每人比例
+    （中坚甄选的 `pickUpPerCharPercent` 是 0.25 / 0.1666625），且选中人数由配置决定：
+    合计 = 名额 × 每人。换成合计再反除，多一次除法就多一处能写错的地方。
+    """
+
+    six: int = 0
+    five: int = 0
+    six_per: float = 0.0
+    five_per: float = 0.0
+
+    def slots(self, star: int) -> int:
+        return self.six if star >= 6 else self.five
+
+    def per_char(self, star: int) -> float:
+        return self.six_per if star >= 6 else self.five_per
+
+    def share_of(self, star: int, picked: int) -> float:
+        """选中 `picked` 人时他们合计占该星级的份额，封顶 1.0。"""
+        return min(1.0, self.per_char(star) * max(0, picked))
+
+    @property
+    def usable(self) -> bool:
+        """名额与份额都成立才可用。"""
+        return (
+            self.six >= 1
+            and self.six_per > 0
+            and self.six_per * self.six <= 1.0001
+            and 0 <= self.five_per * self.five <= 1.0001
+        )
+
+
+def _parse_pick_rule(raw: Any) -> PickRule | None:
+    """读一条 `pick_by_rule_type` 记录。读不出来返回 None（= 该池型不自选）。"""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        rule = PickRule(
+            six=int(raw.get("six") or 0),
+            five=int(raw.get("five") or 0),
+            six_per=float(raw.get("six_per") or 0.0),
+            five_per=float(raw.get("five_per") or 0.0),
+        )
+    except (TypeError, ValueError):
+        return None
+    return rule if rule.usable else None
+
+
+def load_pick_rules(rules_path: Path | str) -> dict[str, PickRule]:
+    """读「池型 → 自选名额与份额」。
+
+    保证：文件缺失、JSON 损坏、某条写错时，只让对应池型不自选（退回普通池），不影响
+    其它池型——把 2 名写成 20 名会让整个池抽不出人，宁可少一个机制。
+    """
+    try:
+        raw = json.loads(Path(rules_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    table = raw.get("pick_by_rule_type")
+    if not isinstance(table, dict):
+        return {}
+    rules: dict[str, PickRule] = {}
+    for rule_type, payload in table.items():
+        rule = _parse_pick_rule(payload)
+        if rule is not None:
+            rules[str(rule_type)] = rule
+    return rules
+
+
+@dataclass(frozen=True)
 class LimitedRewardRules:
     """限定池的两件赠品：300 井阈值与每抽契约数（R-07 / R-08）。
 

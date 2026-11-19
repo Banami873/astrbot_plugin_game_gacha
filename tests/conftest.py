@@ -175,6 +175,12 @@ def warehouse_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def choice_mod() -> ModuleType:
+    """自选池：范围、名额、份额与「名字或序号」的解析。"""
+    return package_module("games.arknights.choice")
+
+
+@pytest.fixture(scope="session")
 def render_mod() -> ModuleType:
     """出图包：Assets / PortraitStore / Renderer / CardItem。"""
     return package_module("games.arknights.render")

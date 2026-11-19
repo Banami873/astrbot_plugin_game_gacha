@@ -113,6 +113,21 @@ _SCHEMA: tuple[str, ...] = (
         PRIMARY KEY (uid, platform, pool_id)
     )
     """,
+    # 自选池锁定的名单（R-19）。与 pool_select 分开：那张表记的是会归零的阈值计数，
+    # 这张表是一次性名单（提交即锁、不可改），两者生命周期与读写语义都不同。
+    # `six_ids` / `five_ids` 是逗号分隔的 char_id，顺序即官方 dynMeta 原序——
+    # 存在一个字段里而不是建两张表，是因为它们永远一起读、一起写、一起删。
+    """
+    CREATE TABLE IF NOT EXISTS pool_choice (
+        uid       TEXT NOT NULL,
+        platform  TEXT NOT NULL,
+        pool_id   TEXT NOT NULL,
+        six_ids   TEXT NOT NULL DEFAULT '',
+        five_ids  TEXT NOT NULL DEFAULT '',
+        locked_at TEXT NOT NULL,
+        PRIMARY KEY (uid, platform, pool_id)
+    )
+    """,
 )
 
 
@@ -124,6 +139,12 @@ def table_names() -> tuple[str, ...]:
     """
     pattern = r"CREATE TABLE IF NOT EXISTS\s+(\w+)"
     return tuple(re.findall(pattern, "\n".join(_SCHEMA), re.IGNORECASE))
+
+
+def _split_ids(raw: Any) -> tuple[str, ...]:
+    """把逗号串拆回 id 元组。空串给空元组，不产生 `[""]` 这种幽灵 id。"""
+    text = str(raw or "").strip()
+    return tuple(part for part in (item.strip() for item in text.split(",")) if part)
 
 
 @dataclass(frozen=True)
@@ -447,6 +468,77 @@ class Store:
         with self._session() as conn:
             cursor = conn.execute(
                 f"DELETE FROM limited_state WHERE uid = ? AND platform = ? "
+                f"AND pool_id IN ({placeholders})",
+                (uid, platform, *keys),
+            )
+            return cursor.rowcount
+
+    # ---- 自选池（R-19）---------------------------------------------------
+
+    def choice_of(
+        self, uid: str, platform: str, pool_id: str
+    ) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+        """这一池已锁定的自选名单，返回 `(6★ ids, 5★ ids)`；没有行时返回 None。
+
+        返回 None 而不是两个空元组：`()` 也可能是「配置里这一档本来就没有 5★」，
+        两者在调用方的意思完全不同（前者要拦住抽卡，后者是正常的空档）。
+        """
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT six_ids, five_ids FROM pool_choice "
+                "WHERE uid = ? AND platform = ? AND pool_id = ?",
+                (uid, platform, pool_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return _split_ids(row["six_ids"]), _split_ids(row["five_ids"])
+
+    def lock_choice(
+        self,
+        uid: str,
+        platform: str,
+        *,
+        pool_id: str,
+        six: Sequence[str],
+        five: Sequence[str],
+        when: str,
+    ) -> bool:
+        """写入锁定名单，返回是否真的写进去了。
+
+        **已有行时不覆盖**（`INSERT OR IGNORE`）：官方文案是「选定后本次寻访不可变更」，
+        R-19 据此定成提交即锁定。用「先查再写」也能做，但并发下会两边都以为自己是第一个；
+        交给主键冲突判断，这条规则就只有一处实现。
+        """
+        with self._session() as conn:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO pool_choice "
+                "(uid, platform, pool_id, six_ids, five_ids, locked_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (uid, platform, pool_id, ",".join(six), ",".join(five), when),
+            )
+            return cursor.rowcount > 0
+
+    def choice_pool_ids(self, uid: str, platform: str) -> tuple[str, ...]:
+        """这个用户名下已有自选记录的池 id，给惰性清理用（与 `limited_pool_ids` 同构）。"""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT pool_id FROM pool_choice WHERE uid = ? AND platform = ? "
+                "ORDER BY pool_id",
+                (uid, platform),
+            ).fetchall()
+        return tuple(str(row["pool_id"]) for row in rows)
+
+    def delete_choice_pools(
+        self, uid: str, platform: str, pool_ids: Iterable[str]
+    ) -> int:
+        """删掉这些池的自选记录，返回行数。池结束后调用，池 id 不复用故删行即清空。"""
+        keys = [str(key) for key in pool_ids]
+        if not keys:
+            return 0
+        placeholders = ",".join("?" for _ in keys)
+        with self._session() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM pool_choice WHERE uid = ? AND platform = ? "
                 f"AND pool_id IN ({placeholders})",
                 (uid, platform, *keys),
             )

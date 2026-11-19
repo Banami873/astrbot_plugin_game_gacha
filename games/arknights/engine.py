@@ -112,6 +112,12 @@ class UpTargets:
 
     `boost` 是剩余份额里额外加权的人（限定池的「同类最近三名限定」），权重为
     `boost_factor` 倍，其余人仍是 1 倍。这一步只作用于 6★：5★ 没有往期加权这回事。
+
+    `six_range` / `five_range` 是**可出范围**（自选池，R-19）：非空时该星级只从这几个人里
+    出，范围外的人一次都抽不到。它与 `six` 的区别是「全体候选」与「其中加权的那几个」——
+    中坚甄选 6★ 只出 12 名甄选对象，但只有自选的 2 名各占 25%，其余 10 名各 5%。
+    只靠 `six` 表达不了后者：现有的「名单内分 share、其余人分 1−share」里的「其余人」是
+    通道里的所有人，会把范围外的中坚干员放进来。
     """
 
     six: tuple[str, ...] = ()
@@ -121,6 +127,16 @@ class UpTargets:
     five_share: float = 0.0
     boost: tuple[str, ...] = ()
     boost_factor: float = 1.0
+    six_range: tuple[str, ...] = ()
+    five_range: tuple[str, ...] = ()
+
+    def range_of(self, star: int) -> tuple[str, ...]:
+        """该星级的可出范围；空元组表示不限（走通道）。"""
+        if star >= 6:
+            return self.six_range
+        if star == 5:
+            return self.five_range
+        return ()
 
     def ids_of(self, star: int) -> tuple[str, ...]:
         if star >= 6:
@@ -219,6 +235,7 @@ def candidates(
     *,
     channels: Collection[str],
     scope: PoolScope | None = None,
+    range_ids: Collection[str] = (),
 ) -> tuple[Character, ...]:
     """某一星级在本池的候选。
 
@@ -231,6 +248,11 @@ def candidates(
     `scope` 进一步收窄「限定」基础池：限定寻访只与**同系列、已解限**的限定干员共享池子，
     不筛的话 2021 年的「年」会从庆典池里冒出来。非限定池传 None。它只作用于 6★——
     与 `UpTargets.boost_of` 同一条边界：往期限定的范围与加权都只存在于 6★。
+
+    `range_ids` 是自选池（R-19）该星级的**可出范围**，非空时只留其中的人。它与
+    `pool.char_ids` 都是「只出这些」，区别在来源：`char_ids` 是官方整池名单（卫戍 10 名 6★），
+    按星级不分；`range_ids` 来自 `dynMeta.rarityPickCharDict`，6★ 与 5★ 各一份。两者可叠加，
+    谁先谁后不影响结果。
     """
     members = roster.of_rarity(star, channels=channels)
     scoped = filter_members(members, scope if star >= 6 else None)
@@ -239,6 +261,13 @@ def candidates(
         # 多放进几个人只影响手感，筛空会让整池抽不出 6★——与 R-14 降级链同一个取舍。
         scoped = members
     members = scoped
+    if range_ids:
+        wanted = set(range_ids)
+        narrowed = tuple(c for c in members if c.char_id in wanted)
+        # 范围与通道完全不交叉（快照没跟上、范围里全是别的池的人）时退回通道：
+        # 自选池一旦抽不出该星级，整池就废了，比多出几个人难看得多。
+        if narrowed:
+            members = narrowed
     if not pool.char_ids:
         return members
     listed = set(pool.char_ids)
@@ -336,7 +365,14 @@ def draw_batch(
         if force:
             star = 6
 
-        pool_chars = candidates(roster, pool, star, channels=channels, scope=scope)
+        pool_chars = candidates(
+            roster,
+            pool,
+            star,
+            channels=channels,
+            scope=scope,
+            range_ids=targets.range_of(star),
+        )
         if not pool_chars:
             raise ValueError(f"干员数据里没有 {star}★ 干员，请重新生成快照")
 
