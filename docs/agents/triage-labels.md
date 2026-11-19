@@ -14,6 +14,9 @@
 
 本地 markdown 跟踪器把它写进 issue 文件顶部的 `> Status:` 行，例如 `> Status: ready-for-agent`。
 
+交付后写 `> Status: done`，并在文件底部 `## Comments` 记下落地提交与对 Scope 的偏差。
+`done` 不在上面五个 triage role 里——它是执行结果，不是待裁决状态。
+
 ## 打 `ready-for-agent` 的四个条件
 
 缺一条就只能打 `ready-for-human` 或 `needs-info`：
