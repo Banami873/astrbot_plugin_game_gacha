@@ -10,12 +10,12 @@ from typing import Any, Mapping, Protocol, Sequence
 
 DIVIDER = "━" * 18
 
-# 与 core.pools.CATEGORY_ORDER 同值；单独写一份是为了不反向依赖查询层。
+# 与 games/arknights/pools.py 的 CATEGORY_ORDER 同值；单独写一份是为了不反向依赖查询层。
 CATEGORY_ORDER: tuple[str, ...] = ("限定", "常驻", "限时", "中坚", "联动", "其他")
 
 
 class PoolLike(Protocol):
-    """渲染只需要这三个方法，不关心它是不是 core.pools.Pool。"""
+    """渲染只需要这三个方法，不关心它是不是 games/arknights/pools.py 的 Pool。"""
 
     def local_window(self) -> tuple[str, str]: ...
     def remaining_text(self, now: int) -> str: ...
@@ -612,7 +612,7 @@ def render_pool_problem(
     now: int,
     known_categories: Sequence[str] = CATEGORY_ORDER,
 ) -> str:
-    """定池失败时说什么。`reason` 的取值见 `core.pools` 里的 `CHOICE_*`。
+    """定池失败时说什么。`reason` 的取值见 `games/arknights/pools.py` 里的 `CHOICE_*`。
 
     保证：每条都给出可执行的下一步（补字、换类别、或去查当前池），不只说「失败」。
     """

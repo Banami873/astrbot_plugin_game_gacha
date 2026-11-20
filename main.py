@@ -25,7 +25,7 @@ from astrbot.api.star import Context, Star, StarTools
 
 from .core import economy
 from .core import pity as pity_module
-from .core import pools as pool_module
+from .games.arknights import pools as pool_module
 from .core.store import LimitedDelta, PullCommit, Store
 from .games.arknights import banners as banner_module
 from .games.arknights import choice as choice_module

@@ -542,7 +542,7 @@ BANNER_PARSER_MODULE = "games.arknights.data"
 
 
 def _plugin_modules() -> tuple[Any, Any]:
-    """导入插件里的 `core.pools` 与名单解析模块。
+    """导入插件里的 `games.arknights.pools` 与名单解析模块。
 
     工具脚本不在包内运行，得先把插件目录塞进 `sys.path`。导入放在函数里而不是模块顶层：
     测试加载本文件时不该顺带把插件包也拉起来。
@@ -551,7 +551,7 @@ def _plugin_modules() -> tuple[Any, Any]:
         sys.path.insert(0, str(PLUGIN_DIR))
     import importlib
 
-    pools_module = importlib.import_module("core.pools")
+    pools_module = importlib.import_module("games.arknights.pools")
     banner_module = importlib.import_module(BANNER_PARSER_MODULE)
     return pools_module, banner_module
 

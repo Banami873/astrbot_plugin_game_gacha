@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-# 与 core/pools.py 的 CST 同值。刻意重复而不是互相 import：测试按文件路径独立加载模块，
+# 与 games/arknights/pools.py 的 CST 同值。刻意重复而不是互相 import：测试按文件路径独立加载模块，
 # 跨模块的相对导入在那里会失败。
 CST = timezone(timedelta(hours=8))
 

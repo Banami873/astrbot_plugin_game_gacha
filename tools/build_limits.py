@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
 
     limited = _plugin_module("games.arknights.limited")
     char_module = _plugin_module("games.arknights.roster")
-    pool_module = _plugin_module("core.pools")
+    pool_module = _plugin_module("games.arknights.pools")
 
     payload, problems = build_limits(
         args.snapshot,

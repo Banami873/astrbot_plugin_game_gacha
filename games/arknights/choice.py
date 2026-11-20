@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
-from ...core.pools import PickRule
+from .pools import PickRule
 from .exchange import resolve
 
 # 范围在 `dynMeta.rarityPickCharDict` 里的键。官方按 TIER_6 / TIER_5 分组，与星级一一对应。

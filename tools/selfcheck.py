@@ -116,7 +116,7 @@ def check_tables() -> tuple[list[str], list[str]]:
 def check_snapshots() -> tuple[str, list[str]]:
     """用插件自己的加载函数读一遍快照，返回一行摘要与问题列表。"""
     char_module = _plugin_module("games.arknights.roster")
-    pool_module = _plugin_module("core.pools")
+    pool_module = _plugin_module("games.arknights.pools")
     banner_module = _plugin_module("games.arknights.banners")
 
     problems: list[str] = []

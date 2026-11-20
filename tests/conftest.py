@@ -1,6 +1,6 @@
 """测试用的模块加载器。
 
-插件的 `core/` 与 `games/` 是相对导入的包（`from .core import pools`），直接
+插件的 `core/` 与 `games/` 是相对导入的包（`from .games.arknights import pools`），直接
 `import core` 会与 AstrBot 进程里其它同名模块撞车。测试改成按文件路径独立加载，
 每个模块在进程里只有一份，且不受 `sys.path` 顺序影响。
 
@@ -46,7 +46,7 @@ def package_module(dotted: str) -> ModuleType:
 
 @pytest.fixture(scope="session")
 def pools_mod() -> ModuleType:
-    return load_module("gacha_under_test_pools", PLUGIN_DIR / "core" / "pools.py")
+    return load_module("gacha_under_test_pools", PLUGIN_DIR / "games" / "arknights" / "pools.py")
 
 
 @pytest.fixture(scope="session")
@@ -121,7 +121,7 @@ def core_engine_mod() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def pools_pkg() -> ModuleType:
-    return package_module("core.pools")
+    return package_module("games.arknights.pools")
 
 
 @pytest.fixture(scope="session")

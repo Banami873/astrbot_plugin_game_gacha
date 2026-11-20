@@ -115,7 +115,7 @@ class TestParseBanners:
 
 
 class _Pool:
-    """对齐只看这几个属性，用不到 core.pools.Pool 的全套方法。"""
+    """对齐只看这几个属性，用不到 games/arknights/pools.py 里 Pool 的全套方法。"""
 
     def __init__(self, pool_id, rule_type, open_time, end_time, category, name=""):
         self.pool_id = pool_id
