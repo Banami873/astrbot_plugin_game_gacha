@@ -10,18 +10,28 @@
 
 三份资源，全部由 `tools/build_hsr_data.py` 生成或核对，运行时**不触网**。
 
+来源两个：
+
+- **卡池**：B站 wiki（`wiki.biligame.com/sr`）的 MediaWiki 接口。入口页「历史跃迁」用
+  `{{:跃迁/4.0}}` 这样的引用把各版本段拼进来，段页里每个 `{{跃迁/角色活动跃迁}}` 模板
+  就是一期卡池——名称、起止、5★/4★ UP 都在模板参数里，比解析渲染后的 HTML 稳。
+- **名册**：StarRailRes 仓库的 `index_min/cn/characters.json` 与 `light_cones.json`。
+
+原先打算用官方 wiki 的 `hoyowiki/wapi/gacha_pool`，2026-11-20 实测整个 `/hoyowiki/wapi/`
+前缀都是 404，已放弃。
+
 ### `resources/hsr/pools.json`
 
 ```json
 {
-  "fetched_at": "2026-11-20 22:00:00",
-  "source": "official-wiki",
+  "fetched_at": "2026-11-20 23:30:45",
+  "source": "biligame-wiki",
   "pools": [
     {
-      "pool_id": "125-1",
+      "pool_id": "067-1",
       "name": "愚戏众星",
-      "start_time": 1762749600,
-      "end_time": 1766386800,
+      "start_time": 1794362400,
+      "end_time": 1797922800,
       "up5": [{"id": "1511", "name": "星神★阿哈"}],
       "up4": [{"id": "1009", "name": "艾丝妲"}, {"id": "1110", "name": "玲可"}, {"id": "1207", "name": "驭空"}]
     }
@@ -29,23 +39,40 @@
 }
 ```
 
-- `pool_id`：`官方池 id` + `-` + `子池序号`。官方接口的 `id` 是「一批」，一个角色池对应其中一个子池条目。
-- `start_time` / `end_time`：unix 秒（UTC），来自官方 `start_time`（北京时间）减 8 小时。
-- `up5` / `up4`：来自子池条目的 `content/info`，星级由条目的 `ext.filter.text` 里的「星级/五星」「星级/四星」判定。
+- `pool_id`：`期数` + `-` + `卡池编号`（如 `067-1`）。期数是官方卡池序号，一个版本两期，
+  同一期的上半/下半各占一个编号。撞号说明 wiki 数据有问题，脚本直接报错而不是取一条。
+- `start_time` / `end_time`：wiki 上写的是北京时间（`2026/11/11 10:00`），按 UTC+8 解析成
+  unix 秒。全量历史都留着，按 `start_time` 倒序，运行时再按当前时刻过滤。
+- `up5` / `up4`：模板里「5星角色」「4星角色」是分列的，按全角顿号切开即可；`id` 由名字
+  反查名册得到，运行时只认 id。
 
-**抓取脚本的池型判定**（官方接口不给池型）：一个子池条目全部是**角色**页，且**恰好 1 个 5★**，则整条算一个角色活动跃迁；5★ 数量不为 1 的（多 UP 合集、联动）本轮跳过并打印说明。
+**抓取脚本的池型判定**（wiki 不给池型标签的语义保证，靠形状判）：
+
+| 形状 | 处理 |
+|---|---|
+| 5★ 恰好 1 人、4★ 恰好 3 人 | 角色活动跃迁，收 |
+| 5★ 2 人以上（铭心之萃这类多角色合集） | 跳过，打印原因 |
+| 4★ 为空（Fate 联动池） | 跳过，打印原因 |
+| 结束时间写「长期」（联动池） | 跳过，打印原因 |
+| 名字在名册里查不到 | 跳过，打印原因 |
+
+跳过不是失败：这些池本来就不在本轮范围里，但必须打印，免得「少了一个池」看不出是漏抓
+还是有意跳过。
 
 ### `resources/hsr/roster.json`
 
 ```json
 {
-  "characters": [{"id": "1511", "name": "星神★阿哈", "rarity": 5, "path": "elation", "element": "quantum"}],
+  "characters": [{"id": "1511", "name": "星神★阿哈", "rarity": 5, "path": "Elation", "element": "Quantum"}],
   "light_cones": [{"id": "20000", "name": "锋镝", "rarity": 3}]
 }
 ```
 
 - 角色来自 StarRailRes `index_min/cn/characters.json`，光锥来自同目录 `light_cones.json`。
-- `{NICKNAME}` 这类占位名（开拓者）**排除**，否则群里会抽出「{NICKNAME}」。
+  `path` / `element` 保留源站的英文原值。
+- `{NICKNAME}` 这类占位名（开拓者八条命途一人一个 id）**排除**，否则群里会抽出「{NICKNAME}」。
+- 重名角色补命途后缀，跟 wiki 的叫法对齐：名册里两个「三月七」，导出成「三月七•存护」和
+  「三月七•巡猎」，否则 5★/4★ UP 名单按名字反查会撞车。
 
 ### `resources/hsr/pool_rules.json`（手写，不抓）
 
@@ -55,12 +82,17 @@
     "base5": 0.6, "soft5": 74, "hard5": 90, "win5": 50,
     "base4": 5.1, "soft4": 9, "hard4": 10, "win4": 50
   },
-  "standard5": ["1003", "1004", "1101", "1102", "1103", "1104", "1209"]
+  "standard5": ["1003", "1004", "1101", "1104", "1107", "1209", "1211"]
 }
 ```
 
 - 概率参数取自参考实现（`HSR-Warp-Simulator` 的 `warp-setup.json`）：`baseRate5/6.0`、`max5/90`、`hard5/74`、`baseRate4/5.1`、`max4/10`、`hard4/9`、`winRate/50`。字段名在本仓库重命名以便读：`soft` = 开始陡升的那一抽，`hard` = 必出的那一抽。
-- `standard5`：常驻 5★ 七人（姬子 / 瓦尔特 / 布洛妮娅 / 杰帕德 / 克拉拉 / 彦卿 / 白露），歪了从这里出。取自参考仓库 `banners/regular.json`，按名字映射到 StarRailRes 的 id。
+- `standard5`：常驻 5★ 七人，歪了从这里出——姬子 1003 / 瓦尔特 1004 / 布洛妮娅 1101 /
+  杰帕德 1104 / 克拉拉 1107 / 彦卿 1209 / 白露 1211。编号由名册按名字反查得到，别手写。
+- 3.2 之后官方把常驻保底改成「玩家自选 7 位」，4.2 又扩了可选范围；本插件仍按最初这七人算，
+  这是 PRD 定的范围，不是数据没跟上。
+
+脚本首次运行时如果 `pool_rules.json` 不存在就从上面的常量写一份；存在则**不覆盖**，手改优先。
 
 ---
 
@@ -200,7 +232,8 @@ cd /e/Githubs/AstrBot
 ./.venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/build_hsr_data.py --check
 ```
 
-`--check` 只比对"仓库里的快照"与"现在网上抓到的"是否一致，不写文件。
+`--check` 只比对"仓库里的快照"与"现在网上抓到的"是否一致，不写文件，有差异退出码 1。
+`--offline` 不触网，只校验随包数据能被运行时读起来。
 
 三条测试（对应 PRD 验收）：
 
