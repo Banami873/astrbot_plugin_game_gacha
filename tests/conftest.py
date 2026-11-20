@@ -126,7 +126,7 @@ def pools_pkg() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def characters_mod() -> ModuleType:
-    return package_module("core.characters")
+    return package_module("games.arknights.roster")
 
 
 @pytest.fixture(scope="session")

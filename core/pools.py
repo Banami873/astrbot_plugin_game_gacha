@@ -58,7 +58,7 @@ FALLBACK_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
 # 没有对应 gachaRuleType，故不在名单内）。
 DEFAULT_UNIMPLEMENTED: frozenset[str] = frozenset({"BACKFLOW"})
 
-# 一个池能抽出哪几类基础池的干员。取值与 `core/characters.py` 的常量一致。
+# 一个池能抽出哪几类基础池的干员。取值与 `games/arknights/roster.py` 的常量一致。
 # 限定池与联动池都同时给 standard：两类池都只是「6★ 换成限定/联动」，低星与歪出来的
 # 六星仍来自标准池——联动干员里没有一个 3★ 或 4★，只给 linkage 会让抽到 3★ 时无人
 # 可抽。中坚池是独立生态，与标准、联动都不互通，这正是串池问题的源头。

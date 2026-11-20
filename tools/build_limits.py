@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     limited = _plugin_module("games.arknights.limited")
-    char_module = _plugin_module("core.characters")
+    char_module = _plugin_module("games.arknights.roster")
     pool_module = _plugin_module("core.pools")
 
     payload, problems = build_limits(

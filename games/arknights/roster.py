@@ -1,5 +1,9 @@
 """可抽取干员的字典：id、名字、星级、基础池。
 
+**方舟专属**：星级范围 3–6、四种基础池（`channels`）都是方舟的概念，所以本模块
+归在 `games/arknights/` 而不是 `core/`。`core/` 只保证「一次抽取产出 (星级, 物品 id)」
+这个形状，不解释星级叫什么、有几档。
+
 抽卡内核只认「星级」和「候选 id 列表」，不知道自己抽到的人叫什么——名字来自这份
 字典。字典随包（`resources/snapshot/characters.json`），由 `tools/build_data.py`
 从官方 `character_table.json` 与 PRTS 干员一览裁剪而来。

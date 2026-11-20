@@ -23,7 +23,6 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import At
 from astrbot.api.star import Context, Star, StarTools
 
-from .core import characters as char_module
 from .core import economy
 from .core import pity as pity_module
 from .core import pools as pool_module
@@ -34,6 +33,7 @@ from .games.arknights import engine as ark_engine
 from .games.arknights import exchange as exchange_module
 from .games.arknights import limited as limited_module
 from .games.arknights import linkage as linkage_module
+from .games.arknights import roster as roster_module
 from .games.arknights import select as select_module
 from .games.arknights import warehouse as warehouse_module
 from .games.arknights.engine import Batch, UpTargets
@@ -133,7 +133,7 @@ class GameGachaPlugin(Star):
         self.config = config or {}
         self.store: Store | None = None
         self.snapshot: pool_module.Snapshot | None = None
-        self.roster: char_module.Roster | None = None
+        self.roster: roster_module.Roster | None = None
         self.category_map: dict[str, tuple[str, ...]] = dict(
             pool_module.FALLBACK_CATEGORY_MAP
         )
@@ -221,7 +221,7 @@ class GameGachaPlugin(Star):
 
         # 干员字典与卡池快照分开装载：缺了干员表只是不能抽卡，查询仍然可用。
         try:
-            self.roster = char_module.load_roster(CHAR_SNAPSHOT_PATH)
+            self.roster = roster_module.load_roster(CHAR_SNAPSHOT_PATH)
         except FileNotFoundError:
             self._roster_error = f"干员数据不存在：{CHAR_SNAPSHOT_PATH.name}"
             logger.error(f"[{PLUGIN_NAME}] {self._roster_error}")

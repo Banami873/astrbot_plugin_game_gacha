@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Collection, Iterable, Sequence
 
-from ...core.characters import CHANNEL_LIMITED, Character
+from .roster import CHANNEL_LIMITED, Character
 
 # 系列与解限期都按游戏时间（UTC+8）判断，不能跟随机器时区：2026-11-01 07:00 在 UTC 下
 # 是 10-31 23:00，按本机时区取月份会把整个池子归到错误的系列（10 月不属于任何一档）。

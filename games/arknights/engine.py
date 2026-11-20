@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Collection, Mapping, Sequence
 
 from ...core import engine as core_engine
-from ...core.characters import Character, Roster
+from .roster import Character, Roster
 from . import linkage as linkage_module
 from . import select as select_module
 from .limited import PoolScope, filter_members
