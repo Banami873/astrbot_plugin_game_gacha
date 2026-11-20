@@ -205,3 +205,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 本机 agent 的工作记录（记忆、临时笔记），不入库
+.workbuddy/
