@@ -86,6 +86,47 @@ class TestConfigSchema:
             assert entry.get("hint"), key
 
 
+class TestAliases:
+    """方舟 9 条各挂 `/方舟*` 别名，星铁 6 条不挂。
+
+    别名是 AstrBot 的注册参数，写错或漏写不会报错——只是那条指令在群里「不存在」。
+    所以对着 `main.py` 的语法树核对，和自检取指令名用的是同一套办法。
+    """
+
+    @staticmethod
+    def _aliases(plugin_dir):
+        import ast
+
+        tree = ast.parse((plugin_dir / "main.py").read_text("utf-8"))
+        found: dict[str, set[str]] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call) or not decorator.args:
+                    continue
+                func = decorator.func
+                if (getattr(func, "attr", None) or getattr(func, "id", "")) != "command":
+                    continue
+                name = decorator.args[0].value
+                aliases = set()
+                for keyword in decorator.keywords:
+                    if keyword.arg == "alias" and isinstance(keyword.value, ast.Set):
+                        aliases = {item.value for item in keyword.value.elts}
+                found[name] = aliases
+        return found
+
+    def test_arknights_commands_have_fangzhou_alias(self, plugin_dir, help_mod):
+        aliases = self._aliases(plugin_dir)
+        for name in help_mod.command_names():
+            assert aliases[name] == {"方舟" + name}, name
+
+    def test_hsr_commands_have_no_alias(self, plugin_dir, pkg):
+        aliases = self._aliases(plugin_dir)
+        for name in pkg("games.hsr.views").command_names():
+            assert aliases[name] == set(), name
+
+
 class TestSelfcheck:
     def test_registered_commands_match_help(self, selfcheck_mod, help_mod, pkg):
         """15 条 = 方舟 9 + 星铁 6。两个游戏各有一份清单，各管自己那半边。"""
