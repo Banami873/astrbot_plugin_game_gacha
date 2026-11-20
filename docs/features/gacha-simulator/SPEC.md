@@ -656,14 +656,20 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 
 **模块契约**（供 issue 拆分，`core/` 与 `games/arknights/` 分工）
 
+`core/` 只放与游戏无关的东西，`games/<游戏>/` 放那个游戏的规则与文案。边界由
+`tests/test_architecture.py` 守着：core 不许 import games，core 的代码里不许出现方舟专有词
+（注释与文档字符串除外——那里的解释是要留的）。
+
 | 模块 | 职责 | 约束 |
 |---|---|---|
-| `core/engine.py` | `weights(counter, rates) → {star: weight}`、`pick_star(weights, rng) → 星级`、`pick_member(候选, rng) → 一个`、`advance(star, counter) → 新计数` | 纯函数，不 import IO、不读时间、不用全局随机源（rng 注入） |
-| `core/characters.py` | 干员字典：id / 名字 / 星级 / 限定标记 / 基础池，按星级与基础池取候选 | 只读 `characters.json`，不碰卡池与数据库 |
+| `core/engine.py` | `weights(counter, rates, top_star) → {star: weight}`、`pick_star`、`pick_member` / `pick_member_weighted`、`advance`、`six_rate`、`distance_to_hard_pity`；另有 `member_weights`（星级内 UP 份额与倍数）与 `raise_floor`（不足下限时抬上去） | 纯函数，不 import IO、不读时间、不用全局随机源（rng 注入）。最高星级、基础概率、软保底起点全部由调用方传入——方舟是 6★，星铁 / FGO / 蔚蓝档案 5★ 封顶 |
+| `core/pool.py` | `PoolBase`：池骨架（`pool_id` / `open_time` / `end_time`）与 `is_active` | 公共的只有这三件事；池名与池型各游戏不同（方舟要经 PRTS 兜底），不进 core |
+| `games/arknights/roster.py` | 干员字典：id / 名字 / 星级 / 限定标记 / 基础池，按星级与基础池取候选 | 只读 `characters.json`，不碰卡池与数据库 |
 | `core/pity.py` | 读 `pity_groups.json`；`group_key_of(pool)` 翻译组键、`is_expired` 判池是否结束、`purge_expired` 惰性清理 | 只碰 `pity` 表。代码里不得出现池型字面量（有测试对源码做断言），分组只从配置来 |
 | ~~`core/rules.py`~~ | 曾计划把两个规则文件的读取收成一层 | **不建立**（2026-11-15 决定）：`pool_rules.json` 的读取在 `core/pools.py`，`pity_groups.json` 的在 `core/pity.py`，各自与对应数据结构强耦合，抽一层纯配置模块只是多一次转发 |
-| `core/store.py` | 上述所有表的读写 + 事务边界 | 唯一允许写 `gacha.db` 的模块 |
-| `core/pools.py` | 池装载、类别过滤、前缀匹配（`choose_pool`）、active 判定 | 纯查询，不触网 |
+| `core/store.py` | 连接、`meta` / `users` / `inventory` 三张通用表、事务边界 | 通用表的唯一入口；游戏自己的表在 `games/<游戏>/store.py` |
+| `games/arknights/store.py` | 方舟五张表（水位 / 池内计数 / 选调 / 限定契约 / 自选名单）的建表与读写，`Store` 继承 `core.store.Store` | 表结构就是方舟机制（`select150_used`、`linkage_miss`…），换游戏必然换表，所以跟着游戏走 |
+| `games/arknights/pools.py` | 池装载、类别过滤、前缀匹配（`choose_pool`）、`Pool(PoolBase)` 的方舟字段（池型 / 类别 / `guarantee5*` / `dynMeta`） | 纯查询，不触网 |
 | `core/economy.py` | 签到、新人奖励、管理员发抽 | 只碰 `users` |
 | `games/arknights/engine.py` | 把 R-01~R-11 组装成「抽一次」的方舟语义；含前 N 抽保底的触发判定 | 调用 core 的三段式，不自己算 IO；水位组键由调用方传入，本模块不判断池型 |
 | `games/arknights/select.py` | 选调：R-05 的累计口径与 R-06 的连续口径共用 `SelectBook` / `SelectState`，`kind` 决定判定用哪个计数；`hit()` 判「这一抽的 6★ 是否被锁定」，`note()` 在每抽末尾推进连续计数 | 纯函数，不读库、不读配置；阈值与口径由调用方从 `pool_rules.json` 取好传进来，本模块不出现池型字面量 |
@@ -681,7 +687,30 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 | `games/arknights/render/draw.py` | 按参数表合成单抽与十连 | 只吃 `CardItem` 列表，不读库、不触网、不决定文案 |
 | `games/arknights/views.py` | 文字结果格式 | 不 import `core`，只吃传入对象 |
 | `games/arknights/help.py` | 指令清单（名字/用法/说明/是否限管理员）与 `/抽卡帮助` 文案 | 清单是唯一真相源：`selfcheck.py` 拿它比对 `main.py` 的注册，双向都不许不一致 |
-| `main.py` | 注册指令、转发、每用户锁 | 不含业务逻辑，目标 < 200 行 |
+| `games/arknights/service.py` | 规则组装（UP 份额、选调表、联动书、限定范围、契约与井）、`draw_and_commit`、兑换的选池与候选、池查询的两张文案表 | 纯规则映射只收它用到的规则表；要读存档的才收插件实例 |
+| `games/arknights/commands.py` | 九条指令的方法体、自选会话与自由文本接管、抽卡流程 `pull()` | 装饰器方法**不能**放这里：框架按 `handler.__module__` 找插件，子模块里的 `@filter.command` 会被静默跳过 |
+| `games/arknights/maintenance.py` | 过期水位、过期契约与自选记录的惰性结算 | 失败只告警，不挡这次抽卡 |
+| `games/arknights/render/glue.py` | 出图胶水：`CardItem` 组装、扔进线程绘制、失败降级文字、只留最近 40 张 | 不画图，只调度 |
+| `main.py` | 注册指令、装载数据、转调、每用户锁 | 不含业务逻辑，约 300 行（一半是生命周期） |
+
+**新游戏能不能套进 core**（2026-11-20 脑内检验，未写代码）
+
+四条判据，套不进去就说明接口缺东西：
+
+| 判据 | 方舟 | 星铁 | FGO | 蔚蓝档案 |
+|---|---|---|---|---|
+| 星级权重 + 软保底 | 3–6，51 抽起 +2% | 3–5，74 抽起陡升 | 1–5，无软保底 | 1–3，无软保底 |
+| 星级内分配（`member_weights`） | 6★ 50% / 限定 70% / 自选 100% | 50%（光锥 75%） | ★5 的 80% | 3★ 的 23% |
+| 抬下限（`raise_floor`） | 每池前 10 抽必 5★+ | 每 10 抽必 4★+ | 每十连 1 张★4+ | 每十连必 2★+ |
+| 跨抽次状态机 | 水位 / 联动 120 / 选调 150·300 | **50-50 歪了下次必中、定轨值** | 无 | 无 |
+| 累计天井 | 300 抽送当期 | **没有**（靠 90 抽硬保底） | 330 抽 | 200 抽点数兑换 |
+
+结论：**FGO 与蔚蓝档案能直接套**（都落在「权重 + 份额 + 阈值」三件套里，FGO 把软保底
+参数置空即可）；**星铁是最难的一个**——双池类型、大小保底状态机与定轨值都不是池内
+权重能表达的东西，只能作为该游戏自己的抽卡流程写在 `games/hsr/engine.py` 里。
+
+这正是本轮只定「池骨架 + 概率件」、不定 `Game` 协议的原因：星铁的状态机会逼出接口的
+真实形状，提前定就是猜。反过来，拿星铁当第一个第二游戏是有利的——它会把接口逼够宽。
 
 **配置项**（`_conf_schema.json`）
 

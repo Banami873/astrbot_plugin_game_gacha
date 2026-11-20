@@ -32,7 +32,7 @@ from .games.arknights.views import render_newbie_notice
 
 
 PLUGIN_NAME = "astrbot_plugin_game_gacha"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.2.0"
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"

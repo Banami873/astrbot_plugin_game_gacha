@@ -10,6 +10,22 @@ AstrBot 插件：明日方舟抽卡模拟器（星穹铁道缓一期，本期不
 潜能仓库，以及中坚甄选 / 定向甄选的**自选池**（范围与份额取自官方 `dynMeta`）均已接上，
 9 条指令全部可用。
 
+## 代码分层（2026-11-20 重构后）
+
+三个包，边界由 `tests/test_architecture.py` 守着（core 不许 import games，core 的代码里
+不许出现方舟专有词；注释与文档字符串不查）。
+
+| 层 | 放什么 | 不许做什么 |
+|---|---|---|
+| `core/` | 与游戏无关的件：概率数学（`engine.py`）、池骨架（`pool.py`）、水位分组语义（`pity.py`）、通用表与事务（`store.py`）、抽数经济（`economy.py`） | 不许 import `games/`；不许出现干员 / 寻访 / 契约这类方舟语义 |
+| `games/arknights/` | 方舟的规则、数据、文案与存档表。`roster.py`（干员字典）、`pools.py`（池与池型）、`store.py`（方舟五张表）、`engine.py`（抽一次的方舟语义）、`service.py`（规则组装与入账编排）、`commands.py`（指令体）、`maintenance.py`（惰性结算）、`render/`（出图） | 不许把通用数学再写一遍——那是 core 的活 |
+| `main.py` | 插件外壳：注册指令、装载数据、转调、每用户锁、生命周期 | 不许有业务逻辑；`@filter.command` **必须**写在这里 |
+
+加游戏时只新增 `games/<游戏>/`：自己的 store 表、自己的 engine、自己的 service 与
+commands，`core/` 一行不动。星铁、FGO、蔚蓝档案能不能套进 core 的四件（权重+软保底、
+星级内分配、抬下限、候选过滤）已经脑内验过，结论写在
+`docs/features/gacha-simulator/SPEC.md` 的模块契约旁。
+
 **执行顺序以 `docs/features/gacha-simulator/PLAN.md` 为准**（2026-11-15 用户调整）：
 先业务逻辑与抽卡行为 → 图层渲染 → 其他池子与机制 → 兑换等收尾。段 1（01-05、13）、
 段 2（11 出图）、12（帮助/配置/自检，2026-11-18 提前）、段 3（06 常驻/中坚选调、14 限时
@@ -36,10 +52,10 @@ cd /e/Githubs/AstrBot
   解析，写成「参数:」会让参数说明悄悄丢失。
 - **`@filter.on_llm_request` 的每个分支裸 `return`**：返回真值会中止整个 LLM 请求。
 - **每完成一个模块提交一次**：中文约定式前缀，正文列出改了哪些文件。
-- **文档改动走 `docs/agent` 分支**：给 agent 读的文档（`docs/`、`AGENTS.md`、`CONTEXT.md`、
-  `README.md`）在 `docs/agent` 上改并提交，不占 `master` 的提交历史。代码与运行时数据
-  （`main.py`、`core/`、`tools/`、`tests/`、`resources/`、`_conf_schema.json`、`metadata.yaml`）
-  留在 `master`。两边都要动时先做一边、提交，再切另一个分支。
+- **文档与代码同一分支、按模块分开提交**（2026-11-20 起，取代旧的 `docs/agent` 工作流）：
+  改哪个模块就同时改它的 `AGENTS.md` / `SPEC.md` / `CONTEXT.md` 描述，一起进入
+  `dev/v0.2`。旧约定让文档单独走一个分支，结果是重构期间两边互相描述不一致；
+  `docs/agent` 分支保留作历史，不再在上面开发。
 - **只改本仓库与 `data/plugin_data/astrbot_plugin_game_gacha/`**，其余目录只读。
 - **遇到分叉先问**：两条路都说得通时停下问用户，不替他选。
 - 改版本时 `metadata.yaml` 的 `version` 与代码里的版本常量同改。
