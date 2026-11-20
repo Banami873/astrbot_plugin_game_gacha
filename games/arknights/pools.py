@@ -16,6 +16,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from ...core.pool import PoolBase
+
 # 游戏时间是 UTC+8，展示与「今天」的判定都按它，不跟随机器时区。
 CST = timezone(timedelta(hours=8))
 
@@ -478,17 +480,14 @@ def category_of(rule_type: str, category_map: Mapping[str, Sequence[str]]) -> st
 
 
 @dataclass(frozen=True)
-class Pool:
-    """一个卡池的骨架。
+class Pool(PoolBase):
+    """一个方舟卡池：骨架（id / 起止）来自 `core/pool.py`，其余是方舟的语义。
 
     01 阶段只有官方表能给的部分：id、池型、起止、井与保底参数、名单池的 charId。
     池名要等 05 接入 PRTS 才有可靠的，现在能拿到真名就用，拿不到留空。
     """
 
-    pool_id: str
     rule_type: str
-    open_time: int  # unix 秒，UTC
-    end_time: int  # unix 秒，UTC；等于它就算已结束
     category: str
     gacha_index: int = 0
     name: str = ""
@@ -530,10 +529,6 @@ class Pool:
         if not isinstance(self.limit_param, Mapping):
             return ""
         return str(self.limit_param.get("limitedCharId") or "")
-
-    def is_active(self, now: int) -> bool:
-        """开池时刻含、结束时刻不含——官方表里两个池首尾相接是常态。"""
-        return self.open_time <= now < self.end_time
 
     def remaining_text(self, now: int) -> str:
         """剩余时间，形如「3 天 5 小时」。已结束时返回「已结束」，不出现负数。

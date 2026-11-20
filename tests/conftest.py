@@ -45,8 +45,13 @@ def package_module(dotted: str) -> ModuleType:
 
 
 @pytest.fixture(scope="session")
-def pools_mod() -> ModuleType:
-    return load_module("gacha_under_test_pools", PLUGIN_DIR / "games" / "arknights" / "pools.py")
+def pools_mod(pools_pkg) -> ModuleType:
+    """旧夹具名，等价于 `pools_pkg`。
+
+    `pools.py` 要 `from ...core.pool import PoolBase`，路径加载没有包上下文，只能整包导入，
+    于是两者拿到的是同一份模块。保留这个名字是因为 test_pools / test_views 用了它。
+    """
+    return pools_pkg
 
 
 @pytest.fixture(scope="session")
