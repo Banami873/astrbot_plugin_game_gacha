@@ -129,7 +129,8 @@ rate(n, base, soft, hard) =
 | 4★ | UP 3 人 + 其余 4★ 角色 | 4★ 大保底时必出 UP；否则 50% 出 UP（3 人均分）、50% 在其余 4★ 里等权 |
 | 3★ | 全部 3★ 光锥 | 等权 |
 
-`core/engine.py` 的 `member_weights(members, up_ids, share)` 正好表达这个句式（UP 拿 `share`，其余分 `1-share`），份额 `share=0.5`；大保底等价于 `share=1.0`。
+`core/engine.py` 的 `member_weights(item_ids, up_ids, share)` 正好表达这个句式（UP 拿
+`share`，其余分 `1-share`），份额 `share=0.5`；大保底等价于 `share=1.0`。
 
 ### 状态推进
 
@@ -137,11 +138,13 @@ rate(n, base, soft, hard) =
 |---|---|---|---|---|
 | 出 5★ UP | 0 | 0 | false | 保持 |
 | 出 5★ 非 UP | 0 | 0 | **true** | 保持 |
-| 出 4★ UP | 不变 | 0 | 保持 | false |
-| 出 4★ 非 UP | 不变 | 0 | 保持 | **true** |
+| 出 4★ UP | +1 | 0 | 保持 | false |
+| 出 4★ 非 UP | +1 | 0 | 保持 | **true** |
 | 出 3★ | +1 | +1 | 保持 | 保持 |
 
 - 出 5★ 时 4★ 计数归零：5★ 已经满足「4★ 以上」的保底。
+- 出 4★ 时 5★ 计数照常 +1：它记的是「距上次 5★ 几抽」，中间出了 4★ 不该让它停住，
+  否则 90 抽硬保底永远走不到。
 - 水位与保底**按 `group_key` 共享**，本轮只有 `character` 一个值；换池不重置。
 
 ---

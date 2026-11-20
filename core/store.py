@@ -67,6 +67,54 @@ def table_names(schema: Sequence[str] = _SCHEMA) -> tuple[str, ...]:
     return tuple(re.findall(pattern, "\n".join(schema), re.IGNORECASE))
 
 
+class Transaction:
+    """一次抽卡事务的句柄：扣抽数、入仓库、退出时核对条数。
+
+    只做每个游戏都要的那一段——余额扣减与仓库累加。游戏自己的表（水位、契约、选调）
+    用 `conn` 写在同一个事务里：异常或条数对不上时一起回滚。
+
+    给游戏模块用，不给指令层用；指令层拿到的应该是 `commit_pulls` 的结果对象。
+    """
+
+    def __init__(
+        self, conn: sqlite3.Connection, *, uid: str, platform: str, cost: int, when: str
+    ):
+        self.conn = conn
+        self.uid = uid
+        self.platform = platform
+        self.cost = cost
+        self.when = when
+        # 扣款是否成功。失败时 `tickets` 是没动过的余额，调用方据此回报「抽数不够」。
+        self.charged = False
+        self.tickets = 0
+        self.counts: dict[str, int] = {}
+        self.added = 0
+
+    def add_items(self, item_ids: Sequence[str]) -> dict[str, int]:
+        """把这些 id 计入仓库，返回每件的累计次数（同一件出现两次会记到 2）。
+
+        只负责入账与统计，不校验条数——校验在退出事务时统一做，免得每个调用方都要
+        记得比较一次 `len(item_ids) == cost`。
+        """
+        for item_id in item_ids:
+            self.conn.execute(
+                "INSERT INTO inventory (uid, platform, char_id, count, first_at) "
+                "VALUES (?, ?, ?, 1, ?) "
+                "ON CONFLICT(uid, platform, char_id) DO UPDATE SET count = count + 1",
+                (self.uid, self.platform, item_id, self.when),
+            )
+        self.added += len(item_ids)
+        for item_id in item_ids:
+            row = self.conn.execute(
+                "SELECT count FROM inventory "
+                "WHERE uid = ? AND platform = ? AND char_id = ?",
+                (self.uid, self.platform, item_id),
+            ).fetchone()
+            if row is not None:
+                self.counts[item_id] = int(row["count"])
+        return self.counts
+
+
 class Store:
     """一个 `gacha.db` 的句柄。
 
@@ -76,7 +124,6 @@ class Store:
 
     def __init__(self, db_path: Path | str):
         self.db_path = Path(db_path)
-
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
@@ -200,3 +247,43 @@ class Store:
                 (uid, platform),
             ).fetchall()
         return {str(row["char_id"]): int(row["count"]) for row in rows}
+
+    # ---- 抽卡事务 --------------------------------------------------------
+
+    @contextmanager
+    def transaction(
+        self, uid: str, platform: str, *, cost: int, when: str
+    ) -> Iterator[Transaction]:
+        """开一次抽卡事务，用法：
+
+            with store.transaction(uid, platform, cost=10, when=now) as tx:
+                if not tx.charged:
+                    return 「抽数不够」           # 余额在 tx.tickets，库里什么都没动
+                conn = tx.conn                    # 写本游戏自己的表
+                tx.add_items(item_ids)            # 入仓库
+
+        三条保证：扣款带 `tickets >= cost` 条件，扣不动就整块不成立；`add_items` 的条数
+        与 `cost` 不符时抛错并回滚（结果算漏一条不许入账）；调用方抛任何异常也回滚。
+        """
+        if cost <= 0:
+            raise ValueError(f"抽数必须为正，收到 {cost}")
+        with self._session() as conn:
+            tx = Transaction(
+                conn, uid=uid, platform=platform, cost=cost, when=when
+            )
+            cursor = conn.execute(
+                "UPDATE users SET tickets = tickets - ? "
+                "WHERE uid = ? AND platform = ? AND tickets >= ?",
+                (cost, uid, platform, cost),
+            )
+            row = conn.execute(
+                "SELECT tickets FROM users WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+            tx.tickets = int(row["tickets"]) if row else 0
+            tx.charged = cursor.rowcount == 1
+            yield tx
+            if tx.charged and tx.added != cost:
+                raise ValueError(
+                    f"结果 {tx.added} 条与抽数 {cost} 不一致，拒绝入账"
+                )
