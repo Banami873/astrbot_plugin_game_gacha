@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Collection, Mapping, Sequence
+from typing import Collection, Sequence
 
 from ...core import engine as core_engine
 from .roster import Character, Roster
@@ -25,6 +25,9 @@ from .limited import PoolScope, filter_members
 
 # R-01 基础概率：6★ 2%、5★ 8%、4★ 50%、3★ 40%。
 BASE_RATES: dict[int, float] = {6: 0.02, 5: 0.08, 4: 0.50, 3: 0.40}
+
+# 方舟最高星级。core 不知道一套概率封顶几星（星铁、FGO、蔚蓝档案都是 5★），所以要显式告诉它。
+TOP_STAR = 6
 
 # R-02：前 50 抽恒为基础概率，第 51 抽起每抽 +2%，第 99 抽封顶。
 SOFT_PITY_START = 50
@@ -89,17 +92,6 @@ def guarantee_count_of(pool) -> int:
     改数据即可，不用动代码。
     """
     return pool.guarantee5_count if pool.guarantee5_avail else 0
-
-
-def _force_five_star(star: int, table: Mapping[int, float], rng: core_engine.RandomLike) -> int:
-    """把一次不足 5★ 的结果抬到 5★ 以上（R-03）。
-
-    规则原文是「先按 6★ 概率判定，未中则落 5★」——所以这里再摇一次，用当前水位下的
-    6★ 权重做门槛。这一抽本来就能出 6★ 时直接放过，不再消耗随机数。
-    """
-    if star >= FIRST10_MIN_STAR:
-        return star
-    return 6 if rng.random() < table.get(6, 0.0) else 5
 
 
 @dataclass(frozen=True)
@@ -171,31 +163,17 @@ def member_weights(
 ) -> list[float]:
     """星级内每个人的权重：UP 分走 `share`，其余人分走 `1-share` 并可按倍数加权。
 
-    单独拆出来是为了能精确断言「5 倍」——靠抽样只能在 ±15% 的噪声里猜，而这里
-    `权重(加权者) / 权重(其他人)` 必须精确等于 `boost_factor`。
-
-    保证：返回与 `members` 等长、非负、总和为 1；`up_ids` 与本池候选不交叉时退回全 1。
+    算法在 `core/engine.member_weights`（它只认 id），这里把干员列表摊成 id 再对齐回人数——
+    core 不需要认识干员。四条份额规则（常驻/限定 50%、限定 70%、自选 100%）的差别只在
+    `share` 的数字，都在这里由调用方传进来。
     """
-    up_wanted = set(up_ids)
-    up = [m for m in members if m.char_id in up_wanted]
-    if not up or share <= 0 or len(up) == len(members):
-        # 没有可用名单、或名单等于全池：等权。「名单等于全池」时 share=1 也没意义，
-        # 因为剩下的份额无人可给，等权正是官方那种「池内只有名单上这些人」的形态。
-        return [1.0] * len(members)
-    if share >= 1.0:
-        # 剩余份额无人可给：名单内等分，名单外为 0。
-        each = 1.0 / len(up)
-        return [each if m.char_id in up_wanted else 0.0 for m in members]
-    boosted = set(boost_ids)
-    factor = boost_factor if boosted else 1.0
-    rest = [m for m in members if m.char_id not in up_wanted]
-    rest_raw = [factor if m.char_id in boosted else 1.0 for m in rest]
-    total_rest = sum(rest_raw)
-    up_weight = share / len(up)
-    weight_of = {m.char_id: up_weight for m in up}
-    for member, raw in zip(rest, rest_raw):
-        weight_of[member.char_id] = (1.0 - share) * raw / total_rest
-    return [weight_of[m.char_id] for m in members]
+    return core_engine.member_weights(
+        [member.char_id for member in members],
+        up_ids,
+        share,
+        boost_ids=boost_ids,
+        boost_factor=boost_factor,
+    )
 
 
 def _choose_member(
@@ -350,12 +328,15 @@ def draw_batch(
             rates=BASE_RATES,
             step=SOFT_PITY_STEP,
             soft_start=SOFT_PITY_START,
+            top_star=TOP_STAR,
         )
         star = core_engine.pick_star(table, rng)
         # 这是本池第 N 抽，前面还没出过 5★ 以上：兜底。第 N 抽之后不再强制，
         # 否则一个前 N 抽没记账的旧存档会在之后每一抽都白送 5★。
         if not hit and guarantee and pulls + 1 == guarantee:
-            star = _force_five_star(star, table, rng)
+            star = core_engine.raise_floor(
+                star, floor=FIRST10_MIN_STAR, top_star=TOP_STAR, weights_=table, rng=rng
+            )
 
         # 联动保底：把星级直接抬到 6★，比「前 N 抽必出 5★」更强，所以排在它之后。
         # 它改的是星级本身，与选调（只改 6★ 里是谁）不是一回事。
@@ -451,7 +432,7 @@ def draw_batch(
             picked = book.note(picked, star, chosen.char_id)
         if link is not None:
             linked = link.note(linked, star, chosen.char_id)
-        current = core_engine.advance(star, current)
+        current = core_engine.advance(star, current, top_star=TOP_STAR)
         # 300 井：本池累计抽数走到阈值那一刻赠送。与这一抽本身无关——它不产契约、不动水位，
         # 只是多进仓库一个人。目标不在干员表里（数据缺失）时不赠送也不置位，下次还能补。
         if well_at and not claimed and pulls == well_at and well_target:

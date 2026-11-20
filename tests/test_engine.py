@@ -174,3 +174,88 @@ class TestPityProgress:
             counter = core_engine_mod.advance(3, counter)
         assert counter == 98
         assert core_engine_mod.six_rate(counter) == pytest.approx(1.0)
+
+
+class TestTopStarIsAParameter:
+    """最高星级由调用方给：方舟 6★，星铁 / FGO / 蔚蓝档案都是 5★ 封顶。"""
+
+    def test_five_star_cap_raises_the_top_tier(self, core_engine_mod):
+        table = core_engine_mod.weights(
+            0, rates={5: 0.006, 4: 0.051, 3: 0.943}, top_star=5
+        )
+        assert table[5] == pytest.approx(0.006)
+        assert set(table) == {3, 4, 5}
+
+    def test_soft_pity_applies_to_five_star_cap(self, core_engine_mod):
+        table = core_engine_mod.weights(
+            80, rates={5: 0.006, 4: 0.051, 3: 0.943}, top_star=5, soft_start=74
+        )
+        assert table[5] > 0.006
+
+    def test_advance_resets_on_five_when_cap_is_five(self, core_engine_mod):
+        assert core_engine_mod.advance(5, 42, top_star=5) == 0
+        assert core_engine_mod.advance(4, 42, top_star=5) == 43
+
+    def test_missing_top_star_is_reported(self, core_engine_mod):
+        with pytest.raises(ValueError):
+            core_engine_mod.weights(0, rates={4: 0.5, 3: 0.5}, top_star=5)
+
+
+class TestMemberWeights:
+    """星级内分份额：UP 拿 share，其余拿 1-share，其中一部分可按倍数加权。"""
+
+    def test_equal_when_no_up_list(self, core_engine_mod):
+        assert core_engine_mod.member_weights(["a", "b", "c"], (), 0.5) == [1.0, 1.0, 1.0]
+
+    def test_up_takes_its_share_evenly(self, core_engine_mod):
+        weights = core_engine_mod.member_weights(["a", "b", "x", "y"], ("a", "b"), 0.5)
+        assert weights[0] == pytest.approx(0.25)
+        assert weights[1] == pytest.approx(0.25)
+        assert weights[2] == pytest.approx(0.25)
+        assert weights[3] == pytest.approx(0.25)
+
+    def test_share_one_zeroes_the_rest(self, core_engine_mod):
+        weights = core_engine_mod.member_weights(["a", "b", "x"], ("a",), 1.0)
+        assert weights == [1.0, 0.0, 0.0]
+
+    def test_boost_factor_is_exact(self, core_engine_mod):
+        weights = core_engine_mod.member_weights(
+            ["up", "old", "plain"], ("up",), 0.7, boost_ids=("old",), boost_factor=5.0
+        )
+        assert weights[0] == pytest.approx(0.7)
+        assert weights[1] / weights[2] == pytest.approx(5.0)
+        assert sum(weights) == pytest.approx(1.0)
+
+
+class TestRaiseFloor:
+    """不足下限时抬上去：按最高星级概率判一次，未中就刚好落在下限。"""
+
+    def test_above_floor_is_untouched_and_consumes_no_random(self, core_engine_mod):
+        rng = SeqRandom([])
+        assert (
+            core_engine_mod.raise_floor(
+                5, floor=4, top_star=5, weights_={5: 0.1, 4: 0.9}, rng=rng
+            )
+            == 5
+        )
+        assert rng._index == 0
+
+    def test_roll_under_top_rate_becomes_top_star(self, core_engine_mod):
+        # 0.05 < 5★ 的 10%：抬到封顶那一档
+        rng = SeqRandom([0.05])
+        assert (
+            core_engine_mod.raise_floor(
+                3, floor=4, top_star=5, weights_={5: 0.1, 4: 0.9}, rng=rng
+            )
+            == 5
+        )
+
+    def test_roll_over_top_rate_lands_on_floor(self, core_engine_mod):
+        # 0.5 > 10%：只抬到下限，不多给
+        rng = SeqRandom([0.5])
+        assert (
+            core_engine_mod.raise_floor(
+                3, floor=4, top_star=5, weights_={5: 0.1, 4: 0.9}, rng=rng
+            )
+            == 4
+        )

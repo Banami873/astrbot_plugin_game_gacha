@@ -4,17 +4,21 @@
 `advance` 推进水位计数。三者都是纯函数——不读时钟、不碰数据库、不用全局随机源：
 随机数发生器由调用方注入，测试才能用固定种子复现同一批结果。
 
-本模块不知道「方舟」，也不知道星级叫什么、有几档。基础概率、软保底起点这些数字
-全部由调用方传入，方舟的那一份在 `games/arknights/engine.py`。
+另外两个同形的件：`member_weights` 管「同一星级内怎么分」（UP 占份额、其余按倍数），
+`raise_floor` 管「不足某个下限时抬上去」（每池前 N 抽、每十连必出）。
+
+本模块不知道「方舟」，也不知道星级叫什么、有几档、最高是几星。基础概率、软保底起点、
+最高星级这些数字全部由调用方传入，方舟的那一份在 `games/arknights/engine.py`。
 """
 
 from __future__ import annotations
 
 from typing import Mapping, Protocol, Sequence, TypeVar
 
-# 权重表的键是星级。这里只声明顺序约定：越高星越先判，浮点累加到底时兜底也有据可依。
-HIGHEST_STAR = 6
-LOWEST_STAR = 3
+# `weights` / `advance` 的默认最高星级。方舟是 6★，星铁与蔚蓝档案 5★ 封顶、FGO 是 5★
+# 且从者礼装同为 5★，所以调用方**应当**显式传自己的最高星级；这里给 6 只是为了让既有
+# 调用不必一次性全改。
+DEFAULT_TOP_STAR = 6
 
 T = TypeVar("T")
 
@@ -56,34 +60,35 @@ def weights(
     rates: Mapping[int, float] | None = None,
     step: float = 0.02,
     soft_start: int = 50,
+    top_star: int = DEFAULT_TOP_STAR,
 ) -> dict[int, float]:
     """按水位算出各星级权重，形如 `{6: 0.02, 5: 0.08, 4: 0.5, 3: 0.4}`。
 
-    `rates` 是基础概率表，最高星级那一项在软保底后会被抬高，其余各档**按原比例**
-    瓜分剩下的概率——这样「2/8/50/40」在任意水位下都保持 8:50:40 的相对关系。
+    `rates` 是基础概率表，`top_star` 是这套概率里的最高星级（方舟 6、星铁与 FGO 5），
+    最高星级那一项在软保底后会被抬高，其余各档**按原比例**瓜分剩下的概率——这样
+    「2/8/50/40」在任意水位下都保持 8:50:40 的相对关系。
 
     保证：各档权重之和为 1（浮点误差内），每档都 > 0。
-    失败：`rates` 里除最高星外的基础概率之和为 0 时抛 `ValueError`——那样剩余概率
-    无处可分，硬算出全 0 会让抽卡永远落空。
+    失败：`rates` 里没有 `top_star` 这一档，或除它以外的基础概率之和为 0 时抛
+    `ValueError`——前者说明调用方传错了最高星级，后者剩余概率无处可分，硬算出全 0
+    会让抽卡永远落空。
     """
     table = dict(rates) if rates is not None else {6: 0.02, 5: 0.08, 4: 0.50, 3: 0.40}
-    if HIGHEST_STAR not in table:
-        raise ValueError(f"基础概率表缺少最高星级 {HIGHEST_STAR}")
-    top = six_rate(
-        counter, base=table[HIGHEST_STAR], step=step, soft_start=soft_start
-    )
-    others = {star: p for star, p in table.items() if star != HIGHEST_STAR}
+    if top_star not in table:
+        raise ValueError(f"基础概率表缺少最高星级 {top_star}")
+    top = six_rate(counter, base=table[top_star], step=step, soft_start=soft_start)
+    others = {star: p for star, p in table.items() if star != top_star}
     total = sum(others.values())
     if total <= 0:
         raise ValueError("除最高星级外的基础概率之和必须大于 0")
     rest = 1.0 - top
-    result = {HIGHEST_STAR: top}
+    result = {top_star: top}
     for star, p in others.items():
         result[star] = rest * p / total
     return result
 
 
-def advance(star: int, counter: int, *, top_star: int = HIGHEST_STAR) -> int:
+def advance(star: int, counter: int, *, top_star: int = DEFAULT_TOP_STAR) -> int:
     """推进水位：出了最高星级归零，否则 +1。
 
     保证：返回值非负；出最高星后一定是 0 而不是 1——差这一格会让硬保底晚一抽。
@@ -154,3 +159,65 @@ def distance_to_hard_pity(
 ) -> int:
     """距离最高星级硬保底还剩几抽，至少 1。"""
     return max(1, hard_pity - max(0, counter))
+
+
+def member_weights(
+    item_ids: Sequence[str],
+    up_ids: Sequence[str],
+    share: float,
+    *,
+    boost_ids: Sequence[str] = (),
+    boost_factor: float = 1.0,
+) -> list[float]:
+    """星级内每个候选的权重：UP 分走 `share`，其余分走 `1-share`，其中一部分可按倍数加权。
+
+    四个游戏的「星级内怎么分」都是这一个句式，差别只在 `share` 的数字：方舟 6★ 50%、
+    限定 70%、自选 100%；星铁 50%（光锥 75%）；FGO ★5 的 80%；蔚蓝档案 3★ 的 23%。
+    所以它是公因数，而不是方舟的规矩。
+
+    单独拆出来是为了能精确断言倍数——靠抽样只能在 ±15% 的噪声里猜，而这里
+    `权重(加权者) / 权重(其他人)` 必须精确等于 `boost_factor`。
+
+    保证：返回与 `item_ids` 等长、非负；`up_ids` 与候选不交叉时退回全 1。
+    """
+    up_wanted = set(up_ids)
+    up = [item for item in item_ids if item in up_wanted]
+    if not up or share <= 0 or len(up) == len(item_ids):
+        # 没有可用名单、或名单等于全池：等权。「名单等于全池」时 share=1 也没意义，
+        # 因为剩下的份额无人可给，等权正是官方那种「池内只有名单上这些人」的形态。
+        return [1.0] * len(item_ids)
+    if share >= 1.0:
+        # 剩余份额无人可给：名单内等分，名单外为 0。
+        each = 1.0 / len(up)
+        return [each if item in up_wanted else 0.0 for item in item_ids]
+    boosted = set(boost_ids)
+    factor = boost_factor if boosted else 1.0
+    rest = [item for item in item_ids if item not in up_wanted]
+    rest_raw = [factor if item in boosted else 1.0 for item in rest]
+    total_rest = sum(rest_raw)
+    up_weight = share / len(up)
+    weight_of = {item: up_weight for item in up}
+    for item, raw in zip(rest, rest_raw):
+        weight_of[item] = (1.0 - share) * raw / total_rest
+    return [weight_of[item] for item in item_ids]
+
+
+def raise_floor(
+    star: int,
+    *,
+    floor: int,
+    top_star: int,
+    weights_: Mapping[int, float],
+    rng: RandomLike,
+) -> int:
+    """把一次不足 `floor` 的结果抬到 `floor` 以上。
+
+    规则原文是「先按最高星级概率判定，未中则落 `floor`」——方舟前 10 抽必出 5★、
+    蔚蓝档案十连必出 2★ 都是这个句式，所以门槛用当前权重表里最高星那一项。
+    这一抽本来就在 `floor` 以上时直接放过，不再消耗随机数（消耗了会改变后续的抽样序列）。
+
+    保证：返回值要么是传入的 `star`，要么是 `floor` 或 `top_star`，不会更低。
+    """
+    if star >= floor:
+        return star
+    return top_star if rng.random() < weights_.get(top_star, 0.0) else floor
