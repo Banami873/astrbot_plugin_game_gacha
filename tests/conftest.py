@@ -51,7 +51,7 @@ def pools_mod() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def store_mod() -> ModuleType:
-    return load_module("gacha_under_test_store", PLUGIN_DIR / "core" / "store.py")
+    return package_module("games.arknights.store")
 
 
 @pytest.fixture(scope="session")

@@ -93,7 +93,7 @@ def check_commands() -> tuple[list[str], list[str]]:
 
 def check_tables() -> tuple[list[str], list[str]]:
     """在临时库上按 `_SCHEMA` 建表，回查真实表名，与声明的逐张比对。"""
-    store_module = _plugin_module("core.store")
+    store_module = _plugin_module("games.arknights.store")
 
     expected = store_module.table_names()
     with tempfile.TemporaryDirectory(prefix="gacha-selfcheck-") as folder:

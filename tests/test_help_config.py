@@ -114,7 +114,7 @@ class TestSelfcheck:
         assert re.fullmatch(r"commands=\d+ tables=\d+ snapshot=ok", first), first
 
     def test_reports_missing_table(self, selfcheck_mod, pkg, monkeypatch, capsys):
-        store_pkg = pkg("core.store")
+        store_pkg = pkg("games.arknights.store")
         original = store_pkg.table_names
         monkeypatch.setattr(
             store_pkg, "table_names", lambda: (*original(), "ghost_table")
