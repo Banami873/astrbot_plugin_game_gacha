@@ -57,6 +57,10 @@ cd /e/Githubs/AstrBot
   `dev/v0.2`。旧约定让文档单独走一个分支，结果是重构期间两边互相描述不一致；
   `docs/agent` 分支保留作历史，不再在上面开发。
 - **只改本仓库与 `data/plugin_data/astrbot_plugin_game_gacha/`**，其余目录只读。
+- **`initialize()` 里的接线没有普通用例守着**：测试都用 `__new__` 造插件实例绕开
+  `__init__`，所以「`main.py` 建库用错了 `Store`」这种错，594 条会全绿、线上第一条
+  指令就崩。改动 `main.py` 的导入后，跑
+  `tests/test_architecture.py::test_shell_uses_the_game_store`。
 - **遇到分叉先问**：两条路都说得通时停下问用户，不替他选。
 - 改版本时 `metadata.yaml` 的 `version` 与代码里的版本常量同改。
 

@@ -2,13 +2,18 @@
 
 `core/` 是与游戏无关的内核：概率数学、存档的通用表、卡池骨架。一旦有人把方舟的规则
 塞回去，抽卡逻辑就会重新长成「只有方舟能用」的样子，而这件事没有任何一条普通用例会
-失败——它只是「以后加星铁时才发现地基是斜的」。所以用两条检查代替「靠人记得」：
+失败——它只是「以后加星铁时才发现地基是斜的」。所以用三条检查代替「靠人记得」：
 
 1. `core/` 不许 import `games/`（哪怕只是拿一个常量）；
-2. `core/` 的**代码**里不许出现方舟专有词。
+2. `core/` 的**代码**里不许出现方舟专有词；
+3. 外壳接的存档必须是方舟那一份，不能是 core 的通用句柄。
 
 注意第 2 条只看代码：注释与文档字符串不查。core 里的注释大量在解释「为什么方舟的
 东西放在 games 而不在这里」，那些文字是要留着的。
+
+第 3 条是踩过的坑：`main.py` 曾把 `Store` 从 `core.store` 导入，于是 `initialize()`
+建出来的是通用句柄——库里三张表、`choice_of` 之类的方法一个都没有。所有用例都用
+`__new__` 造实例、绕开 `initialize`，所以 594 条全绿而线上第一条 `/十连 中坚` 就崩。
 """
 
 from __future__ import annotations
@@ -129,6 +134,17 @@ def test_core_code_has_no_arknights_wording(plugin_dir: Path):
     }
     offenders = {name: hits for name, hits in offenders.items() if hits}
     assert not offenders, f"core 的代码里出现了方舟专有词：{offenders}"
+
+
+def test_shell_uses_the_game_store(pkg):
+    """外壳建库必须用方舟的 `Store`，不是 core 的通用句柄。
+
+    通用句柄只有三张表、没有 `choice_of` / `read_pull_state` 这些方法，接错了的
+    表现不是「报错」而是「抽卡到一半 AttributeError」，或者在空库上只剩三张表。
+    """
+    main_mod = pkg("main")
+    game_store = pkg("games.arknights.store")
+    assert main_mod.Store is game_store.Store
 
 
 def test_guard_catches_game_import(tmp_path: Path):
