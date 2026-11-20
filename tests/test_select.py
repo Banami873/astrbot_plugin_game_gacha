@@ -539,14 +539,11 @@ class TestConsecutiveStore:
 
 
 class TestSelectBookWiring:
-    """`main._select_book`：登记在哪张表决定口径，名单缺失就整条不启用。"""
+    """`service.select_book`：登记在哪张表决定口径，名单缺失就整条不启用。"""
 
-    def _instance(self, pkg, rules, banners):
-        main_mod = pkg("main")
-        instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
-        instance.select_rules = rules
-        instance.banners = banners
-        return instance
+    def _book(self, pkg, rules, banners, pool):
+        service = pkg("games.arknights.service")
+        return service.select_book(rules, banners, pool)
 
     def _banners(self, banners_mod, pool_id, up6=("char_a",)):
         return banners_mod.BannerBook({pool_id: banners_mod.Banner(pool_id=pool_id, name="测试池", up6=up6)})
@@ -554,26 +551,26 @@ class TestSelectBookWiring:
     def test_cumulative_table_means_cumulative_kind(self, pkg, pools_pkg, select_mod, banners_mod, plugin_dir):
         rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
         pool = _pool(pools_pkg, pool_id="DOUBLE_TEST", rule_type="DOUBLE")
-        book = self._instance(pkg, rules, self._banners(banners_mod, pool.pool_id))._select_book(pool)
+        book = self._book(pkg, rules, self._banners(banners_mod, pool.pool_id), pool)
         assert book.thresholds == (150, 300)
         assert book.kind == select_mod.KIND_CUMULATIVE
 
     def test_consecutive_table_means_consecutive_kind(self, pkg, pools_pkg, select_mod, banners_mod, plugin_dir):
         rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
         pool = _single_pool(pools_pkg)
-        book = self._instance(pkg, rules, self._banners(banners_mod, pool.pool_id))._select_book(pool)
+        book = self._book(pkg, rules, self._banners(banners_mod, pool.pool_id), pool)
         assert book.thresholds == (150,)
         assert book.kind == select_mod.KIND_CONSECUTIVE
 
     def test_missing_banner_disables_the_whole_rule(self, pkg, pools_pkg, banners_mod, plugin_dir):
         rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
         pool = _single_pool(pools_pkg)
-        book = self._instance(pkg, rules, banners_mod.BannerBook({}))._select_book(pool)
+        book = self._book(pkg, rules, banners_mod.BannerBook({}), pool)
         assert book.enabled is False
         assert book.up6 == (), "名单缺失时不该带着名单继续锁人"
 
     def test_pool_type_with_no_table_has_no_select(self, pkg, pools_pkg, banners_mod, plugin_dir):
         rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
         pool = _pool(pools_pkg, pool_id="LIMITED_TEST", rule_type="LIMITED", category="限定")
-        book = self._instance(pkg, rules, self._banners(banners_mod, pool.pool_id))._select_book(pool)
+        book = self._book(pkg, rules, self._banners(banners_mod, pool.pool_id), pool)
         assert book.enabled is False
