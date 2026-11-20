@@ -82,3 +82,41 @@ def load_pools(path: Path | str) -> tuple[Pool, ...]:
 def active_pools(pools: Sequence[Pool], now: int) -> tuple[Pool, ...]:
     """当前在开的池。同一时刻只有一个，多于一个时由调用方提示「带池名」，不替玩家猜。"""
     return tuple(pool for pool in pools if pool.is_active(now))
+
+
+@dataclass(frozen=True)
+class PoolChoice:
+    """「这一抽该用哪个池」的判定结果。
+
+    `reason` 只有三种非空值：`none`（一期都没开）、`ambiguous`（多个池且没对上名字）、
+    `unknown`（给了名字但不在开着的池里）。`candidates` 是给用户看的候选，不含已结束的池。
+    """
+
+    pool: Pool | None
+    candidates: tuple[Pool, ...] = ()
+    reason: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.pool is not None
+
+
+def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
+    """挑一个池：只开一期就直接用，多期按池名匹配，匹配不上不猜。
+
+    只有一个池时不看 `query`——玩家把池名打错一个字，也不该因此抽不了卡。
+    """
+    active = active_pools(pools, now)
+    if not active:
+        return PoolChoice(None, active, "none")
+    if len(active) == 1:
+        return PoolChoice(active[0], active)
+    text = (query or "").strip()
+    if text:
+        hits = tuple(pool for pool in active if text in pool.name)
+        if len(hits) == 1:
+            return PoolChoice(hits[0], active)
+        if not hits:
+            return PoolChoice(None, active, "unknown")
+        return PoolChoice(None, hits, "ambiguous")
+    return PoolChoice(None, active, "ambiguous")

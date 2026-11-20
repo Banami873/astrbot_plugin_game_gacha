@@ -38,6 +38,18 @@ ARK_TERMS = (
     "guarantee5",
 )
 
+# 星铁的专有词。第二个游戏接进来之后，同一套判据要守两条线：core 里不许有方舟语义，
+# 也不许有星铁语义——否则「通用核心」又变成「先做了哪个游戏就长成哪个样子」。
+HSR_TERMS = (
+    "跃迁",
+    "星铁",
+    "星穹",
+    "命途",
+    "光锥",
+    "星轨",
+    "hsr",
+)
+
 # core/ 下的模块；新增 core 文件不需要改这里，用 glob 现取。
 CORE_DIR = "core"
 
@@ -118,6 +130,34 @@ def ark_wording(source: str) -> list[str]:
     return [term for term in ARK_TERMS if term in text]
 
 
+def hsr_wording(source: str) -> list[str]:
+    """代码里出现的星铁专有词。"""
+    text = code_only(source)
+    return [term for term in HSR_TERMS if term in text]
+
+
+def _game_files(plugin_dir: Path, game: str) -> list[Path]:
+    return sorted(
+        path
+        for path in (plugin_dir / "games" / game).rglob("*.py")
+        if "__pycache__" not in str(path)
+    )
+
+
+def cross_game_imports(plugin_dir: Path, game: str, other: str) -> dict[str, list[str]]:
+    """`games/<game>/` 里那些指向另一个游戏的 import。"""
+    hits: dict[str, list[str]] = {}
+    for path in _game_files(plugin_dir, game):
+        found = [
+            module
+            for module in imported_modules(path.read_text(encoding="utf-8"))
+            if other in module.split(".")
+        ]
+        if found:
+            hits[str(path.relative_to(plugin_dir))] = found
+    return hits
+
+
 def test_core_does_not_import_games(plugin_dir: Path):
     offenders = {
         path.name: game_imports(path.read_text(encoding="utf-8"))
@@ -134,6 +174,24 @@ def test_core_code_has_no_arknights_wording(plugin_dir: Path):
     }
     offenders = {name: hits for name, hits in offenders.items() if hits}
     assert not offenders, f"core 的代码里出现了方舟专有词：{offenders}"
+
+
+def test_core_code_has_no_hsr_wording(plugin_dir: Path):
+    offenders = {
+        path.name: hsr_wording(path.read_text(encoding="utf-8"))
+        for path in _core_files(plugin_dir)
+    }
+    offenders = {name: hits for name, hits in offenders.items() if hits}
+    assert not offenders, f"core 的代码里出现了星铁专有词：{offenders}"
+
+
+def test_games_do_not_import_each_other(plugin_dir: Path):
+    """两个游戏平级：各自完整，共用的只有 core。
+
+    允许互相 import 的后果不是报错，而是「改方舟顺手动了星铁」——两个模块从此只能一起改。
+    """
+    assert not cross_game_imports(plugin_dir, "arknights", "hsr")
+    assert not cross_game_imports(plugin_dir, "hsr", "arknights")
 
 
 def test_shell_uses_the_game_store(pkg):

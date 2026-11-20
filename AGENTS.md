@@ -13,18 +13,22 @@ AstrBot 插件：明日方舟抽卡模拟器（星穹铁道缓一期，本期不
 ## 代码分层（2026-11-20 重构后）
 
 三个包，边界由 `tests/test_architecture.py` 守着（core 不许 import games，core 的代码里
-不许出现方舟专有词；注释与文档字符串不查）。
+不许出现方舟或星铁专有词，两个 `games/` 子包互不 import；注释与文档字符串不查）。
 
 | 层 | 放什么 | 不许做什么 |
 |---|---|---|
-| `core/` | 与游戏无关的件：概率数学（`engine.py`）、池骨架（`pool.py`）、水位分组语义（`pity.py`）、通用表与事务（`store.py`）、抽数经济（`economy.py`） | 不许 import `games/`；不许出现干员 / 寻访 / 契约这类方舟语义 |
-| `games/arknights/` | 方舟的规则、数据、文案与存档表。`roster.py`（干员字典）、`pools.py`（池与池型）、`store.py`（方舟五张表）、`engine.py`（抽一次的方舟语义）、`service.py`（规则组装与入账编排）、`commands.py`（指令体）、`maintenance.py`（惰性结算）、`render/`（出图） | 不许把通用数学再写一遍——那是 core 的活 |
-| `main.py` | 插件外壳：注册指令、装载数据、转调、每用户锁、生命周期 | 不许有业务逻辑；`@filter.command` **必须**写在这里 |
+| `core/` | 与游戏无关的件：概率数学（`engine.py`）、池骨架（`pool.py`）、水位分组语义（`pity.py`）、通用表与事务（`store.py`）、抽数经济（`economy.py`） | 不许 import `games/`；不许出现干员 / 寻访 / 契约 / 跃迁 / 光锥这类某一款游戏的语义 |
+| `games/arknights/` | 方舟的规则、数据、文案与存档表。`roster.py`（干员字典）、`pools.py`（池与池型）、`store.py`（方舟五张表）、`engine.py`（抽一次的方舟语义）、`service.py`（规则组装与入账编排）、`commands.py`（指令体）、`maintenance.py`（惰性结算）、`render/`（出图） | 不许把通用数学再写一遍——那是 core 的活；不许 import `games/hsr/` |
+| `games/hsr/` | 星铁的规则、数据、文案与存档表。`roster.py`（角色与光锥）、`pools.py`（一期跃迁与选池）、`store.py`（`hsr_pity`）、`engine.py`（两条独立保底）、`service.py`（`HsrRuntime`，六样协议）、`commands.py`（指令体）、`views.py`（文案 + 指令清单） | 同上；不许 import `games/arknights/` |
+| `main.py` | 插件外壳：注册指令、装载数据、转调、每用户锁、生命周期、`games` 注册表 | 不许有业务逻辑；`@filter.command` **必须**写在这里 |
 
 加游戏时只新增 `games/<游戏>/`：自己的 store 表、自己的 engine、自己的 service 与
-commands，`core/` 一行不动。星铁、FGO、蔚蓝档案能不能套进 core 的四件（权重+软保底、
-星级内分配、抬下限、候选过滤）已经脑内验过，结论写在
-`docs/features/gacha-simulator/SPEC.md` 的模块契约旁。
+commands，`core/` 一行不动。星铁已按这条路走通（`docs/features/hsr-gacha/`），
+FGO、蔚蓝档案能不能套进 core 的四件（权重+软保底、星级内分配、抬下限、候选过滤）
+已经脑内验过，结论写在 `docs/features/gacha-simulator/SPEC.md` 的模块契约旁。
+
+**两个游戏的存档是两个文件**：方舟 `gacha.db`、星铁 `hsr.db`。抽数、仓库、水位全部
+各记各的——星铁的指令不能借用外壳的 `_register()`（那个写方舟的库），这是串账的入口。
 
 **执行顺序以 `docs/features/gacha-simulator/PLAN.md` 为准**（2026-11-15 用户调整）：
 先业务逻辑与抽卡行为 → 图层渲染 → 其他池子与机制 → 兑换等收尾。段 1（01-05、13）、

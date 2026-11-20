@@ -1,12 +1,13 @@
-"""《明日方舟》抽卡模拟器。
+"""游戏抽卡模拟器：明日方舟与崩坏：星穹铁道。
 
-在真实卡池里抽卡，把结果按游戏的样子画出来，并记住水位、选调进度与寻访数据契约。
+两个游戏各有一套规则、数据与存档（`gacha.db` / `hsr.db`），共用的只有 `core/` 里的数学
+与通用表。不带前缀的指令仍指方舟，`/方舟*` 是它的显式别名，`/星铁*` 走星铁。
 
 这个文件只做外壳该做的事：注册指令、装载数据、把事件转给业务模块、把回复发出去。
-业务分三层——`core/`（与游戏无关的数学、存档、卡池骨架）、`games/arknights/`
-（方舟的规则与文案）、`games/arknights/commands.py`（指令体）。指令的**装饰器方法**
-必须留在本文件：AstrBot 按 `handler.__module__` 找插件，定义在子模块里的
-`@filter.command` 会被静默跳过（见 AGENTS.md「运行」一节）。
+业务分三层——`core/`（与游戏无关的数学、存档、卡池骨架）、`games/<游戏>/`
+（规则与文案）、`games/<游戏>/commands.py`（指令体）。指令的**装饰器方法**必须留在
+本文件：AstrBot 按 `handler.__module__` 找插件，定义在子模块里的 `@filter.command` 会被
+静默跳过（见 AGENTS.md「运行」一节）。
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ from .games.arknights.commands import ChoiceSession
 from .games.arknights.render import glue as render_glue
 from .games.arknights.store import Store
 from .games.arknights.views import render_newbie_notice
+from .games.hsr import commands as hsr_commands
+from .games.hsr.service import HsrRuntime
 
 
 PLUGIN_NAME = "astrbot_plugin_game_gacha"
@@ -72,6 +75,9 @@ class GameGachaPlugin(Star):
         self._choices: dict[tuple[str, str], ChoiceSession] = {}
         self._load_error = ""
         self._roster_error = ""
+        # 游戏注册表：按 `game_id` 取运行时。方舟暂时指向插件自身（它已持有那批字段），
+        # 星铁是独立对象。等协议稳定了再把方舟抽成同样形状——那时才知道协议该装什么。
+        self.games: dict[str, object] = {"arknights": self, "hsr": HsrRuntime()}
         # 出图三件：素材/绘制器、立绘缓存、开关。关掉出图时三者都不建，
         # 连 PIL 都不 import——素材与字体也就不会被加载（R-18）。
         self.renderer = None
@@ -164,6 +170,16 @@ class GameGachaPlugin(Star):
 
         render_glue.setup_renderer(self, Path(data_dir))
 
+        # 星铁最后装载：它失败也只记日志，方舟的九条指令照常可用。
+        hsr = self.games["hsr"]
+        hsr.signin_reward = self.signin_reward
+        hsr.newbie_bonus = self.newbie_bonus
+        try:
+            await hsr.load(Path(data_dir))
+        except Exception as exc:  # noqa: BLE001 — 星铁装不上不能拖垮方舟
+            hsr.error = f"{type(exc).__name__}: {exc}"
+            logger.error(f"[{PLUGIN_NAME}] 星铁装载失败：{hsr.error}")
+
     # ---- 配置 ------------------------------------------------------------
 
     def _cfg_int(self, key: str, default: int) -> int:
@@ -219,58 +235,98 @@ class GameGachaPlugin(Star):
     # 每条只有三件事：把事件转给 `games/arknights/commands.py`、把回复发出去。
     # 指令名写在这里而不是业务模块，是因为 AstrBot 按函数定义所在的模块找插件。
 
-    @filter.command("抽卡帮助")
+    @filter.command("抽卡帮助", alias={"方舟抽卡帮助"})
     async def cmd_help(self, event: AstrMessageEvent):
         """看指令与规则说明。用法：/抽卡帮助"""
         async for chunk in ark_commands.cmd_help(self, event):
             yield chunk
 
-    @filter.command("卡池查询")
+    @filter.command("卡池查询", alias={"方舟卡池查询"})
     async def cmd_pool_query(self, event: AstrMessageEvent):
         """查看当前进行中的卡池。用法：/卡池查询 [限定|常驻|限时|中坚|联动|全部]"""
         async for chunk in ark_commands.cmd_pool_query(self, event):
             yield chunk
 
-    @filter.command("潜能仓库")
+    @filter.command("潜能仓库", alias={"方舟潜能仓库"})
     async def cmd_inventory(self, event: AstrMessageEvent):
         """看自己已获得的干员与潜能。用法：/潜能仓库 [页码]"""
         async for chunk in ark_commands.cmd_inventory(self, event):
             yield chunk
 
-    @filter.command("抽卡签到")
+    @filter.command("抽卡签到", alias={"方舟抽卡签到"})
     async def cmd_sign_in(self, event: AstrMessageEvent):
         """每日签到领抽数。用法：/抽卡签到"""
         async for chunk in ark_commands.cmd_sign_in(self, event):
             yield chunk
 
-    @filter.command("抽数修改")
+    @filter.command("抽数修改", alias={"方舟抽数修改"})
     async def cmd_adjust_tickets(self, event: AstrMessageEvent):
         """管理员给成员加减抽数。用法：/抽数修改 <整数，可为负> [@成员]"""
         async for chunk in ark_commands.cmd_adjust_tickets(self, event):
             yield chunk
 
-    @filter.command("单抽")
+    @filter.command("单抽", alias={"方舟单抽"})
     async def cmd_pull_single(self, event: AstrMessageEvent):
         """抽一次。用法：/单抽 [限定|常驻|限时|中坚|联动] [池名前缀]"""
         async for chunk in ark_commands.pull(self, event, 1):
             yield chunk
 
-    @filter.command("十连")
+    @filter.command("十连", alias={"方舟十连"})
     async def cmd_pull_ten(self, event: AstrMessageEvent):
         """抽十次。用法：/十连 [限定|常驻|限时|中坚|联动] [池名前缀]"""
         async for chunk in ark_commands.pull(self, event, 10):
             yield chunk
 
-    @filter.command("契约兑换")
+    @filter.command("契约兑换", alias={"方舟契约兑换"})
     async def cmd_contract_exchange(self, event: AstrMessageEvent):
         """用寻访数据契约换干员。用法：/契约兑换 <75|200|300> [干员名]"""
         async for chunk in ark_commands.cmd_contract_exchange(self, event):
             yield chunk
 
-    @filter.command("自选")
+    @filter.command("自选", alias={"方舟自选"})
     async def cmd_choice(self, event: AstrMessageEvent):
         """自选本期出率提升的干员。用法：/自选 [类别] [池名] [序号或名字...]"""
         async for chunk in ark_commands.cmd_choice(self, event):
+            yield chunk
+
+    # ---- 星穹铁道 --------------------------------------------------------
+    #
+    # 同样只有三行：转给 `games/hsr/commands.py`、把回复发出去。两条抽卡共用 `pull`。
+
+    @filter.command("星铁帮助")
+    async def cmd_hsr_help(self, event: AstrMessageEvent):
+        """看星铁的指令与规则。用法：/星铁帮助"""
+        async for chunk in hsr_commands.cmd_help(self, event):
+            yield chunk
+
+    @filter.command("星铁卡池")
+    async def cmd_hsr_pool(self, event: AstrMessageEvent):
+        """看正在开的角色活动跃迁。用法：/星铁卡池"""
+        async for chunk in hsr_commands.cmd_pool(self, event):
+            yield chunk
+
+    @filter.command("星铁签到")
+    async def cmd_hsr_sign_in(self, event: AstrMessageEvent):
+        """每日签到领抽数。用法：/星铁签到"""
+        async for chunk in hsr_commands.cmd_sign_in(self, event):
+            yield chunk
+
+    @filter.command("星铁单抽")
+    async def cmd_hsr_pull_single(self, event: AstrMessageEvent):
+        """角色活动跃迁抽一次。用法：/星铁单抽 [池名]"""
+        async for chunk in hsr_commands.pull(self, event, 1):
+            yield chunk
+
+    @filter.command("星铁十连")
+    async def cmd_hsr_pull_ten(self, event: AstrMessageEvent):
+        """角色活动跃迁抽十次。用法：/星铁十连 [池名]"""
+        async for chunk in hsr_commands.pull(self, event, 10):
+            yield chunk
+
+    @filter.command("星铁抽数修改")
+    async def cmd_hsr_adjust_tickets(self, event: AstrMessageEvent):
+        """管理员给成员加减抽数。用法：/星铁抽数修改 <整数，可为负> [@成员]"""
+        async for chunk in hsr_commands.cmd_adjust_tickets(self, event):
             yield chunk
 
     @filter.regex(r".+")

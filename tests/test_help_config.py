@@ -87,9 +87,13 @@ class TestConfigSchema:
 
 
 class TestSelfcheck:
-    def test_registered_commands_match_help(self, selfcheck_mod, help_mod):
-        assert selfcheck_mod.registered_commands() == sorted(help_mod.command_names())
-        assert "抽卡帮助" in selfcheck_mod.registered_commands()
+    def test_registered_commands_match_help(self, selfcheck_mod, help_mod, pkg):
+        """15 条 = 方舟 9 + 星铁 6。两个游戏各有一份清单，各管自己那半边。"""
+        hsr_views = pkg("games.hsr.views")
+        declared = sorted([*help_mod.command_names(), *hsr_views.command_names()])
+        assert len(declared) == 15
+        assert selfcheck_mod.registered_commands() == declared
+        assert "抽卡帮助" in declared and "星铁十连" in declared
 
     def test_table_names_match_database(self, store_mod, tmp_path):
         db = tmp_path / "tables.db"
