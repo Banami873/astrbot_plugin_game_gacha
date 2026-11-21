@@ -19,6 +19,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
 from .engine import Pulled, count_by_star, distance_to_hard
+from .store import (
+    EMBER_MONTH_LIMIT, EMBERS_PER_TICKET, STARDUST_PER_CONE,
+    STARDUST_PER_TICKET, STANDARD_MILESTONE,
+)
 from .pools import (
     KIND_CHARACTER,
     KIND_COLLAB_CHARACTER,
@@ -51,6 +55,14 @@ KIND_ORDER = (
     KIND_STANDARD,
 )
 
+# 星缘相邀：4.2 起 13 位候选里选 7 位，影响角色活动/联动池 5★ 歪掉的候选。
+# 前 7 位是常驻，接着三位是 3.2 加入，最后三位是 4.2 加入（官方更新说明）。
+STAR_INVITE_POOL = (
+    "1003", "1004", "1101", "1104", "1107", "1209", "1211",
+    "1102", "1205", "1208", "1221", "1302", "1006",
+)
+STAR_INVITE_SIZE = 7
+
 # 帮助里指令名的对齐宽度（终端显示列数，一个汉字两列）。
 _NAME_WIDTH = 26
 
@@ -77,6 +89,10 @@ COMMANDS: tuple[CommandDoc, ...] = (
         "管理员给成员增减抽数，可写负数",
         admin_only=True,
     ),
+    CommandDoc("星铁星缘相邀", "/星铁星缘相邀 [7 位角色名 | 重置]", "设置星缘相邀的 7 位歪池角色"),
+    CommandDoc("星铁常驻自选", "/星铁常驻自选 [5★角色名]", "查看 300 抽进度或领取常驻 5★"),
+    CommandDoc("星铁兑换", "/星铁兑换 [星芒|余烬|光锥 名字]", "用星芒/余烬换抽数或常驻光锥"),
+    CommandDoc("星铁仓库", "/星铁仓库", "看星魂、叠影与货币余额"),
 )
 
 
@@ -169,6 +185,27 @@ def render_pulls(
             else:
                 lines.append("下次 5★ 必出本期 UP")
     return "\n".join(lines)
+
+
+def render_pull_brief(
+    pulled: Sequence[Pulled], *, tickets: int, pity, rules, pool_kind: str
+) -> str:
+    """出图时跟在图片后面的那一行水位简报。
+
+    完整文字里有星级统计与 UP 提示；图里已经能一眼看出星级，所以只留水位与本批 UP，
+    不重复整段结果（方舟 `render_pull_brief` 同形）。
+    """
+    params = rules.params(pool_kind)
+    line = f"剩余 {tickets} 抽 · 距 5★ 硬保底还有 {distance_to_hard(pity, params)} 抽"
+    if pool_kind != KIND_STANDARD:
+        five_stars = [item for item in pulled if item.star == 5]
+        if five_stars:
+            up = [item for item in five_stars if item.is_up]
+            line += " · " + (
+                "本期 UP：" + "、".join(item.name for item in up)
+                if up else "下次 5★ 必出本期 UP"
+            )
+    return line
 
 
 def render_insufficient(tickets: int, cost: int) -> str:
@@ -342,6 +379,108 @@ def render_newbie_notice(bonus: int) -> str:
     return f"[新人礼] 星穹铁道首次使用，已发放 {bonus} 抽。"
 
 
+# ---- 星缘相邀与常驻自选 -------------------------------------------------
+
+
+def render_star_invite(names: Sequence[str], *, default: bool = False) -> str:
+    """当前星缘名单。`default` 为真表示玩家没设置过，显示的是随包默认值。"""
+    head = "【星穹铁道 · 星缘相邀】" + ("（当前为默认名单）" if default else "")
+    lines = [head, "角色活动/联动跃迁 5★ 歪了会从这 7 位里出："]
+    lines += [f"· {name}" for name in names]
+    lines += [
+        "",
+        "改名单：/星铁星缘相邀 名字1 名字2 …（给 7 位，可写 id）",
+        "恢复默认：/星铁星缘相邀 重置",
+    ]
+    return "\n".join(lines)
+
+
+def render_star_invite_set(names: Sequence[str]) -> str:
+    return "星缘相邀已更新：\n" + "\n".join(f"· {name}" for name in names)
+
+
+def render_star_invite_reset() -> str:
+    return "星缘相邀已恢复默认：7 位常驻 5★ 角色。"
+
+
+def render_star_invite_bad(problem: str, names: Sequence[str]) -> str:
+    """名单不合法：说清哪里不对，并列出可写的候选，不让玩家猜。"""
+    lines = [f"星缘相邀：{problem}", "", "可选角色（13 位里选 7 位）："]
+    lines += [f"· {name}" for name in names]
+    lines += ["", "例如：/星铁星缘相邀 姬子 瓦尔特 布洛妮娅 杰帕德 克拉拉 彦卿 白露"]
+    return "\n".join(lines)
+
+
+def render_standard_milestone(pulls: int, claimed: bool, names: Sequence[str]) -> str:
+    """群星跃迁 300 抽进度。"""
+    lines = [
+        "【星穹铁道 · 群星跃迁自选】",
+        f"累计跃迁 {min(pulls, STANDARD_MILESTONE)}/{STANDARD_MILESTONE} 抽",
+        "奖励已领取" if claimed else (
+            "满 300 抽可任选 1 位常驻 5★ 角色（仅限一次，不消耗抽数）"
+        ),
+    ]
+    if not claimed:
+        lines += ["", "可领取：", "· " + "、".join(names)]
+        lines += ["", "领取：/星铁常驻自选 角色名"]
+    return "\n".join(lines)
+
+
+def render_standard_claim(name: str) -> str:
+    return f"群星跃迁 300 抽奖励已领取：{name} 已加入仓库。"
+
+
+# ---- 星芒/余烬兑换与仓库 -------------------------------------------------
+
+
+def render_exchange(
+    stardust: int, embers: int, *, ember_used: int = 0,
+    cone_month: str = "", candidates: Sequence[str] = (),
+) -> str:
+    """商店面板：价格与本月额度都写明，免得玩家猜为什么换不了。"""
+    return "\n".join([
+        "【星穹铁道 · 凝滞虚影兑换】",
+        DIVIDER,
+        f"未熄的星芒 {stardust} · 未熄的余烬 {embers}",
+        "",
+        f"· 星芒 {STARDUST_PER_TICKET} → 1 抽（无限）：/星铁兑换 星芒",
+        f"· 余烬 {EMBERS_PER_TICKET} → 1 抽（本月 {ember_used}/{EMBER_MONTH_LIMIT}）：/星铁兑换 余烬",
+        f"· 星芒 {STARDUST_PER_CONE} → 常驻 5★ 光锥（每月 1 次）：/星铁兑换 光锥 名字",
+        "  " + "、".join(candidates) if candidates else "",
+        f"本月光锥额度：{'已用' if cone_month else '可用'}",
+    ])
+
+
+def render_exchange_tickets(method: str, tickets: int) -> str:
+    name = "星芒" if method == "stardust" else "余烬"
+    return f"兑换成功：花掉{name}，+1 抽，现在有 {tickets} 抽。"
+
+
+def render_exchange_cone(name: str) -> str:
+    return f"兑换成功：{name} 已加入仓库（本月额度已用）。"
+
+
+def render_exchange_bad(method: str) -> str:
+    if method == "embers":
+        return "余烬不够，或这个月的 5 次额度已用完。"
+    if method == "stardust":
+        return "星芒不够 20。"
+    return "用法：/星铁兑换 星芒 | 余烬 | 光锥 名字（/星铁兑换 看余额）"
+
+
+def render_warehouse(rows: Sequence[tuple[str, str, int]], stardust: int, embers: int) -> str:
+    """`rows` 是 `(名字, 类型标签, 累计获得次数)`。星魂上限 6、叠影上限 5。"""
+    lines = ["【星穹铁道 · 仓库】", DIVIDER]
+    if not rows:
+        lines.append("还没有重复的物品（首次获得不算星魂/叠影）。")
+    for name, label, count in rows:
+        is_cone = label == "叠影"
+        rank = min(5 if is_cone else 6, max(0, count - 1))
+        lines.append(f"· {name}　{label} {'S' if is_cone else 'E'}{rank}（获得 {count} 次）")
+    lines += ["", f"未熄的星芒 {stardust} · 未熄的余烬 {embers}"]
+    return "\n".join(lines)
+
+
 # ---- 帮助与异常 ----------------------------------------------------------
 
 
@@ -370,7 +509,10 @@ def render_help(*, signin_reward: int = 10, newbie_bonus: int = 30) -> str:
         "· 光锥活动跃迁：5★ 0.8%，第 66 抽起陡升，第 80 抽必出；75% 是 UP，同样歪了必中",
         "· 群星跃迁（常驻）：5★ 0.6%，第 90 抽必出，角色与光锥各半，没有 UP",
         "· 联动跃迁：规则同活动跃迁，但保底与活动跃迁分开算",
-        "· 4★ 一律每 10 抽必出；水位只在同类型池之间继承",
+        "· 4★ 一律每 10 抽必出，角色与光锥都会出；水位只在同类型池之间继承",
+        "· 星缘相邀：/星铁星缘相邀 可从 13 位 5★ 中选 7 位，角色池歪了从这 7 位里出",
+        "· 群星跃迁累计 300 抽可自选 1 位常驻 5★（/星铁常驻自选，仅限一次）",
+        "· 重复角色给星魂与星芒、重复光锥给叠影；兑换见 /星铁兑换",
         "",
         "■ 抽哪个池",
         "· 不带词：抽当期限定（本期新角色）。限定没开就报错，不会改抽常驻或复刻",

@@ -55,6 +55,36 @@ def pool_of(pools, pool_id):
     return next(pool for pool in pools if pool.pool_id == pool_id)
 
 
+# ---- 4★ 跨类型 ----------------------------------------------------------
+
+
+class TestFourStarCrossType:
+    def test_character_pool_four_star_includes_cones(self, engine, roster, pools, rules):
+        """角色活动跃迁的 4★ 位也会出光锥（官方：角色/光锥基础概率各半）。"""
+        pool = pool_of(pools, "char-067-1")
+        candidates, up_ids = engine._candidates(4, pool, roster, rules)
+        chars = {item.item_id for item in roster.characters_of(4)}
+        cones = {item.item_id for item in roster.cones_of(4)}
+        assert set(candidates) == chars | cones
+        assert up_ids == list(pool.up4_ids)
+
+    def test_four_star_up_share_unchanged(self, engine, roster, pools, rules):
+        """跨类型只改候选池，50% / 75% 的 UP 份额不受影响。"""
+        char_pool = pool_of(pools, "char-067-1")
+        cone_pool = pool_of(pools, "cone-067-1")
+        assert rules.params(char_pool.kind).win4 == 50.0
+        assert rules.params(cone_pool.kind).win4 == 75.0
+        char_candidates, char_up = engine._candidates(4, char_pool, roster, rules)
+        cone_candidates, cone_up = engine._candidates(4, cone_pool, roster, rules)
+        assert char_up and cone_up
+        char_weights = engine.member_weights(char_candidates, char_up, 0.5)
+        cone_weights = engine.member_weights(cone_candidates, cone_up, 0.75)
+        char_share = sum(w for item, w in zip(char_candidates, char_weights) if item in char_up)
+        cone_share = sum(w for item, w in zip(cone_candidates, cone_weights) if item in cone_up)
+        assert char_share == pytest.approx(0.5)
+        assert cone_share == pytest.approx(0.75)
+
+
 # ---- 光锥活动跃迁 --------------------------------------------------------
 
 
@@ -93,11 +123,16 @@ class TestLightConePool:
         # 七个常驻 + 本期 UP：不混进任何角色
         assert len(candidates) == 8
 
-    def test_four_star_candidates_are_cones_only(self, engine, roster, pools, rules):
+    def test_four_star_candidates_mix_characters_and_cones(
+        self, engine, roster, pools, rules
+    ):
+        """官方：4★ 位角色与光锥都出，UP 份额仍只给本期光锥。"""
         pool = pool_of(pools, "cone-067-1")
-        candidates, _ = engine._candidates(4, pool, roster, rules)
+        candidates, up_ids = engine._candidates(4, pool, roster, rules)
         cones = {item.item_id for item in roster.cones_of(4)}
-        assert set(candidates) <= cones
+        chars = {item.item_id for item in roster.characters_of(4)}
+        assert set(candidates) == cones | chars
+        assert up_ids == list(pool.up4_ids)
         assert pool.up4_ids[0] in candidates
 
     def test_seventy_five_percent_up_share(self, engine, roster, pools, rules):

@@ -53,7 +53,9 @@ class TestSchema:
     def test_table_names_include_core_tables(self, hsr_store_mod):
         names = hsr_store_mod.table_names()
         assert names[0:3] == ("meta", "users", "inventory")
-        assert names[-1] == "hsr_pity"
+        assert set(names[3:]) == {
+            "hsr_pity", "hsr_star_invite", "hsr_standard_milestone", "hsr_currency",
+        }
 
     def test_ensure_schema_is_idempotent(self, store):
         store.ensure_schema()

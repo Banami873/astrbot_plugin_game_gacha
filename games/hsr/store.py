@@ -13,10 +13,15 @@
 
 水位本身是「连续没出这个星级的次数」，与方舟的 `six_counter` 同形不同表：方舟一张表
 只记最高星级，星铁要记两条，所以不能共用。
+
+另外两张小表服务于玩家自选：`hsr_star_invite` 存「星缘相邀」选的 7 位 5★ 角色，
+`hsr_standard_milestone` 记群星跃迁累计抽数与 300 抽奖励是否已领。都按
+`(uid, platform)` 存，和抽数/水位同一个库、同一套事务。
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -38,7 +43,48 @@ _SCHEMA: tuple[str, ...] = (
         PRIMARY KEY (uid, platform, group_key)
     )
     """,
+    # 星缘相邀：13 选 7，存 id 列表；空行表示用默认的 7 位常驻角色。
+    """
+    CREATE TABLE IF NOT EXISTS hsr_star_invite (
+        uid       TEXT NOT NULL,
+        platform  TEXT NOT NULL,
+        item_ids  TEXT NOT NULL,
+        PRIMARY KEY (uid, platform)
+    )
+    """,
+    # 群星跃迁累计抽数：满 300 可领 1 位常驻 5★ 角色，一次性。
+    """
+    CREATE TABLE IF NOT EXISTS hsr_standard_milestone (
+        uid      TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        pulls    INTEGER NOT NULL DEFAULT 0 CHECK (pulls >= 0),
+        claimed  INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (uid, platform)
+    )
+    """,
+    # 星芒/余烬与每月兑换额度。兑换都在同一个事务里扣货币、加抽数/入仓库。
+    """
+    CREATE TABLE IF NOT EXISTS hsr_currency (
+        uid         TEXT    NOT NULL,
+        platform    TEXT    NOT NULL,
+        stardust    INTEGER NOT NULL DEFAULT 0 CHECK (stardust >= 0),
+        embers      INTEGER NOT NULL DEFAULT 0 CHECK (embers >= 0),
+        ember_month TEXT,
+        ember_count INTEGER NOT NULL DEFAULT 0,
+        cone_month  TEXT,
+        PRIMARY KEY (uid, platform)
+    )
+    """,
 )
+
+# 官方「群星跃迁 300 次可自选一名 5★ 角色，仅限一次」。
+STANDARD_MILESTONE = 300
+# 商店价：20 星芒换 1 抽（无限）；90 余烬换 1 抽（每月 5 次）；
+# 600 星芒换 1 张常驻 5★ 光锥（每月 1 次）。
+STARDUST_PER_TICKET = 20
+EMBERS_PER_TICKET = 90
+EMBER_MONTH_LIMIT = 5
+STARDUST_PER_CONE = 600
 
 
 def table_names() -> tuple[str, ...]:
@@ -95,6 +141,154 @@ class Store(CoreStore):
             four_guaranteed=bool(row["four_guaranteed"]),
         )
 
+    def star_invite(self, uid: str, platform: str) -> tuple[str, ...]:
+        """这名玩家自选的星缘名单；没选过返回空元组，由规则层回退默认值。"""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT item_ids FROM hsr_star_invite WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+        if row is None:
+            return ()
+        try:
+            ids = json.loads(str(row["item_ids"]))
+        except (TypeError, ValueError):
+            return ()
+        return tuple(str(i) for i in ids) if isinstance(ids, list) else ()
+
+    def set_star_invite(self, uid: str, platform: str, item_ids: Sequence[str]) -> None:
+        """覆盖星缘名单。校验名单内容在指令层做，这里只负责落库。"""
+        with self._session() as conn:
+            conn.execute(
+                "INSERT INTO hsr_star_invite (uid, platform, item_ids) VALUES (?, ?, ?) "
+                "ON CONFLICT(uid, platform) DO UPDATE SET item_ids = excluded.item_ids",
+                (uid, platform, json.dumps(list(item_ids), ensure_ascii=False)),
+            )
+
+    def clear_star_invite(self, uid: str, platform: str) -> None:
+        """恢复默认的 7 位常驻角色。"""
+        with self._session() as conn:
+            conn.execute(
+                "DELETE FROM hsr_star_invite WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            )
+
+    def milestone(self, uid: str, platform: str) -> tuple[int, bool]:
+        """群星跃迁累计抽数与是否已领 300 抽奖励。"""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT pulls, claimed FROM hsr_standard_milestone "
+                "WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+        if row is None:
+            return 0, False
+        return int(row["pulls"]), bool(row["claimed"])
+
+    def claim_standard(self, uid: str, platform: str, item_id: str, when: str) -> bool:
+        """满 300 抽后领 1 位常驻 5★：判定与入仓库在同一事务里，只能领一次。"""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT pulls, claimed FROM hsr_standard_milestone "
+                "WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+            if row is None or int(row["pulls"]) < STANDARD_MILESTONE or int(row["claimed"]):
+                return False
+            cursor = conn.execute(
+                "UPDATE hsr_standard_milestone SET claimed = 1 "
+                "WHERE uid = ? AND platform = ? AND claimed = 0",
+                (uid, platform),
+            )
+            if cursor.rowcount != 1:
+                return False
+            conn.execute(
+                "INSERT INTO inventory (uid, platform, char_id, count, first_at) "
+                "VALUES (?, ?, ?, 1, ?) "
+                "ON CONFLICT(uid, platform, char_id) DO UPDATE SET count = count + 1",
+                (uid, platform, str(item_id), when),
+            )
+        return True
+
+    def currency(self, uid: str, platform: str) -> tuple[int, int, str | None, int, str | None]:
+        """`(星芒, 余烬, 余烬兑换月份, 本月已换次数, 光锥兑换月份)`。"""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT stardust, embers, ember_month, ember_count, cone_month "
+                "FROM hsr_currency WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+        if row is None:
+            return 0, 0, None, 0, None
+        return (int(row["stardust"]), int(row["embers"]), row["ember_month"],
+                int(row["ember_count"]), row["cone_month"])
+
+    def exchange_tickets(self, uid: str, platform: str, method: str, month: str) -> bool:
+        """20 星芒换 1 抽（无限）或 90 余烬换 1 抽（每月限 5）。"""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT stardust, embers, ember_month, ember_count "
+                "FROM hsr_currency WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+            stardust = int(row["stardust"]) if row else 0
+            embers = int(row["embers"]) if row else 0
+            ember_month = row["ember_month"] if row else None
+            used = int(row["ember_count"]) if row else 0
+            if ember_month != month:
+                used = 0
+            if method == "stardust":
+                if stardust < STARDUST_PER_TICKET:
+                    return False
+                stardust -= STARDUST_PER_TICKET
+            elif method == "embers":
+                if embers < EMBERS_PER_TICKET or used >= EMBER_MONTH_LIMIT:
+                    return False
+                embers -= EMBERS_PER_TICKET
+                used += 1
+                ember_month = month
+            else:
+                raise ValueError(f"未知的兑换方式：{method}")
+            conn.execute(
+                "INSERT INTO hsr_currency "
+                "(uid, platform, stardust, embers, ember_month, ember_count) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(uid, platform) DO UPDATE SET "
+                "stardust = excluded.stardust, embers = excluded.embers, "
+                "ember_month = excluded.ember_month, ember_count = excluded.ember_count",
+                (uid, platform, stardust, embers, ember_month, used),
+            )
+            conn.execute(
+                "UPDATE users SET tickets = tickets + 1 WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            )
+        return True
+
+    def exchange_cone(self, uid: str, platform: str, cone_id: str,
+                      month: str, when: str) -> bool:
+        """600 星芒换 1 张常驻 5★ 光锥，每月一次。"""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT stardust, cone_month FROM hsr_currency "
+                "WHERE uid = ? AND platform = ?",
+                (uid, platform),
+            ).fetchone()
+            stardust = int(row["stardust"]) if row else 0
+            if stardust < STARDUST_PER_CONE or (row and row["cone_month"] == month):
+                return False
+            conn.execute(
+                "INSERT INTO hsr_currency (uid, platform, stardust, cone_month) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(uid, platform) DO UPDATE SET "
+                "stardust = excluded.stardust, cone_month = excluded.cone_month",
+                (uid, platform, stardust - STARDUST_PER_CONE, month),
+            )
+            conn.execute(
+                "INSERT INTO inventory (uid, platform, char_id, count, first_at) "
+                "VALUES (?, ?, ?, 1, ?) "
+                "ON CONFLICT(uid, platform, char_id) DO UPDATE SET count = count + 1",
+                (uid, platform, str(cone_id), when),
+            )
+        return True
+
     def commit_pulls(
         self,
         uid: str,
@@ -105,6 +299,9 @@ class Store(CoreStore):
         pity: Pity,
         item_ids: Sequence[str],
         when: str,
+        standard_add: int = 0,
+        stardust: int = 0,
+        embers: int = 0,
     ) -> PullCommit:
         """把一批抽卡结果一次性落库：扣抽数、写水位、累加仓库。
 
@@ -135,5 +332,20 @@ class Store(CoreStore):
                     1 if pity.four_guaranteed else 0,
                 ),
             )
+            if standard_add and group_key == "standard":
+                tx.conn.execute(
+                    "INSERT INTO hsr_standard_milestone (uid, platform, pulls) "
+                    "VALUES (?, ?, ?) ON CONFLICT(uid, platform) DO UPDATE SET "
+                    "pulls = pulls + excluded.pulls",
+                    (uid, platform, int(standard_add)),
+                )
+            if stardust or embers:
+                tx.conn.execute(
+                    "INSERT INTO hsr_currency (uid, platform, stardust, embers) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT(uid, platform) DO UPDATE SET "
+                    "stardust = stardust + excluded.stardust, "
+                    "embers = embers + excluded.embers",
+                    (uid, platform, int(stardust), int(embers)),
+                )
             counts = tx.add_items(item_ids)
         return PullCommit(committed=True, tickets=tx.tickets, counts=counts)

@@ -81,14 +81,17 @@ def _tables(path: Path) -> set[str]:
 
 
 def test_two_databases(plugin):
-    """两个库各在自己文件里：方舟 8 张，星铁 4 张。"""
+    """两个库各在自己文件里：方舟 8 张，星铁 7 张。"""
     ark_db = plugin.ark.store.db_path
     hsr_db = plugin.games["hsr"].store.db_path
     assert ark_db.name == "gacha.db" and hsr_db.name == "hsr.db"
     assert ark_db != hsr_db and hsr_db.exists()
 
     assert "pity" in _tables(ark_db) and "pool_choice" in _tables(ark_db)
-    assert _tables(hsr_db) == {"meta", "users", "inventory", "hsr_pity"}
+    assert _tables(hsr_db) == {
+        "meta", "users", "inventory", "hsr_pity",
+        "hsr_star_invite", "hsr_standard_milestone", "hsr_currency",
+    }
 
     # 两个 Store 不是同一个类：方舟那只有 choice_of，星铁这只没有。
     assert hasattr(plugin.ark.store, "choice_of")

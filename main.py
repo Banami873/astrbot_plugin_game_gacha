@@ -213,6 +213,30 @@ class GameGachaPlugin(Star):
         async for chunk in hsr_commands.cmd_adjust_tickets(self.hsr, event):
             yield chunk
 
+    @filter.command("星铁星缘相邀")
+    async def cmd_hsr_star_invite(self, event: AstrMessageEvent):
+        """设置星缘相邀的 7 位角色。用法：/星铁星缘相邀 [7 位名字 | 重置]"""
+        async for chunk in hsr_commands.cmd_star_invite(self.hsr, event):
+            yield chunk
+
+    @filter.command("星铁常驻自选")
+    async def cmd_hsr_standard_claim(self, event: AstrMessageEvent):
+        """查看 300 抽进度或领取。用法：/星铁常驻自选 [角色名]"""
+        async for chunk in hsr_commands.cmd_standard_claim(self.hsr, event):
+            yield chunk
+
+    @filter.command("星铁兑换")
+    async def cmd_hsr_exchange(self, event: AstrMessageEvent):
+        """星芒/余烬兑换。用法：/星铁兑换 [星芒|余烬|光锥 名字]"""
+        async for chunk in hsr_commands.cmd_exchange(self.hsr, event):
+            yield chunk
+
+    @filter.command("星铁仓库")
+    async def cmd_hsr_warehouse(self, event: AstrMessageEvent):
+        """看星魂、叠影与货币余额。用法：/星铁仓库"""
+        async for chunk in hsr_commands.cmd_warehouse(self.hsr, event):
+            yield chunk
+
     @filter.regex(r".+")
     async def on_choice_free_text(self, event: AstrMessageEvent):
         """接住自选会话里的裸消息（「3 7 13 14 15」「确认」「取消」）。

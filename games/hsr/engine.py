@@ -97,6 +97,9 @@ class Rules:
     collab_light_cone: Params | None = None
     standard5: tuple[str, ...] = ()
     standard_cone5: tuple[str, ...] = ()
+    # 「星缘相邀」玩家自选的 7 位：只改角色活动/联动池 5★ 歪掉的候选，
+    # 不改群星跃迁的可抽名单（官方 4.2 更新说明）。空时沿用 standard5。
+    star_invite5: tuple[str, ...] = ()
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "Rules":
@@ -137,9 +140,19 @@ class Rules:
             return self.standard
         return self.character
 
+    def with_invite(self, item_ids) -> "Rules":
+        """带上这名玩家的星缘相邀名单，返回一份新的规则（原对象不动）。"""
+        return replace(self, star_invite5=tuple(str(i) for i in item_ids))
+
     def off5(self, kind: str) -> tuple[str, ...]:
-        """非 UP 的 5★ 候选：光锥池从常驻光锥里歪，角色池从常驻角色里歪。"""
-        return self.standard_cone5 if kind in CONE_KINDS else self.standard5
+        """非 UP 的 5★ 候选：光锥池从常驻光锥里歪，角色池从星缘名单里歪。
+
+        群星跃迁不走这里（`_pick_standard` 有自己的两类各半），所以给
+        `star_invite5` 赋值不会让自选的限定角色混进常驻池。
+        """
+        if kind in CONE_KINDS:
+            return self.standard_cone5
+        return self.star_invite5 or self.standard5
 
 
 @dataclass(frozen=True)
@@ -195,9 +208,11 @@ def _candidates(
         return up + others, up
     if star == 4:
         up = list(pool.up4_ids)
-        pool_items = (
-            roster.cones_of(4) if pool.kind in CONE_KINDS else roster.characters_of(4)
-        )
+        # 官方口径（wiki「跃迁」）：4★ 对象里角色与光锥都会出——角色活动跃迁的
+        # 4★ 基础 5.1% 是「角色 2.55% + 光锥 2.55%」，光锥池则是 3.3% + 3.3%。
+        # UP 份额只给本期同类 UP（角色池 50% / 光锥池 75%），剩下那份在**全部**
+        # 4★ 角色与光锥里均分。联动池 up4 为空，直接走同一句「名单空 → 等权」。
+        pool_items = (*roster.characters_of(4), *roster.cones_of(4))
         others = [item.item_id for item in pool_items if item.item_id not in up]
         return up + others, up
     return [item.item_id for item in roster.cones_of(3)], []
@@ -331,6 +346,49 @@ def draw_batch(
 def distance_to_hard(state: Pity, params: Params) -> int:
     """距离 5★ 硬保底还剩几抽，至少 1。文案用。"""
     return max(1, params.hard5 - state.five_counter)
+
+
+@dataclass(frozen=True)
+class Byproduct:
+    """一批抽卡产出的兑换货币。角色星魂/光锥叠影由仓库份数直接算，不另记。"""
+
+    stardust: int = 0   # 未熄的星芒
+    embers: int = 0     # 未熄的余烬
+
+
+def byproducts(
+    pulled: Sequence[Pulled],
+    before_counts: Mapping[str, int],
+    cone_ids: frozenset[str] | set[str],
+) -> Byproduct:
+    """按 wiki「消耗品和副产物」表算这一批给多少星芒/余烬。
+
+    光锥：5★ 40 星芒 / 4★ 8 星芒 / 3★ 20 余烬，每次都给（叠影不看次数）。
+    角色：首次给 0；第 2~7 次给 1 星魂 + 40（5★）或 8（4★）星芒；
+    第 8 次起溢出，只给 100（5★）或 20（4★）星芒。
+    同一批里出现两次的同一件要逐次计档，所以用 before_counts 逐件推进。
+    """
+    stardust = embers = 0
+    counts = {str(k): int(v) for k, v in before_counts.items()}
+    for item in pulled:
+        cid = str(item.item_id)
+        nth = counts.get(cid, 0) + 1
+        counts[cid] = nth
+        if cid in cone_ids:
+            if item.star == TOP_STAR:
+                stardust += 40
+            elif item.star == 4:
+                stardust += 8
+            else:
+                embers += 20
+            continue
+        if nth == 1:
+            continue
+        if nth <= 7:
+            stardust += 40 if item.star == TOP_STAR else 8
+        else:
+            stardust += 100 if item.star == TOP_STAR else 20
+    return Byproduct(stardust, embers)
 
 
 def count_by_star(pulled: Sequence[Pulled]) -> dict[int, int]:
