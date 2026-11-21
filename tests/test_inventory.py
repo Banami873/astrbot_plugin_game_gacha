@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -158,21 +157,14 @@ class TestRenderWarehouse:
 
 
 @pytest.fixture()
-def main_mod():
-    return importlib.import_module("data.plugins.astrbot_plugin_game_gacha.main")
-
-
-@pytest.fixture()
-def inventory_plugin(main_mod, store, real_roster):
-    instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
-    instance.config = {}
-    instance.store = store
-    instance.roster = real_roster
-    instance.snapshot = None
-    instance._load_error = ""
-    instance._roster_error = ""
-    instance.image_enabled = False
-    return instance
+def inventory_plugin(store, real_roster, make_ark_plugin):
+    return make_ark_plugin(
+        store=store,
+        roster=real_roster,
+        snapshot=None,
+        _load_error="",
+        _roster_error="",
+    )
 
 
 class TestInventoryCommand:

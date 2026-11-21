@@ -1,13 +1,13 @@
-"""星铁的指令体：取运行时、解析参数、拼回复。
+"""星铁的指令体：解析参数、拼回复。
 
 `main.py` 只保留指令名与转调——AstrBot 用 `handler.__module__` 找插件，定义在子模块里
 的 `@filter.command` 会被静默跳过（见 AGENTS.md「运行」一节），所以带装饰器的方法必须
-留在入口文件。这里收的是方法体：它们拿插件实例 `game` 与事件对象，产出
-`event.plain_result(...)`，由外壳 yield 出去。
+留在入口文件。这里收的是方法体：它们拿星铁的运行时 `rt`（`HsrRuntime`）与事件对象，
+产出 `event.plain_result(...)`，由外壳 yield 出去。
 
-`game` 就是插件实例，这里只用到这几样：`games["hsr"]`（运行时）、`_identity(event)`、
-`_lock_for(uid, platform)`。**不用** `game.store` / `game._register()`——那两样指向方舟的
-`gacha.db`，星铁的抽数与仓库在自己的 `hsr.db` 里，混用就会串账。
+与方舟的指令体同形：第一个参数都是运行时，跨游戏的东西走 `rt.shell`（身份、每用户锁）。
+**不用** `rt.shell._register()`——那个写的是方舟的 `gacha.db`，星铁的抽数与仓库在自己的
+`hsr.db` 里，混用就会串账。星铁的建档是 `rt.register(event)`。
 """
 
 from __future__ import annotations
@@ -17,68 +17,50 @@ from astrbot.api.message_components import At
 
 from ...core import economy
 from . import views
-from .service import HsrRuntime
 
 
-def _runtime(game) -> HsrRuntime | None:
-    """从外壳上取星铁运行时。没接线时返回 None，由各指令回一句明确的话。"""
-    games = getattr(game, "games", None) or {}
-    runtime = games.get("hsr")
-    return runtime if isinstance(runtime, HsrRuntime) else None
-
-
-async def pull(game, event: AstrMessageEvent, times: int):
+async def pull(rt, event: AstrMessageEvent, times: int):
     """单抽与十连共用：整个流程在 `HsrRuntime.pull` 里。"""
-    runtime = _runtime(game)
-    if runtime is None:
-        yield event.plain_result("星铁还没接上，请让管理员重启插件。")
-        return
-    async for chunk in runtime.pull(game, event, times):
+    async for chunk in rt.pull(rt.shell, event, times):
         yield chunk
 
 
-async def cmd_pool(game, event: AstrMessageEvent):
+async def cmd_pool(rt, event: AstrMessageEvent):
     """看正在开的角色活动跃迁。用法：/星铁卡池"""
-    runtime = _runtime(game)
-    if runtime is None:
-        yield event.plain_result("星铁还没接上，请让管理员重启插件。")
-        return
-    if not runtime.ready:
-        yield event.plain_result(views.render_not_ready(runtime.error))
+    if not rt.ready:
+        yield event.plain_result(views.render_not_ready(rt.error))
         return
 
-    notice = runtime.register(game, event)
-    now = runtime.clock()
-    active = runtime.active_pools(now)
+    notice = rt.register(event)
+    now = rt.clock()
+    active = rt.active_pools(now)
     if not active:
         yield event.plain_result(views.render_no_pool(now) + notice)
         return
     yield event.plain_result(views.render_pool(active, now) + notice)
 
 
-async def cmd_sign_in(game, event: AstrMessageEvent):
+async def cmd_sign_in(rt, event: AstrMessageEvent):
     """每日签到领抽数。用法：/星铁签到"""
-    runtime = _runtime(game)
-    if runtime is None or runtime.store is None:
-        yield event.plain_result(views.render_not_ready(runtime.error if runtime else ""))
+    if rt.store is None:
+        yield event.plain_result(views.render_not_ready(rt.error))
         return
 
-    notice = runtime.register(game, event)
-    uid, platform = game._identity(event)
+    notice = rt.register(event)
+    uid, platform = rt.shell._identity(event)
     result = economy.sign_in(
-        runtime.store,
+        rt.store,
         uid,
         platform,
         today=economy.local_day(),
-        reward=runtime.signin_reward,
+        reward=rt.signin_reward,
     )
     yield event.plain_result(views.render_signin(result) + notice)
 
 
-async def cmd_adjust_tickets(game, event: AstrMessageEvent):
+async def cmd_adjust_tickets(rt, event: AstrMessageEvent):
     """管理员给成员加减抽数。用法：/星铁抽数修改 <整数，可为负> [@成员]"""
-    runtime = _runtime(game)
-    if runtime is None or runtime.store is None:
+    if rt.store is None:
         yield event.plain_result("数据尚未就绪，请稍后再试。")
         return
     if not event.is_admin():
@@ -100,29 +82,22 @@ async def cmd_adjust_tickets(game, event: AstrMessageEvent):
         yield event.plain_result(f"单次改动不能超过 {economy.MAX_ADJUST}，请分几次发。")
         return
 
-    self_uid, platform = game._identity(event)
+    self_uid, platform = rt.shell._identity(event)
     target_uid = _target_of(event) or self_uid
     result = economy.adjust(
-        runtime.store,
+        rt.store,
         target_uid,
         platform,
         delta,
-        bonus=runtime.newbie_bonus,
+        bonus=rt.newbie_bonus,
     )
     label = "你" if target_uid == self_uid else f"成员 {target_uid}"
     yield event.plain_result(views.render_adjust(result, label, delta))
 
 
-async def cmd_help(game, event: AstrMessageEvent):
+async def cmd_help(rt, event: AstrMessageEvent):
     """看星铁的指令与规则。用法：/星铁帮助"""
-    runtime = _runtime(game)
-    text = (
-        runtime.help_text()
-        if runtime is not None
-        else views.render_help()
-    )
-    if runtime is not None:
-        text += runtime.register(game, event)
+    text = rt.help_text() + rt.register(event)
     yield event.plain_result(text)
 
 

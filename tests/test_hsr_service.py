@@ -55,12 +55,20 @@ class FakeGame:
     def __init__(self, runtime):
         self.games = {"arknights": self, "hsr": runtime}
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+        # 运行时从外壳取身份与锁（`rt.shell`），构造即绑定。
+        runtime.shell = self
 
     def _identity(self, event):
         return event.get_sender_id(), event.get_platform_name()
 
     def _lock_for(self, uid: str, platform: str) -> asyncio.Lock:
         return self._locks.setdefault((uid, platform), asyncio.Lock())
+
+
+def bound(runtime):
+    """给运行时绑好外壳，返回运行时本身——指令体收的就是运行时。"""
+    FakeGame(runtime)
+    return runtime
 
 
 def _collect(agen) -> str:
@@ -83,6 +91,7 @@ def hsr(pkg, tmp_path: Path):
     runtime = service.HsrRuntime(clock=lambda: FIXED_NOW)
     asyncio.run(runtime.load(tmp_path))
     assert runtime.ready, runtime.error
+    FakeGame(runtime)  # 绑上外壳：指令体从 rt.shell 取身份与锁
     return runtime
 
 
@@ -153,9 +162,9 @@ class TestChoosePool:
 class TestPull:
     def test_ten_pull_charges_and_stores(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        game = FakeGame(hsr)
+        FakeGame(hsr)
 
-        text = _collect(commands.pull(game, StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连"), 10))
 
         assert "角色活动跃迁" in text and "10 抽：" in text
         assert hsr.store.get_user(UID, PLATFORM)["tickets"] == 30 - 10
@@ -165,7 +174,7 @@ class TestPull:
 
     def test_single_pull_writes_one_item(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        text = _collect(commands.pull(FakeGame(hsr), StubEvent("星铁单抽"), 1))
+        text = _collect(commands.pull(hsr, StubEvent("星铁单抽"), 1))
         assert "1 抽：" in text
         assert sum(hsr.store.inventory_of(UID, PLATFORM).values()) == 1
 
@@ -173,9 +182,9 @@ class TestPull:
         commands = pkg("games.hsr.commands")
         # 新人礼由外壳注入到运行时上；这里只给 5 抽，抽不了十连。
         hsr.newbie_bonus = 5
-        game = FakeGame(hsr)
+        FakeGame(hsr)
 
-        text = _collect(commands.pull(game, StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连"), 10))
 
         assert "抽数不够" in text
         assert hsr.store.get_user(UID, PLATFORM)["tickets"] == 5
@@ -201,13 +210,13 @@ class TestPull:
 
         runtime = service.HsrRuntime(resource_dir=res, clock=lambda: FIXED_NOW)
         asyncio.run(runtime.load(tmp_path / "data"))
-        game = FakeGame(runtime)
+        bound(runtime)
 
-        text = _collect(commands.pull(game, StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(runtime, StubEvent("星铁十连"), 10))
         assert "2 个池" in text and "请带池名" in text
         assert runtime.store.get_user(UID, PLATFORM)["tickets"] == 30
 
-        text = _collect(commands.pull(game, StubEvent("星铁十连 二期"), 10))
+        text = _collect(commands.pull(runtime, StubEvent("星铁十连 二期"), 10))
         assert "二期测试" in text and "10 抽：" in text
 
     def test_not_loaded_says_so(self, pkg, tmp_path: Path):
@@ -216,7 +225,7 @@ class TestPull:
         runtime = service.HsrRuntime(resource_dir=tmp_path / "nothing")
         asyncio.run(runtime.load(tmp_path))
 
-        text = _collect(commands.pull(FakeGame(runtime), StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(bound(runtime), StubEvent("星铁十连"), 10))
         assert "还没装载" in text
 
 
@@ -226,26 +235,26 @@ class TestPull:
 class TestOtherCommands:
     def test_pool_list(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        text = _collect(commands.cmd_pool(FakeGame(hsr), StubEvent("星铁卡池")))
+        text = _collect(commands.cmd_pool(hsr, StubEvent("星铁卡池")))
         assert "愚戏众星" in text and "星神★阿哈" in text
         assert "剩 " in text
 
     def test_signin_once_a_day(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        game = FakeGame(hsr)
+        FakeGame(hsr)
 
-        first = _collect(commands.cmd_sign_in(game, StubEvent("星铁签到")))
+        first = _collect(commands.cmd_sign_in(hsr, StubEvent("星铁签到")))
         assert "签到成功 +10" in first
         assert hsr.store.get_user(UID, PLATFORM)["tickets"] == 40
 
-        second = _collect(commands.cmd_sign_in(game, StubEvent("星铁签到")))
+        second = _collect(commands.cmd_sign_in(hsr, StubEvent("星铁签到")))
         assert "已经领过" in second
         assert hsr.store.get_user(UID, PLATFORM)["tickets"] == 40
 
     def test_adjust_requires_admin(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
         text = _collect(
-            commands.cmd_adjust_tickets(FakeGame(hsr), StubEvent("星铁抽数修改 100"))
+            commands.cmd_adjust_tickets(hsr, StubEvent("星铁抽数修改 100"))
         )
         assert "只能管理员" in text
 
@@ -253,7 +262,7 @@ class TestOtherCommands:
         commands = pkg("games.hsr.commands")
         text = _collect(
             commands.cmd_adjust_tickets(
-                FakeGame(hsr), StubEvent("星铁抽数修改 100", admin=True)
+                hsr, StubEvent("星铁抽数修改 100", admin=True)
             )
         )
         assert "+100" in text

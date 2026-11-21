@@ -16,11 +16,11 @@ from astrbot.api import logger
 _LOG = "[astrbot_plugin_game_gacha]"
 
 
-def card_item(game, draft) -> object:
+def card_item(rt, draft) -> object:
     """把一条抽取结果变成渲染层的 `CardItem`：展示字段从干员字典补。"""
     from . import CardItem
 
-    character = game.roster.get(draft.char_id) if game.roster else None
+    character = rt.roster.get(draft.char_id) if rt.roster else None
     return CardItem(
         char_id=draft.char_id,
         name=draft.name,
@@ -31,16 +31,16 @@ def card_item(game, draft) -> object:
     )
 
 
-async def render_result_image(game, drafts, *, single: bool) -> Path | None:
+async def render_result_image(rt, drafts, *, single: bool) -> Path | None:
     """画一张结果图。失败返回 `None`，调用方降级为文字（R-15）。
 
     渲染是同步 CPU 操作（十连要解 10 张立绘、叠十几层），必须扔进线程，
     否则会把整个 AstrBot 的事件循环卡住。
     """
-    renderer = getattr(game, "renderer", None)
-    if renderer is None or not getattr(game, "image_enabled", False):
+    renderer = getattr(rt, "renderer", None)
+    if renderer is None or not getattr(rt, "image_enabled", False):
         return None
-    items = [card_item(game, draft) for draft in drafts]
+    items = [card_item(rt, draft) for draft in drafts]
     one = single and len(items) == 1
     try:
         if one:
@@ -69,42 +69,46 @@ def prune_images(folder: Path, keep: int = 40) -> None:
         pass
 
 
-def setup_renderer(game, data_dir: Path) -> None:
+def setup_renderer(rt, data_dir: Path) -> None:
     """按配置建绘制器与立绘缓存，然后起后台预热。
 
     出图是锦上添花：素材缺失、PIL 装不上、配置写坏，任何一种都只该让指令回到
     纯文字，不能让插件加载失败（R-15）。
+
+    配置项在外壳上（`enable_image` / `allow_network` / `image_quality`），所以这里经
+    `rt.shell` 取——绘制器与缓存挂在 runtime 上，它们只服务方舟。
     """
-    game.image_enabled = game._cfg_bool("enable_image", True)
-    if not game.image_enabled:
+    shell = rt.shell
+    rt.image_enabled = shell._cfg_bool("enable_image", True)
+    if not rt.image_enabled:
         logger.info(f"{_LOG} 出图已关闭，一律文字结果")
         return
     try:
         from . import Assets, PortraitStore, Renderer
     except Exception as exc:  # noqa: BLE001 — 缺 PIL 之类的环境问题不该拖垮插件
         logger.warning(f"{_LOG} 出图组件加载失败，改用文字：{exc}")
-        game.image_enabled = False
+        rt.image_enabled = False
         return
     cache_dir = data_dir / "cache"
-    game.portraits = PortraitStore(
+    rt.portraits = PortraitStore(
         cache_dir,
-        allow_network=game._cfg_bool("allow_network", True),
-        quality=str(game.config.get("image_quality") or "中"),
+        allow_network=shell._cfg_bool("allow_network", True),
+        quality=str(shell.config.get("image_quality") or "中"),
     )
-    game.renderer = Renderer(Assets(), game.portraits, out_dir=cache_dir / "render")
-    if game.portraits.allow_network and game.roster is not None:
+    rt.renderer = Renderer(Assets(), rt.portraits, out_dir=cache_dir / "render")
+    if rt.portraits.allow_network and rt.roster is not None:
         # 全量预热立绘：318 人两套图，600 多次请求，跑十几分钟。
         # 存进实例字段——`asyncio` 只持有 Task 的弱引用，不存引用会在 await 期间被 GC。
-        game._preload_task = asyncio.create_task(preload_portraits(game))
+        rt._preload_task = asyncio.create_task(preload_portraits(rt))
 
 
-async def preload_portraits(game) -> None:
+async def preload_portraits(rt) -> None:
     """后台把全部干员的立绘下载进缓存。失败只记日志，抽卡时会再试一次。"""
-    if game.portraits is None or game.roster is None:
+    if rt.portraits is None or rt.roster is None:
         return
-    characters = list(game.roster.characters)
+    characters = list(rt.roster.characters)
     try:
-        counts = await asyncio.to_thread(game.portraits.ensure_many, characters)
+        counts = await asyncio.to_thread(rt.portraits.ensure_many, characters)
     except Exception as exc:  # noqa: BLE001 — 预热失败不影响任何指令
         logger.warning(f"{_LOG} 立绘预热中断：{exc}")
         return

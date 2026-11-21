@@ -66,6 +66,8 @@ class HsrRuntime:
         self.pools: tuple[pool_module.Pool, ...] = ()
         self.rules: engine.Rules | None = None
         self.error = ""
+        # 外壳（插件）在装载前绑上来：身份与每用户锁都是跨游戏的，归它管。
+        self.shell = None
         # 奖励数值由外壳从配置注入；这里给默认值，单测可以直接用。
         self.signin_reward = economy.DEFAULT_SIGNIN_REWARD
         self.newbie_bonus = economy.DEFAULT_NEWBIE_BONUS
@@ -130,7 +132,7 @@ class HsrRuntime:
             signin_reward=self.signin_reward, newbie_bonus=self.newbie_bonus
         )
 
-    def register(self, game, event) -> str:
+    def register(self, event) -> str:
         """保证这个人在星铁库里已建档，返回要追加的新人礼提示（空串表示不用提示）。
 
         不能用外壳的 `_register`：那个写的是方舟的 `gacha.db`。两个游戏的抽数分开记是
@@ -138,7 +140,7 @@ class HsrRuntime:
         """
         if self.store is None:
             return ""
-        uid, platform = game._identity(event)
+        uid, platform = self.shell._identity(event)
         result = economy.ensure_user(
             self.store, uid, platform, bonus=self.newbie_bonus
         )
@@ -152,11 +154,15 @@ class HsrRuntime:
         锁里只做同步的读、算、写，不 yield：一次网络发送期间一直占着这个用户的锁，会让
         他连发两条时第二条无谓地等。
         """
+        # 协议里 `game` 是外壳；本对象在装载时已绑了同一个引用，这里再绑一次是为了
+        # 让「拿假的外壳顶替插件」的测试也能走通。
+        if game is not None:
+            self.shell = game
         if not self.ready:
             yield event.plain_result(views.render_not_ready(self.error))
             return
 
-        notice = self.register(game, event)
+        notice = self.register(event)
         now = self.clock()
         query = _query_of(event)
         choice = pool_module.choose_pool(self.pools, now, query)
@@ -170,13 +176,13 @@ class HsrRuntime:
             return
 
         pool = choice.pool
-        uid, platform = game._identity(event)
+        uid, platform = self.shell._identity(event)
         error = ""
         pulled: list[engine.Pulled] = []
         after: engine.Pity | None = None
         tickets_after = 0
 
-        async with game._lock_for(uid, platform):
+        async with self.shell._lock_for(uid, platform):
             user = self.store.get_user(uid, platform)
             tickets = int(user["tickets"]) if user else 0
             if tickets < times:

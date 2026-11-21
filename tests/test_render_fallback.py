@@ -150,9 +150,9 @@ class TestRenderFallbackInPull:
     """渲染出问题时，用户仍拿到文字，抽数与水位保持已入账。"""
 
     def _enable(self, plugin, renderer, portraits=None):
-        plugin.image_enabled = True
-        plugin.renderer = renderer
-        plugin.portraits = portraits
+        plugin.ark.image_enabled = True
+        plugin.ark.renderer = renderer
+        plugin.ark.portraits = portraits
         return plugin
 
     def test_broken_renderer_still_sends_text(self, plugin, store, pkg):
@@ -195,8 +195,8 @@ class TestRenderFallbackInPull:
         assert store.get_user("10001", "qq")["tickets"] == 20
 
     def test_image_disabled_sends_text_only(self, plugin, store):
-        plugin.image_enabled = False
-        plugin.renderer = object()
+        plugin.ark.image_enabled = False
+        plugin.ark.renderer = object()
         from test_isolation import FakeEvent, run
 
         text = run(plugin.cmd_pull_single(FakeEvent(message="单抽")))

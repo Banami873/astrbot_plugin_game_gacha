@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import dataclasses
-import importlib
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -361,11 +360,6 @@ class TestExchangeStore:
 
 
 @pytest.fixture()
-def main_mod():
-    return importlib.import_module("data.plugins.astrbot_plugin_game_gacha.main")
-
-
-@pytest.fixture()
 def live_pool(pools_pkg, real_snapshot):
     """把「将雪投火」延到 2100 年，得到一个进行中的庆典限定池。
 
@@ -383,29 +377,25 @@ def live_snapshot(pools_pkg, live_pool):
 
 @pytest.fixture()
 def exchange_plugin(
-    main_mod, store, live_snapshot, real_roster, real_banners, real_discounts,
-    limited_mod, pools_pkg, plugin_dir,
+    pkg, store, live_snapshot, real_roster, real_banners, real_discounts,
+    limited_mod, pools_pkg, plugin_dir, make_ark_plugin,
 ):
     """一个只装了兑换需要的零件的插件实例（绕开 Star.__init__）。"""
-    instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
-    instance.config = {}
-    instance.store = store
-    instance.snapshot = live_snapshot
-    instance.roster = real_roster
-    instance.banners = real_banners
-    instance.discounts = real_discounts
-    instance.limited = limited_mod.build_index(live_snapshot.pools)
-    instance.pity_groups = main_mod.pity_module.PityGroups()
-    instance.reward_rules = pools_pkg.load_limited_rewards(
-        plugin_dir / "resources" / "pool_rules.json"
+    return make_ark_plugin(
+        store=store,
+        snapshot=live_snapshot,
+        roster=real_roster,
+        banners=real_banners,
+        discounts=real_discounts,
+        limited=limited_mod.build_index(live_snapshot.pools),
+        pity_groups=pkg("core.pity").PityGroups(),
+        reward_rules=pools_pkg.load_limited_rewards(
+            plugin_dir / "resources" / "pool_rules.json"
+        ),
+        select_rules=pools_pkg.SelectRules(),
+        _load_error="",
+        _roster_error="",
     )
-    instance.select_rules = pools_pkg.SelectRules()
-    instance.image_enabled = False
-    instance.renderer = None
-    instance.portraits = None
-    instance._load_error = ""
-    instance._roster_error = ""
-    return instance
 
 
 def _seed_contracts(store, store_mod, *, contracts, pool_id=ANNIVERSARY_POOL):
@@ -432,7 +422,7 @@ class TestExchangeCommand:
 
     def test_no_active_pool_is_explained(self, exchange_plugin, pools_pkg):
         """一个限定池都没开时不能报「余额不足」，那会让人以为有契约没到账。"""
-        exchange_plugin.snapshot = pools_pkg.Snapshot(pools=())
+        exchange_plugin.ark.snapshot = pools_pkg.Snapshot(pools=())
         text = run(
             exchange_plugin.cmd_contract_exchange(FakeEvent(message="/契约兑换 75"))
         )
@@ -533,7 +523,7 @@ class TestExchangeCommand:
         self, exchange_plugin, store, store_mod, banners_mod
     ):
         """名单缺失时该档不可用，而不是「一个人都没有，所以随时能换」。"""
-        exchange_plugin.banners = banners_mod.BannerBook({})
+        exchange_plugin.ark.banners = banners_mod.BannerBook({})
         _seed_contracts(store, store_mod, contracts=400)
         text = run(
             exchange_plugin.cmd_contract_exchange(FakeEvent(message="/契约兑换 75"))

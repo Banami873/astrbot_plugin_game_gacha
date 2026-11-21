@@ -6,14 +6,16 @@
 
 1. `core/` 不许 import `games/`（哪怕只是拿一个常量）；
 2. `core/` 的**代码**里不许出现方舟专有词；
-3. 外壳接的存档必须是方舟那一份，不能是 core 的通用句柄。
+3. 方舟 runtime 接的存档必须是方舟那一份，不能是 core 的通用句柄；
+4. 外壳不许再长出任何游戏的字段。
 
 注意第 2 条只看代码：注释与文档字符串不查。core 里的注释大量在解释「为什么方舟的
 东西放在 games 而不在这里」，那些文字是要留着的。
 
-第 3 条是踩过的坑：`main.py` 曾把 `Store` 从 `core.store` 导入，于是 `initialize()`
+第 3、4 条是踩过的坑：`main.py` 曾把 `Store` 从 `core.store` 导入，于是 `initialize()`
 建出来的是通用句柄——库里三张表、`choice_of` 之类的方法一个都没有。所有用例都用
 `__new__` 造实例、绕开 `initialize`，所以 594 条全绿而线上第一条 `/十连 中坚` 就崩。
+那次之后方舟的字段整体搬进了 `games/arknights/runtime.py`，第 4 条就是防止它们游回外壳。
 """
 
 from __future__ import annotations
@@ -52,6 +54,25 @@ HSR_TERMS = (
 
 # core/ 下的模块；新增 core 文件不需要改这里，用 glob 现取。
 CORE_DIR = "core"
+
+# 曾经长在 `main.py` 上、现在归 `games/<游戏>/runtime.py` 的字段。这串名字回到外壳，
+# 就说明「外壳只认注册表」这条又破了。
+GAME_FIELDS = (
+    "store",
+    "snapshot",
+    "roster",
+    "banners",
+    "limited",
+    "discounts",
+    "category_map",
+    "unimplemented",
+    "channel_rules",
+    "pity_groups",
+    "up_rules",
+    "select_rules",
+    "reward_rules",
+    "pick_rules",
+)
 
 
 def _core_files(plugin_dir: Path) -> list[Path]:
@@ -194,15 +215,39 @@ def test_games_do_not_import_each_other(plugin_dir: Path):
     assert not cross_game_imports(plugin_dir, "hsr", "arknights")
 
 
-def test_shell_uses_the_game_store(pkg):
-    """外壳建库必须用方舟的 `Store`，不是 core 的通用句柄。
+def test_runtime_uses_the_game_store(pkg):
+    """方舟 runtime 建库必须用方舟的 `Store`，不是 core 的通用句柄。
 
     通用句柄只有三张表、没有 `choice_of` / `read_pull_state` 这些方法，接错了的
     表现不是「报错」而是「抽卡到一半 AttributeError」，或者在空库上只剩三张表。
+
+    建库这一步从 `main.py` 挪到了 `games/arknights/runtime.py`，检查跟着挪——守的
+    一直是「谁建库、用哪个 Store」，不是某个文件里有没有这个名字。
     """
-    main_mod = pkg("main")
+    runtime_mod = pkg("games.arknights.runtime")
     game_store = pkg("games.arknights.store")
-    assert main_mod.Store is game_store.Store
+    assert runtime_mod.Store is game_store.Store
+
+
+def test_shell_has_no_game_fields(plugin_dir: Path):
+    """外壳不许再长出方舟的字段。
+
+    `self.store` / `self.snapshot` 这些名字回到 `main.py`，就意味着外壳又开始认识
+    某个游戏的装载结果；接着「外壳改了一行、业务没跟上」就会重新变成可能。字段该挂在
+    `games/<游戏>/runtime.py` 上，外壳只留 `self.games` 这本注册表。
+    """
+    tree = ast.parse((plugin_dir / "main.py").read_text(encoding="utf-8"))
+    hits = sorted(
+        {
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "self"
+            and node.attr in GAME_FIELDS
+        }
+    )
+    assert not hits, f"外壳又长出了游戏字段：{hits}（应挂到 games/<游戏>/ 上）"
 
 
 def test_guard_catches_game_import(tmp_path: Path):

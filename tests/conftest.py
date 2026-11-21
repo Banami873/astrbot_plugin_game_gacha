@@ -119,6 +119,30 @@ def pkg():
     return package_module
 
 
+@pytest.fixture()
+def make_ark_plugin(pkg):
+    """造「外壳 + 方舟 runtime」的最小组合，字段往 runtime 上塞。
+
+    方舟的字段整体搬进了 `games/arknights/runtime.py`。用例若还往插件实例上塞
+    `store` / `snapshot`，模拟的就是一个不再存在的形状——接错线也不会红，所以这里
+    统一走 `plugin.ark`。
+
+    外壳只给三样：`config`（配置项）、`_locks`（每用户锁）、以及 `ark` 这个入口。
+    """
+
+    def build(**fields):
+        main_mod = pkg("main")
+        plugin = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
+        plugin.config = {}
+        plugin._locks = {}
+        plugin.ark = main_mod.ArknightsRuntime(plugin)
+        for name, value in fields.items():
+            setattr(plugin.ark, name, value)
+        return plugin
+
+    return build
+
+
 @pytest.fixture(scope="session")
 def core_engine_mod() -> ModuleType:
     return package_module("core.engine")

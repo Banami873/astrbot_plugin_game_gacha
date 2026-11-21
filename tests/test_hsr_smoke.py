@@ -82,7 +82,7 @@ def _tables(path: Path) -> set[str]:
 
 def test_two_databases(plugin):
     """两个库各在自己文件里：方舟 8 张，星铁 4 张。"""
-    ark_db = plugin.store.db_path
+    ark_db = plugin.ark.store.db_path
     hsr_db = plugin.games["hsr"].store.db_path
     assert ark_db.name == "gacha.db" and hsr_db.name == "hsr.db"
     assert ark_db != hsr_db and hsr_db.exists()
@@ -91,7 +91,7 @@ def test_two_databases(plugin):
     assert _tables(hsr_db) == {"meta", "users", "inventory", "hsr_pity"}
 
     # 两个 Store 不是同一个类：方舟那只有 choice_of，星铁这只没有。
-    assert hasattr(plugin.store, "choice_of")
+    assert hasattr(plugin.ark.store, "choice_of")
     assert not hasattr(plugin.games["hsr"].store, "choice_of")
 
 
@@ -105,10 +105,10 @@ def test_hsr_ten_pull(plugin):
     assert sum(hsr_store.inventory_of(UID, PLATFORM).values()) == 10
 
     # 方舟的库完全没被碰过：抽数、仓库、水位都没有这个人的行
-    assert plugin.store.get_user(UID, PLATFORM) is None
-    assert plugin.store.inventory_of(UID, PLATFORM) == {}
+    assert plugin.ark.store.get_user(UID, PLATFORM) is None
+    assert plugin.ark.store.inventory_of(UID, PLATFORM) == {}
     assert (
-        plugin.store.read_pull_state(UID, PLATFORM, group_key="NORMAL", pool_id="x")
+        plugin.ark.store.read_pull_state(UID, PLATFORM, group_key="NORMAL", pool_id="x")
         .six_counter
         == 0
     )
@@ -118,8 +118,8 @@ def test_arknights_still_works_alongside(plugin):
     """方舟那条路一条没变：`/十连` 仍然扣 gacha.db 的抽数。"""
     text = _collect(plugin.cmd_pull_ten, StubEvent("十连"))
     assert "10 抽" in text
-    assert plugin.store.get_user(UID, PLATFORM)["tickets"] == 30 - 10
-    assert sum(plugin.store.inventory_of(UID, PLATFORM).values()) == 10
+    assert plugin.ark.store.get_user(UID, PLATFORM)["tickets"] == 30 - 10
+    assert sum(plugin.ark.store.inventory_of(UID, PLATFORM).values()) == 10
 
     hsr_store = plugin.games["hsr"].store
     assert hsr_store.get_user(UID, PLATFORM) is None

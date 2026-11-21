@@ -8,7 +8,6 @@ R-16 要求所有存档以 `(平台, 用户 id)` 为维度，群内互不可见�
 from __future__ import annotations
 
 import asyncio
-import importlib
 import sys
 from pathlib import Path
 
@@ -67,22 +66,10 @@ def run(agen) -> str:
     return "\n".join(asyncio.run(collect()))
 
 
-@pytest.fixture(scope="module")
-def main_mod():
-    return importlib.import_module("data.plugins.astrbot_plugin_game_gacha.main")
-
-
 @pytest.fixture()
-def plugin(main_mod, store):
+def plugin(make_ark_plugin, store):
     """绕开 Star.__init__：它要 AstrBot 运行时的 Context，而指令逻辑不依赖它。"""
-    instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
-    instance.config = {}
-    instance.store = store
-    instance.snapshot = None
-    instance.category_map = {}
-    instance.unimplemented = frozenset()
-    instance._load_error = ""
-    return instance
+    return make_ark_plugin(store=store, snapshot=None, _load_error="")
 
 
 class TestStoreIsolation:

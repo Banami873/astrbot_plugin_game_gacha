@@ -7,9 +7,9 @@
 两档入参是刻意分开的：
 
 - **纯规则映射**（选调表、联动书、井送谁、契约份数、限定范围）只收自己用到的规则表与
-  快照数据，可以脱离插件对象单独断言；
-- **要读存档的编排**（`draw_and_commit`、兑换、池查询的两张文案表）收插件实例 `game`：
-  它承载已装载的快照、干员字典与规则表，测试里用 `__new__` 造出来的实例同样满足。
+  快照数据，可以脱离 runtime 单独断言；
+- **要读存档的编排**（`draw_and_commit`、兑换、池查询的两张文案表）收 `ArknightsRuntime`：
+  它承载已装载的快照、干员字典与规则表。测试里塞了 `store` / `snapshot` 的 runtime 同样满足。
 """
 
 from __future__ import annotations
@@ -182,16 +182,17 @@ def contract_display(reward_rules, pool, contracts: int, now: int) -> tuple[int 
 # ---- 要读插件状态的编排 ------------------------------------------------
 
 
-def choice_pool(game, pool) -> choice_module.ChoicePool | None:
+def choice_pool(rt, pool) -> choice_module.ChoicePool | None:
     """本池如果是自选池就返回它的范围与名额，否则 None（R-19）。
 
-    `pick_rules` 用 `getattr` 取：测试会用 `__new__` 绕过 `__init__`，那里没有这个属性。
+    `pick_rules` 用 `getattr` 取：只塞了 `store` / `snapshot` 的轻量 runtime 没有它，
+    缺表按「这池不是自选池」处理。
     """
-    rules = getattr(game, "pick_rules", None) or {}
+    rules = getattr(rt, "pick_rules", None) or {}
     return choice_module.build(pool, rules.get(getattr(pool, "rule_type", "")))
 
 
-def up_targets(game, pool, picked=None) -> UpTargets:
+def up_targets(rt, pool, picked=None) -> UpTargets:
     """本池的 UP 名单、份额与往期加权（R-11 / R-19）。
 
     名单独自缺失不该让池不可抽（R-14 降级链第 4 条）：少一次 UP 加成，玩家看到的
@@ -202,7 +203,7 @@ def up_targets(game, pool, picked=None) -> UpTargets:
     份额」算，同时把官方范围作为 `six_range` / `five_range` 传下去——范围外的人该星级
     不出。范围来自 `dynMeta`，与 PRTS 名单无关，所以这两类池不看 `banner`。
     """
-    picked_pool = choice_pool(game, pool)
+    picked_pool = choice_pool(rt, pool)
     if picked_pool is not None and picked is not None:
         six, five = picked
         return UpTargets(
@@ -214,9 +215,9 @@ def up_targets(game, pool, picked=None) -> UpTargets:
             five_range=picked_pool.five_range,
         )
 
-    share = game.up_rules.for_pool(pool)
-    banner = game.banners.get(pool.pool_id)
-    pool_scope = scope(game.limited, game.banners, pool)
+    share = rt.up_rules.for_pool(pool)
+    banner = rt.banners.get(pool.pool_id)
+    pool_scope = scope(rt.limited, rt.banners, pool)
     boost = pool_scope.boosted if pool_scope else ()
     if banner is None or not banner.has_up():
         return UpTargets(six_share=0.0, five_share=0.0, boost=boost)
@@ -231,28 +232,28 @@ def up_targets(game, pool, picked=None) -> UpTargets:
     )
 
 
-def up_text_map(game) -> dict[str, str]:
+def up_text_map(rt) -> dict[str, str]:
     """池 id → 「UP 6★ A、B · 5★ C」，给 `/卡池查询` 用。
 
     自选池换成「可出范围 N 名」：那些人是**候选**，不是 UP（UP 由玩家自选，见下方
     那行自选状态）。把 36 名候选当 UP 全列出来，既占版面又让人以为概率已经生效。
     """
-    if game.roster is None:
+    if rt.roster is None:
         return {}
     result: dict[str, str] = {}
-    for pool_id, banner in game.banners.by_pool.items():
+    for pool_id, banner in rt.banners.by_pool.items():
         parts: list[str] = []
         for star, ids in (("6", banner.up6), ("5", banner.up5), ("4", banner.up4)):
             if not ids:
                 continue
-            names = banner_module.names_for_display(ids, game.roster.name_of)
+            names = banner_module.names_for_display(ids, rt.roster.name_of)
             parts.append(f"UP {star}★ {names}")
         if parts:
             result[pool_id] = " · ".join(parts)
-    snapshot = getattr(game, "snapshot", None)
+    snapshot = getattr(rt, "snapshot", None)
     if snapshot is not None:
         for pool in snapshot.pools:
-            picked_pool = choice_pool(game, pool)
+            picked_pool = choice_pool(rt, pool)
             if picked_pool is None:
                 continue
             result[pool.pool_id] = (
@@ -262,26 +263,26 @@ def up_text_map(game) -> dict[str, str]:
     return result
 
 
-def boost_text_map(game) -> dict[str, str]:
+def boost_text_map(rt) -> dict[str, str]:
     """池 id → 「往期 5 倍 A、B、C」，给 `/卡池查询` 的限定池加一行。"""
-    if game.roster is None or not len(game.limited):
+    if rt.roster is None or not len(rt.limited):
         return {}
-    pools = {pool.pool_id: pool for pool in game.snapshot.pools}
+    pools = {pool.pool_id: pool for pool in rt.snapshot.pools}
     result: dict[str, str] = {}
-    for pool_id, banner in game.banners.by_pool.items():
+    for pool_id, banner in rt.banners.by_pool.items():
         pool = pools.get(pool_id)
         if pool is None or pool.rule_type != limited_module.LIMITED_RULE_TYPE:
             continue
-        pool_scope = game.limited.scope_for(pool, up_ids=banner.up6)
+        pool_scope = rt.limited.scope_for(pool, up_ids=banner.up6)
         if pool_scope.boosted:
             names = banner_module.names_for_display(
-                pool_scope.boosted, game.roster.name_of
+                pool_scope.boosted, rt.roster.name_of
             )
             result[pool_id] = f"往期 5 倍 {names}"
     return result
 
 
-def exchange_pool(game, uid: str, platform: str, now: int):
+def exchange_pool(rt, uid: str, platform: str, now: int):
     """挑一个能兑换的限定池，返回 `(pool, 契约数)`；一个进行中的限定池都没有时返回 None。
 
     契约按池记、池结束作废，所以只能落在**进行中**的那一个上。候选池来自快照而不是
@@ -289,33 +290,33 @@ def exchange_pool(game, uid: str, platform: str, now: int):
     没开」是两种回复。同时开两个限定池时取契约多的那个——回复里会写明换了谁，换错
     能立刻发现。
     """
-    if game.store is None or game.snapshot is None:
+    if rt.store is None or rt.snapshot is None:
         return None
     best = None
-    rewards = getattr(game, "reward_rules", None)
-    for pool in game.snapshot.pools:
+    rewards = getattr(rt, "reward_rules", None)
+    for pool in rt.snapshot.pools:
         if not pool.is_active(now) or contracts_for(rewards, pool) <= 0:
             continue
-        contracts = game.store.contracts_of(uid, platform, pool.pool_id)
+        contracts = rt.store.contracts_of(uid, platform, pool.pool_id)
         if best is None or contracts > best[1]:
             best = (pool, contracts)
     return best
 
 
-def exchange_offer(game, pool, tier: int, now: int) -> exchange_module.Offer:
+def exchange_offer(rt, pool, tier: int, now: int) -> exchange_module.Offer:
     """组装某一档的候选名单（R-09）。
 
     三档的目标来源不同：75 与 300 来自 PRTS 名单，200 来自本系列、已解限且已到年限的
     往期限定（`limits.json`）。所以这里只把原料备齐，筛选规则全在 `exchange.offer_for`。
     """
-    banner = game.banners.get(pool.pool_id)
+    banner = rt.banners.get(pool.pool_id)
     up6 = banner.up6 if banner is not None else ()
     up5 = banner.up5 if banner is not None else ()
 
     old: tuple[exchange_module.OldCandidate, ...] = ()
     discounted: tuple[str, ...] = ()
     if tier in (exchange_module.TIER_OLD, exchange_module.TIER_CURRENT):
-        board = getattr(game, "discounts", None)
+        board = getattr(rt, "discounts", None)
         if board is not None:
             series = limited_module.series_of(pool.open_time)
             rows = board.eligible_at(now, series=series)
@@ -332,7 +333,7 @@ def exchange_offer(game, pool, tier: int, now: int) -> exchange_module.Offer:
     if tier == exchange_module.TIER_CURRENT:
         # 本池允许出现的限定 = 同系列 + 已解限 + 当期 UP。已降价的那些由 discounted
         # 剔除——他们在 200 档，300 档不该重复出现（官方交换所就是这么列的）。
-        pool_scope = game.limited.scope_for(pool, up_ids=up6)
+        pool_scope = rt.limited.scope_for(pool, up_ids=up6)
         limited_scope = tuple(sorted(pool_scope.available))
 
     return exchange_module.offer_for(
@@ -346,7 +347,7 @@ def exchange_offer(game, pool, tier: int, now: int) -> exchange_module.Offer:
 
 
 def draw_and_commit(
-    game,
+    rt,
     uid: str,
     platform: str,
     pool,
@@ -360,11 +361,11 @@ def draw_and_commit(
     保证：成功时 `error` 为空且 `batch` / `commit` 都有值；失败时一切归零
     （余额不足时连一条结果都没生成，更没扣抽数）。
     """
-    # 两张规则表用 getattr 取：测试会用 `__new__` 绕过 `__init__` 直接驱动指令，那里
-    # 没有这些属性。缺表时按「这池没有契约/没有选调」处理，不是把功能判成坏了。
-    rewards = getattr(game, "reward_rules", None)
-    select_rules = getattr(game, "select_rules", None)
-    state = game.store.read_pull_state(
+    # 两张规则表用 getattr 取：只塞了存档与快照的轻量 runtime 没有它们。缺表时按
+    # 「这池没有契约 / 没有选调」处理，不是把功能判成坏了。
+    rewards = getattr(rt, "reward_rules", None)
+    select_rules = getattr(rt, "select_rules", None)
+    state = rt.store.read_pull_state(
         uid, platform, pool_id=pool.pool_id, group_key=group_key
     )
     if state.tickets < times:
@@ -372,30 +373,30 @@ def draw_and_commit(
     per_pull = contracts_for(rewards, pool)
     try:
         batch = ark_engine.draw_batch(
-            game.roster,
+            rt.roster,
             pool,
             counter=state.six_counter,
             times=times,
             rng=random.Random(),
-            channels=game.channel_rules.for_pool(pool),
+            channels=rt.channel_rules.for_pool(pool),
             pool_pulls=state.pool_pulls,
             first10_hit=state.first10_hit,
-            up=up_targets(game, pool, picked),
-            scope=scope(game.limited, game.banners, pool),
-            select=select_book(select_rules, game.banners, pool),
+            up=up_targets(rt, pool, picked),
+            scope=scope(rt.limited, rt.banners, pool),
+            select=select_book(select_rules, rt.banners, pool),
             select_state=select_module.SelectState(
                 used=state.select_used,
                 locked=state.select_locked,
                 up_miss=state.up_miss,
             ),
-            linkage=linkage_book(game.banners, pool),
+            linkage=linkage_book(rt.banners, pool),
             linkage_state=linkage_module.LinkageState(
                 miss=state.linkage_miss,
                 used=state.linkage_used,
                 up5_obtained=state.up5_obtained,
             ),
             well_at=well_at(rewards, pool),
-            well_target=well_target(pool, game.banners),
+            well_target=well_target(pool, rt.banners),
             well_claimed=state.well_claimed,
         )
     except ValueError as exc:
@@ -403,7 +404,7 @@ def draw_and_commit(
         return PullOutcome(error=f"抽卡失败：{exc}")
 
     try:
-        commit = game.store.commit_pulls(
+        commit = rt.store.commit_pulls(
             uid,
             platform,
             pool_id=pool.pool_id,

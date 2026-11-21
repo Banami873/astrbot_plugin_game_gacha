@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import dataclasses
-import importlib
 
 import pytest
 
@@ -20,11 +19,6 @@ from test_isolation import FakeEvent, run
 # 真实快照里这两类池各取一个。用真数据是因为「范围在哪一层」本身就是本条的实现口径。
 FESCLASSIC_POOL = "FESCLASSIC_79_0_1"
 SPECIAL_POOL = "SPECIAL_77_0_4"
-
-
-@pytest.fixture(scope="module")
-def main_mod():
-    return importlib.import_module("data.plugins.astrbot_plugin_game_gacha.main")
 
 
 class ChoiceEvent(FakeEvent):
@@ -312,28 +306,24 @@ def _choice_pool(pools_pkg, *, pid, rule_type="FESCLASSIC", category="中坚", s
 
 
 @pytest.fixture()
-def choice_plugin(main_mod, store, real_roster, pools_pkg, plugin_dir):
+def choice_plugin(pkg, store, real_roster, pools_pkg, plugin_dir, make_ark_plugin):
     """只装自选需要的零件：一个进行中的中坚甄选。"""
     sixes = tuple(c.char_id for c in real_roster.of_rarity(6, channels=("standard",)))[:6]
     fives = tuple(c.char_id for c in real_roster.of_rarity(5, channels=("standard",)))[:6]
     pool = _choice_pool(pools_pkg, pid="FESCLASSIC_TEST", six=sixes, five=fives)
-    instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
-    instance.config = {}
-    instance.store = store
-    instance.snapshot = pools_pkg.Snapshot(pools=(pool,))
-    instance.roster = real_roster
-    instance.banners = main_mod.banner_module.BannerBook({})
-    instance.pity_groups = main_mod.pity_module.PityGroups()
-    instance.select_rules = pools_pkg.SelectRules()
-    instance.reward_rules = pools_pkg.LimitedRewardRules()
-    instance.pick_rules = pools_pkg.load_pick_rules(plugin_dir / "resources" / "pool_rules.json")
-    instance.image_enabled = False
-    instance.renderer = None
-    instance.portraits = None
-    instance._load_error = ""
-    instance._roster_error = ""
-    instance._choices = {}
-    return instance
+    return make_ark_plugin(
+        store=store,
+        snapshot=pools_pkg.Snapshot(pools=(pool,)),
+        roster=real_roster,
+        banners=pkg("games.arknights.banners").BannerBook({}),
+        pity_groups=pkg("core.pity").PityGroups(),
+        select_rules=pools_pkg.SelectRules(),
+        reward_rules=pools_pkg.LimitedRewardRules(),
+        pick_rules=pools_pkg.load_pick_rules(plugin_dir / "resources" / "pool_rules.json"),
+        _load_error="",
+        _roster_error="",
+        _choices={},
+    )
 
 
 class TestCommand:
@@ -395,8 +385,8 @@ class TestCommand:
             six=sixes,
             five=fives,
         )
-        choice_plugin.snapshot = pools_pkg.Snapshot(
-            pools=(choice_plugin.snapshot.pools[0], other)
+        choice_plugin.ark.snapshot = pools_pkg.Snapshot(
+            pools=(choice_plugin.ark.snapshot.pools[0], other)
         )
         text = run(choice_plugin.cmd_choice(ChoiceEvent(message="/自选 1 3 7 8 9")))
         assert "2 个自选池" in text

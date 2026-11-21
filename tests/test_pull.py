@@ -251,48 +251,43 @@ class TestCommitPulls:
 
 
 @pytest.fixture()
-def plugin(pkg, store, real_roster, pools_pkg, pool):
+def plugin(pkg, store, real_roster, pools_pkg, pool, make_ark_plugin):
     """一个装好数据、但没装出图组件的插件实例。
 
     出图默认关：文字链路的用例不该依赖素材与字体；出图相关的用例见
     `test_render_fallback.py`，那边会显式塞一个假渲染器进来。
+
+    字段落在 `plugin.ark` 上——方舟的装载结果归 `ArknightsRuntime`，外壳只持有它。
     """
     from conftest import PLUGIN_DIR
 
-    main_mod = pkg("main")
     pity_mod = pkg("core.pity")
-    instance = main_mod.GameGachaPlugin.__new__(main_mod.GameGachaPlugin)
-    instance.config = {}
-    instance.store = store
-    instance.snapshot = FakeSnapshot([pool])
-    instance.roster = real_roster
-    instance.category_map = pools_pkg.FALLBACK_CATEGORY_MAP
-    instance.unimplemented = frozenset()
-    instance.channel_rules = pools_pkg.ChannelRules(
-        dict(pools_pkg.DEFAULT_CHANNEL_MAP),
-        dict(pools_pkg.DEFAULT_CHANNEL_BY_RULE_TYPE),
+    return make_ark_plugin(
+        store=store,
+        snapshot=FakeSnapshot([pool]),
+        roster=real_roster,
+        category_map=pools_pkg.FALLBACK_CATEGORY_MAP,
+        unimplemented=frozenset(),
+        channel_rules=pools_pkg.ChannelRules(
+            dict(pools_pkg.DEFAULT_CHANNEL_MAP),
+            dict(pools_pkg.DEFAULT_CHANNEL_BY_RULE_TYPE),
+        ),
+        # 水位分组读真实配置：测试池是 NORMAL，组键应为 standard，与生产一致。
+        pity_groups=pity_mod.load_pity_groups(
+            PLUGIN_DIR / "resources" / "pity_groups.json"
+        ),
+        # 名单与 UP 份额：测试池没有 banner，等价于「UP 名单未获取」的运行方式，
+        # 抽卡结果仍要能出来，只是少了 UP 加成（R-14 降级链第 4 条）。
+        banners=pkg("games.arknights.banners").BannerBook({}),
+        up_rules=pools_pkg.load_up_share(
+            PLUGIN_DIR / "resources" / "pool_rules.json"
+        ),
+        # 限定索引同理：测试池都是常驻/限时池，`_scope` 会直接返回 None，
+        # 但字段必须存在——少了它，哪天用例换成限定池就会变成 AttributeError。
+        limited=pkg("games.arknights.limited").LimitedIndex(),
+        _load_error="",
+        _roster_error="",
     )
-    # 水位分组读真实配置：测试池是 NORMAL，组键应为 standard，与生产一致。
-    instance.pity_groups = pity_mod.load_pity_groups(
-        PLUGIN_DIR / "resources" / "pity_groups.json"
-    )
-    # 名单与 UP 份额：测试池没有 banner，等价于「UP 名单未获取」的运行方式，
-    # 抽卡结果仍要能出来，只是少了 UP 加成（R-14 降级链第 4 条）。
-    instance.banners = pkg("games.arknights.banners").BannerBook({})
-    instance.up_rules = pools_pkg.load_up_share(
-        PLUGIN_DIR / "resources" / "pool_rules.json"
-    )
-    # 限定索引同理：测试池都是常驻/限时池，`_scope` 会直接返回 None，
-    # 但字段必须存在——少了它，哪天用例换成限定池就会变成 AttributeError。
-    instance.limited = pkg("games.arknights.limited").LimitedIndex()
-    instance._locks = {}
-    instance._load_error = ""
-    instance._roster_error = ""
-    instance.renderer = None
-    instance.portraits = None
-    instance.image_enabled = False
-    instance._preload_task = None
-    return instance
 
 
 class TestPullCommands:
@@ -332,7 +327,7 @@ class TestPullCommands:
         assert store.get_user("10001", "qq")["tickets"] == 30
 
     def test_ambiguous_category_lists_candidates(self, plugin, store, pools_pkg):
-        plugin.snapshot = FakeSnapshot(
+        plugin.ark.snapshot = FakeSnapshot(
             [
                 _pool(pools_pkg, pool_id="S1", rule_type="SINGLE", category="限时", name="海渊之下的回声"),
                 _pool(pools_pkg, pool_id="S2", rule_type="SINGLE", category="限时", name="沉向海渊"),
@@ -344,7 +339,7 @@ class TestPullCommands:
         assert store.get_user("10001", "qq")["tickets"] == 30
 
     def test_prefix_selects_the_only_match(self, plugin, store, pools_pkg):
-        plugin.snapshot = FakeSnapshot(
+        plugin.ark.snapshot = FakeSnapshot(
             [
                 _pool(pools_pkg, pool_id="S1", rule_type="SINGLE", category="限时", name="海渊之下的回声"),
                 _pool(pools_pkg, pool_id="S2", rule_type="SINGLE", category="限时", name="沉向海渊"),
@@ -355,7 +350,7 @@ class TestPullCommands:
         assert store.get_user("10001", "qq")["tickets"] == 29
 
     def test_no_active_pool(self, plugin, store):
-        plugin.snapshot = FakeSnapshot([])
+        plugin.ark.snapshot = FakeSnapshot([])
         text = run(plugin.cmd_pull_single(FakeEvent(message="单抽")))
         assert "没有进行中的卡池" in text
         assert store.get_user("10001", "qq")["tickets"] == 30
