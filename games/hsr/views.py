@@ -261,7 +261,11 @@ def _pool_lines(pools: Sequence[Pool], now: int) -> list[str]:
 def render_no_match(
     scope: str, query: str, pools: Sequence[Pool], now: int
 ) -> str:
-    """给了名字但该范围内没对上。列出该范围的候选，不跨类别找。"""
+    """给了名字但该范围内没对上。列出该范围的候选，不跨类别找。
+
+    无前缀时的范围就是「限定」，所以这里还要告诉玩家怎么换类别——名字对不上可能只是
+    因为他在限定池里找一张联动池的卡，而范围由关键词决定，不由名字猜。
+    """
     where = f"{scope}池里" if scope else "在开的池里"
     lines = [f"{where}没有对得上「{query}」的名字。"]
     if not pools:
@@ -271,6 +275,7 @@ def render_no_match(
     if len(pools) > 8:
         lines.append(f"……还有 {len(pools) - 8} 个，/星铁卡池 看全部。")
     lines.append(f"例如：/星铁十连 {pool_query_hint(scope, pools[0].name)}")
+    lines.append("换类别就在前面写关键词：光锥 / 联动 / 常驻")
     return "\n".join(lines)
 
 
@@ -369,11 +374,11 @@ def render_help(*, signin_reward: int = 10, newbie_bonus: int = 30) -> str:
         "",
         "■ 抽哪个池",
         "· 不带词：抽当期限定（本期新角色）。限定没开就报错，不会改抽常驻或复刻",
-        "· 第一个词写类别，就只在这一类里找：",
+        "· 第一个词写类别，就只在这一类里找（该类的新池与复刻都能命中）：",
         "  限定 / 复刻 / 角色 / 光锥 / 联动 / 联动光锥 / 常驻（群星同理）",
         "· 类别后面写池名、合集名或 UP 名，例如：",
         "  /星铁十连 复刻 火花    /星铁十连 光锥 流光定影    /星铁十连 联动 Saber",
-        "· 只写名字也行（/星铁十连 愚戏众星）；对不上或对上多张会列出候选",
+        "· 只写名字时范围仍是限定（/星铁十连 阿哈）；要抽别的类别，关键词必须写出来",
         "",
         "明日方舟的指令仍是不带前缀那几条，也可加 /方舟 前缀使用。",
     ]

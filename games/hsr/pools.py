@@ -62,8 +62,8 @@ class Scope:
 SCOPES: dict[str, Scope] = {
     "限定": Scope("限定", frozenset({KIND_CHARACTER}), "当期的新角色跃迁", featured=True),
     "复刻": Scope("复刻", frozenset({KIND_CHARACTER}), "复刻的角色跃迁", featured=False),
-    "角色": Scope("角色", CHARACTER_KINDS, "角色活动跃迁"),
-    "光锥": Scope("光锥", CONE_KINDS, "光锥活动跃迁"),
+    "角色": Scope("角色", CHARACTER_KINDS, "角色活动跃迁与联动角色跃迁"),
+    "光锥": Scope("光锥", CONE_KINDS, "光锥活动跃迁与联动光锥跃迁"),
     # 「联动」默认指联动角色池——群里问「抽联动」十次有九次是要角色；
     # 要抽联动光锥写全「联动光锥」，或者先写「光锥」再写光锥名。
     "联动": Scope("联动", frozenset({KIND_COLLAB_CHARACTER}), "联动角色跃迁"),
@@ -196,13 +196,22 @@ class PoolChoice:
         return self.pool is not None
 
 
-def _norm(text: str) -> str:
-    """比对用的归一化：去掉空格与分隔点。
+# 常见同音写法 → 官方写法。只放「换成官方字之后不会和别的名字撞车」的几对：中文池名与
+# UP 名里没有以「啊」为实义字的，所以把「啊」并到「阿」是安全的。加新的一对之前先想
+# 一遍会不会让原本分得清的两个名字变成同一个。
+_FOLD = (("啊", "阿"),)
 
-    玩家会把「真意之汇•欢迎来到银河城」写成「真意之汇 欢迎来到银河城」，这两个
-    写法在池名匹配上应当等价。
+
+def _norm(text: str) -> str:
+    """比对用的归一化：去掉空格与分隔点，再抹平几个常见同音写法。
+
+    玩家会把「真意之汇•欢迎来到银河城」写成「真意之汇 欢迎来到银河城」；「阿哈」也
+    十有八九被写成「啊哈」。这两类差异都不该让人抽不了卡，所以在比对前就抹掉。
     """
-    return text.replace(" ", "").replace("•", "").replace("·", "")
+    text = text.replace(" ", "").replace("•", "").replace("·", "")
+    for wrong, right in _FOLD:
+        text = text.replace(wrong, right)
+    return text
 
 
 def _match(pools: Sequence[Pool], text: str) -> tuple[Pool, ...]:
@@ -244,14 +253,16 @@ def _resolve(hits: Sequence[Pool], scope: str, query: str) -> PoolChoice:
 def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
     """挑一个池：`[/星铁十连] [作用域] [池名 / 合集名 / UP 名]`。
 
-    规则一句话：**不带词抽当期限定，带词就在那个作用域里找，范围空了就报错**。
-    四步：
+    规则一句话：**无前缀一律限定；写了关键词就只在该范围内按名字找；范围空了就报错**。
+    三步：
 
     1. 第一个词是完全相等的池型关键词（`限定` / `复刻` / `角色` / `光锥` / `联动` /
-       `联动光锥` / `常驻` / `群星`）时，它就是作用域，剩下的都算名字。
-    2. 没有关键词、也没有名字 → 作用域取 `限定`（当期新角色那一张）。
-    3. 没有关键词、但有名字 → 在**全部**在开池里按名字找（池名 / 合集名 / UP 名）。
-    4. 作用域里一张池都没有 → `no_scope`，绝不改抽别的类别；带名字但没匹配上 →
+       `联动光锥` / `常驻` / `群星`）时，它就是作用域，剩下的都算名字；名字只在**这个
+       作用域里**找，「角色」这种泛指关键词覆盖该类的全部池（新池、复刻、联动）。
+    2. 没有关键词时作用域一律取 `限定`——不管后面跟没跟名字。玩家打 `/星铁十连 阿哈`
+       要的是这一期的新角色；名字在限定里对不上就报错，不溜到光锥或联动去兜底。想抽
+       别的类别，关键词写出来（`/星铁十连 联动 Saber`）。
+    3. 作用域里一张池都没有 → `no_scope`，绝不改抽别的类别；带名字但没匹配上 →
        `unknown`，列出该范围内的候选。
     """
     usable = usable_pools(pools, now)
@@ -265,14 +276,9 @@ def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
     # 「真意之汇•拂晓之前」等价，所以这里只需要把词拼回去。
     name = " ".join(tokens[1:]) if scope is not None else text
 
-    if scope is None and not name:
-        scope = SCOPES[DEFAULT_SCOPE]
-
     if scope is None:
-        hits = _match(usable, name)
-        if not hits:
-            return PoolChoice(None, usable, "unknown", "", name)
-        return _resolve(hits, "", name)
+        # 无前缀 = 限定。名字也只在限定里找：范围由关键词决定，不由名字猜。
+        scope = SCOPES[DEFAULT_SCOPE]
 
     scoped = tuple(pool for pool in usable if scope.covers(pool))
     if not scoped:

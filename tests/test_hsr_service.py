@@ -182,7 +182,7 @@ class TestChoosePool:
             up5=hsr_pool.up5,
             up4=hsr_pool.up4,
         )
-        choice = hsr_pkg.choose_pool([hsr_pool, other], FIXED_NOW, "二期")
+        choice = hsr_pkg.choose_pool([hsr_pool, other], FIXED_NOW, "角色 二期")
         assert choice.ok and choice.pool is other
 
     def test_unknown_name_is_not_guessed(self, hsr_pkg, hsr_pool):
@@ -196,6 +196,46 @@ class TestChoosePool:
         )
         choice = hsr_pkg.choose_pool([hsr_pool, other], FIXED_NOW, "不存在的池")
         assert not choice.ok and choice.reason == "unknown"
+
+    def test_bare_name_prefers_the_limited_pool(self, hsr_pkg, hsr_pool, hsr_cone_pool):
+        """`/星铁十连 阿哈` 抽限定：光锥名里也有「阿哈」，但不该因此反问玩家要哪张。"""
+        choice = hsr_pkg.choose_pool([hsr_pool, hsr_cone_pool], FIXED_NOW, "阿哈")
+        assert choice.ok and choice.pool is hsr_pool
+
+    def test_bare_name_folds_the_common_typo(self, hsr_pkg, hsr_pool):
+        """官方译名是「阿哈」，群里常写「啊哈」，两种写法都要能抽。"""
+        for query in ("阿哈", "啊哈"):
+            choice = hsr_pkg.choose_pool([hsr_pool], FIXED_NOW, query)
+            assert choice.ok and choice.pool is hsr_pool
+
+    def test_bare_name_never_leaves_the_limited_scope(self, hsr_pkg, hsr, hsr_pool):
+        """无前缀就是限定：`/星铁十连 Saber` 报错，要抽联动得把关键词写上。"""
+        collab = next(pool for pool in hsr.pools if pool.pool_id == "char-collab-040-1")
+        choice = hsr_pkg.choose_pool([hsr_pool, collab], FIXED_NOW, "Saber")
+        assert not choice.ok and choice.reason == "unknown"
+        assert choice.scope == "限定"
+        assert [pool.pool_id for pool in choice.candidates] == [hsr_pool.pool_id]
+
+    def test_keyword_searches_the_whole_kind(self, hsr_pkg, hsr, hsr_pool):
+        """写了「角色」就在角色全域里找：复刻池与联动角色池都够得着。"""
+        rerun = hsr_pkg.Pool(
+            pool_id="char-067-2-2",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="火花",
+            up5=(hsr_pkg.Item(item_id="1901", name="火花", rarity=5),),
+            up4=hsr_pool.up4,
+            featured=False,
+        )
+        collab = next(pool for pool in hsr.pools if pool.pool_id == "char-collab-040-1")
+        for query, expected in (("角色 火花", rerun), ("角色 Saber", collab)):
+            choice = hsr_pkg.choose_pool([hsr_pool, rerun, collab], FIXED_NOW, query)
+            assert choice.ok and choice.pool is expected
+
+    def test_scope_keeps_the_name_inside_it(self, hsr_pkg, hsr_pool, hsr_cone_pool):
+        """写了「光锥」就只在光锥里找，名字再像角色池也不越界。"""
+        choice = hsr_pkg.choose_pool([hsr_pool, hsr_cone_pool], FIXED_NOW, "光锥 阿哈")
+        assert choice.ok and choice.pool is hsr_cone_pool
 
     def test_name_never_escapes_its_scope(self, hsr_pkg, hsr_pool, hsr_cone_pool):
         """`复刻 阿哈` 只在复刻池里找：阿哈是限定的 UP，不能因为全局能对上就抽它。"""
@@ -326,7 +366,7 @@ class TestPull:
         commands = pkg("games.hsr.commands")
         roster_mod = pkg("games.hsr.roster")
 
-        text = _collect(commands.pull(hsr, StubEvent("星铁十连 流光定影"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 光锥 流光定影"), 10))
 
         assert "光锥活动跃迁" in text and "10 抽：" in text
         ids = hsr.store.inventory_of(UID, PLATFORM)
@@ -339,14 +379,14 @@ class TestPull:
 
     def test_standard_pool_has_no_up(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        text = _collect(commands.pull(hsr, StubEvent("星铁十连 群星跃迁"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 常驻"), 10))
         assert "群星跃迁" in text and "10 抽：" in text
         assert "本期 UP" not in text and "下次 5★ 必出" not in text
         assert pity_keys(hsr) == {"standard"}
 
     def test_collab_pity_is_separate(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        text = _collect(commands.pull(hsr, StubEvent("星铁十连 Saber"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 联动 Saber"), 10))
         # 用 UP 名点池，落到的是联动角色池；标题里带池型，保底进另一条桶。
         assert "角色联动跃迁" in text and "圣剑辉烈之誓" in text
         assert pity_keys(hsr) == {"collab_character"}
