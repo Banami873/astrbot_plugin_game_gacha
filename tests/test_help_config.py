@@ -18,8 +18,7 @@ EXPECTED_CONFIG = {
     "image_quality": ("string", "中"),
     "signin_reward": ("int", 10),
     "newbie_bonus": ("int", 30),
-    "data_refresh_hours": ("int", 6),
-    "prts_refresh_hours": ("int", 24),
+    "check_times": ("string", "04:00,12:00"),
     "allow_network": ("bool", True),
 }
 

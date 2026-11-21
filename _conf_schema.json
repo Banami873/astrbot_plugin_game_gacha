@@ -28,22 +28,16 @@
     "default": 30,
     "hint": "用户第一次和插件交互时发放，只发一次。"
   },
-  "data_refresh_hours": {
-    "description": "官方数据检查间隔（小时）",
-    "type": "int",
-    "default": 6,
-    "hint": "目前快照由管理员手动执行 tools/build_data.py 构建，此项保留给后续的定时刷新，暂不生效。"
-  },
-  "prts_refresh_hours": {
-    "description": "PRTS 卡池一览抓取间隔（小时）",
-    "type": "int",
-    "default": 24,
-    "hint": "同上，目前随 build_data.py 一起手动跑。"
+  "check_times": {
+    "description": "每日自动检查时刻",
+    "type": "string",
+    "default": "04:00,12:00",
+    "hint": "每天在这些时刻检查方舟官方表、PRTS 名单、星铁卡池与站点素材映射有没有更新，有更新才拉全量并立即生效，没更新磁盘不动。逗号分隔可多个（如 04:00,12:00），留空则不自动检查（可用 tools/ 下脚本手动刷）。抓取失败不影响现有数据，下个检查点自动重试。"
   },
   "allow_network": {
     "description": "允许联网",
     "type": "bool",
     "default": true,
-    "hint": "关掉后只用随包快照，并且不下载立绘（缺图一律画占位块）。离线环境下应当关掉，否则抽卡会卡在等网络。"
+    "hint": "关掉后只用随包快照，不下载立绘，也不做定时检查。离线环境下应当关掉，否则抽卡会卡在等网络。"
   }
 }

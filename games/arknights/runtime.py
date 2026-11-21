@@ -66,6 +66,8 @@ class ArknightsRuntime:
 
         # 装载结果。`store` 在 `load()` 里建，其余在装到之前保持空值。
         self.store: Store | None = None
+        # AstrBot 数据目录（放 gacha.db 与刷新 state），`load()` 记下，定时刷新用它。
+        self.data_dir: Path | None = None
         self.snapshot: pool_module.Snapshot | None = None
         self.roster: roster_module.Roster | None = None
         self.banners: banner_module.BannerBook = banner_module.BannerBook({})
@@ -123,6 +125,7 @@ class ArknightsRuntime:
         的提示，比整个插件注册失败要好排查。
         """
         data_dir = Path(data_dir)
+        self.data_dir = data_dir
         self.store = Store(data_dir / DB_NAME)
         self.store.ensure_schema()
         self._load_rules()
@@ -231,6 +234,32 @@ class ArknightsRuntime:
             self.shell = game
         async for chunk in ark_commands.pull(self, event, times):
             yield chunk
+
+    async def refresh(self) -> str:
+        """协议第七样：每天定时由外壳调度器调用，检查官方表与 PRTS 有没有更新。
+
+        实现（ETag 快查、全量重建、热重载编排）见 `games/arknights/refresh.py`；
+        本方法只负责转发与把热重载回调接回运行时的装载方法。抓取是阻塞 IO，丢进
+        线程跑，事件循环不许被网络请求冻结。
+        """
+        import asyncio
+
+        from . import refresh as refresh_module
+
+        if self.data_dir is None:
+            return "方舟尚未装载，跳过刷新"
+
+        def reload_data() -> None:
+            # 顺序不能换：名单先套卡池（见 `_load_snapshot` 的注释）。
+            self._load_snapshot()
+            self._load_roster()
+
+        return await asyncio.to_thread(
+            refresh_module.refresh_checkpoint,
+            self.data_dir,
+            reload_data=reload_data,
+            reload_discounts=self._load_discounts,
+        )
 
     # ---- 外壳替身 --------------------------------------------------------
 

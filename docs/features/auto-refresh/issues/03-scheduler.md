@@ -1,6 +1,6 @@
 # 03 — 外壳调度器与配置项
 
-Status: ready-for-agent
+Status: done
 
 **目标**：`updater.py` 定时循环接上 01/02 的 `refresh()` 协议，`check_times` 配置项
 替换两个间隔项，插件装上即可无人值守。
@@ -25,6 +25,18 @@ Status: ready-for-agent
 - 启动即检查：任务跑起来第一件事就是一轮检查点（不必等到 4:00）。
 - `test_shell_has_no_game_fields` 仍绿。
 
-## 实际结果
+## 实际结果（2026-11-21）
 
-（待执行）
+- `updater.py`（插件顶层）：`parse_check_times`（`4:00` 也认、非法项 warning 后跳过、
+  去重保序）、`seconds_until`（过点回绕到明天）、`_loop`（启动即一轮 → 睡到下个时刻，
+  clock/sleep 可注入）、`run_checks`（`getattr` 探测协议第七样，逐游戏串行，异常只记
+  日志）、`start`/`stop`（句柄归外壳 `_refresh_task`，`terminate()` 取消）。
+- `main.py`：`initialize()` 尾部 `updater.start(self)`；`terminate()` 先停刷新再停预热；
+  外壳补 `_cfg_str`。
+- 协议第七样：`ArknightsRuntime.refresh()`（`to_thread` 包 `refresh_checkpoint`，
+  reload 回调接 `_load_snapshot`→`_load_roster` 与 `_load_discounts`）；星铁侧 02 已就位。
+- `_conf_schema.json`：删 `data_refresh_hours`/`prts_refresh_hours`，加 `check_times`
+  （默认 `"04:00,12:00"`，hint 写明四项检查与失败语义）；`allow_network` hint 同步
+  （关网也不做定时检查）。
+- 验证：`test_updater.py` 17 条 + `test_help_config` + smoke/isolation/architecture
+  全绿；`test_shell_has_no_game_fields` 不红（`_refresh_task` 不在 GAME_FIELDS）。

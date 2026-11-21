@@ -25,6 +25,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 
 from .core import economy
+from . import updater
 from .games.arknights import commands as ark_commands
 from .games.arknights.runtime import ArknightsRuntime
 from .games.hsr import commands as hsr_commands
@@ -45,6 +46,8 @@ class GameGachaPlugin(Star):
         self.hsr = HsrRuntime()
         self.games: dict[str, object] = {"arknights": self.ark, "hsr": self.hsr}
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+        # 定时刷新任务句柄（asyncio 只弱引用任务，必须持强引用）。updater 起停。
+        self._refresh_task = None
 
     async def initialize(self) -> None:
         """按注册表逐个装载游戏，装载失败只记日志。
@@ -66,6 +69,8 @@ class GameGachaPlugin(Star):
                 logger.error(
                     f"[{PLUGIN_NAME}] {game_id} 装载失败：{type(exc).__name__}: {exc}"
                 )
+        # 装载完才起定时刷新：refresh 要用运行时里的数据与 state 路径。
+        self._refresh_task = updater.start(self)
 
     # ---- 配置 ------------------------------------------------------------
 
@@ -82,6 +87,11 @@ class GameGachaPlugin(Star):
         if isinstance(value, str):
             return value.strip().lower() in ("1", "true", "yes", "on")
         return bool(value)
+
+    def _cfg_str(self, key: str, default: str = "") -> str:
+        """读一个字符串配置项。非字符串（面板给了别的类型）原样转字符串再用。"""
+        value = self.config.get(key, default)
+        return default if value is None else str(value)
 
     @property
     def signin_reward(self) -> int:
@@ -249,5 +259,6 @@ class GameGachaPlugin(Star):
             yield chunk
 
     async def terminate(self) -> None:
-        """插件卸载时停掉立绘预热。"""
+        """插件卸载时停掉定时刷新与立绘预热。"""
+        updater.stop(self)
         self.ark.stop_preload()
