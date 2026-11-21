@@ -371,7 +371,11 @@ class TestPull:
         assert choice.ok and choice.pool is hsr_pool
 
     def test_light_cone_pool_gives_only_light_cones(self, pkg, hsr):
-        """光锥池抽光锥：3★ 位本来就是光锥，5★/4★ 位也不能混进角色。"""
+        """光锥池抽光锥：3★ 位本来就是光锥，5★ 也只能是光锥。
+
+        4★ 按官方规则允许跨类型掉落（光锥池 4★ 位可出角色），所以只约束
+        非 4★ 的物品必须全是光锥；水位仍只写光锥桶。
+        """
         commands = pkg("games.hsr.commands")
         roster_mod = pkg("games.hsr.roster")
 
@@ -380,8 +384,10 @@ class TestPull:
         assert "光锥活动跃迁" in text and "10 抽：" in text
         ids = hsr.store.inventory_of(UID, PLATFORM)
         assert len(ids) > 0
-        assert all(
-            isinstance(hsr.roster.get(item_id), roster_mod.LightCone) for item_id in ids
+        items = [hsr.roster.get(item_id) for item_id in ids]
+        non_cone = [item for item in items if not isinstance(item, roster_mod.LightCone)]
+        assert all(item.star == 4 for item in non_cone), (
+            f"光锥池混进了非 4★ 的角色：{[item.name for item in non_cone]}"
         )
         # 水位只写进光锥桶，角色桶一点没动
         assert pity_keys(hsr) == {"light_cone"}

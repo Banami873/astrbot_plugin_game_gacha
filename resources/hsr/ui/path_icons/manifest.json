@@ -1,0 +1,83 @@
+{
+ "abundance": {
+  "file": "abundance.svg",
+  "w": 512,
+  "h": 580,
+  "fills": {
+   "fil0": "#ffffff59",
+   "fil1": "#fff"
+  }
+ },
+ "destruction": {
+  "file": "destruction.svg",
+  "w": 512,
+  "h": 540,
+  "fills": {
+   "fil1": "#ffffff59",
+   "fil0": "#fff"
+  }
+ },
+ "erudition": {
+  "file": "erudition.svg",
+  "w": 512,
+  "h": 464,
+  "fills": {
+   "fil1": "#ffffff59",
+   "fil2": "#fff"
+  }
+ },
+ "harmony": {
+  "file": "harmony.svg",
+  "w": 512,
+  "h": 510,
+  "fills": {
+   "fil1": "#ffffff59",
+   "fil0": "#fff"
+  }
+ },
+ "hunt": {
+  "file": "hunt.svg",
+  "w": 512,
+  "h": 449,
+  "fills": {
+   "fil0": "#ffffff59",
+   "fil1": "#fff"
+  }
+ },
+ "nihility": {
+  "file": "nihility.svg",
+  "w": 512,
+  "h": 528,
+  "fills": {
+   "fil2": "#ffffff59",
+   "fil1": "#fff"
+  }
+ },
+ "preservation": {
+  "file": "preservation.svg",
+  "w": 512,
+  "h": 608,
+  "fills": {
+   "fil1": "#ffffff59",
+   "fil0": "#fff"
+  }
+ },
+ "remembrance": {
+  "file": "remembrance.svg",
+  "w": 512,
+  "h": 563,
+  "fills": {
+   "fil1": "#ffffff59",
+   "fil0": "#fff"
+  }
+ },
+ "elation": {
+  "file": "elation.svg",
+  "w": 512,
+  "h": 526,
+  "fills": {
+   "fil1": "#ffffff59",
+   "fil0": "#fff"
+  }
+ }
+}

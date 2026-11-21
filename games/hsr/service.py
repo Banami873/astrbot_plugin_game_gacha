@@ -33,6 +33,15 @@ from . import roster as roster_module
 from . import views
 from .store import Store
 
+# 出图是可选增强：缺 PIL / numpy 时整块渲染层都不该让抽卡起不来（R-15）。
+try:
+    from .render import glue as render_glue
+except Exception as _render_error:  # noqa: BLE001
+    render_glue = None
+    _RENDER_ERROR = f"{type(_render_error).__name__}: {_render_error}"
+else:
+    _RENDER_ERROR = ""
+
 # 与 `main.PLUGIN_NAME` 同值。模块不反向 import main——那会成环，也不该为了一个日志前缀
 # 把外壳拖进业务模块。
 _LOG = "[astrbot_plugin_game_gacha]"
@@ -69,6 +78,9 @@ class HsrRuntime:
         self.error = ""
         # 外壳（插件）在装载前绑上来：身份与每用户锁都是跨游戏的，归它管。
         self.shell = None
+        # 出图状态由 `setup_renderer` 填；默认关，测试与降级路径都不依赖渲染层。
+        self.image_enabled = False
+        self.renderer = None
         # 奖励数值由外壳从配置注入；这里给默认值，单测可以直接用。
         self.signin_reward = economy.DEFAULT_SIGNIN_REWARD
         self.newbie_bonus = economy.DEFAULT_NEWBIE_BONUS
@@ -125,6 +137,10 @@ class HsrRuntime:
             f"{_LOG} 星铁已装载：卡池 {len(self.pools)} 期（{detail}），"
             f"角色 {len(roster.characters)} 名，光锥 {len(roster.light_cones)} 件"
         )
+        if render_glue is None:
+            logger.warning(f"{_LOG} 星铁出图不可用，一律文字：{_RENDER_ERROR}")
+            return
+        render_glue.setup_renderer(self, data_dir)
 
     # ---- 协议 ------------------------------------------------------------
 
@@ -193,13 +209,26 @@ class HsrRuntime:
                 # 水位按池型分桶：角色、光锥、联动角色、联动光锥、常驻各算各的，
                 # 这正是官方「同类型池之间继承、不同类型互不影响」的规则。
                 pity = self.store.read_pity(uid, platform, pool.kind)
+                # 星缘相邀只改角色活动/联动池「歪了」的那 7 位候选；
+                # 群星池的可抽名单不受影响，所以这里按池型分流。
+                rules = self.rules
+                if pool.kind in pool_module.CHARACTER_KINDS:
+                    invited = self.store.star_invite(uid, platform)
+                    if invited:
+                        rules = rules.with_invite(invited)
                 pulled, after = engine.draw_batch(
                     times,
                     state=pity,
                     pool=pool,
                     roster=self.roster,
-                    rules=self.rules,
+                    rules=rules,
                     rng=random.Random(),
+                )
+                # 副产物按「这批之前仓库里各有多少件」分档，重复角色第 2~7 次才给星魂。
+                # 用户锁保证读仓库与提交之间没人改这个号。
+                cone_ids = {cone.item_id for cone in self.roster.light_cones}
+                reward = engine.byproducts(
+                    pulled, self.store.inventory_of(uid, platform), cone_ids
                 )
                 commit = self.store.commit_pulls(
                     uid,
@@ -209,6 +238,9 @@ class HsrRuntime:
                     pity=after,
                     item_ids=[item.item_id for item in pulled],
                     when=economy.now_iso(),
+                    standard_add=times if pool.kind == pool_module.KIND_STANDARD else 0,
+                    stardust=reward.stardust,
+                    embers=reward.embers,
                 )
                 if commit.committed:
                     tickets_after = commit.tickets
@@ -219,6 +251,37 @@ class HsrRuntime:
         if error:
             yield event.plain_result(error + notice)
             return
+
+        # 事务已提交（R-15）：出图只影响发什么，不影响抽数与水位。出图/发图有任何
+        # 异常都退回原来的完整文字，玩家不会白抽一次，也不会收到半张图。
+        image_path = None
+        if render_glue is not None:
+            try:
+                image_path = await render_glue.render_result_image(self, pool, pulled)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"{_LOG} 星铁出图失败，降级为文字：{exc}")
+                image_path = None
+        brief = ""
+        if image_path is not None:
+            try:
+                brief = views.render_pull_brief(
+                    pulled,
+                    tickets=tickets_after,
+                    pity=after,
+                    rules=self.rules,
+                    pool_kind=pool.kind,
+                ) + notice
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"{_LOG} 星铁水位简报失败，降级为文字：{exc}")
+                image_path = None
+        if image_path is not None:
+            try:
+                yield event.image_result(str(image_path))
+                yield event.plain_result(brief)
+                return
+            except Exception as exc:  # noqa: BLE001 —— 有些适配器不支持发图
+                logger.warning(f"{_LOG} 星铁发图失败，降级为文字：{exc}")
+
         yield event.plain_result(
             views.render_pulls(
                 pool,
