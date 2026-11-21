@@ -236,13 +236,20 @@ class GameRuntime(Protocol):
     def help_text(self) -> str: ...
 ```
 
-`load` 收 AstrBot 给插件的数据目录（`hsr.db` 落在那里）；名册与卡池从插件目录的
-`resources/<游戏>/` 读，可写的运行状态与只读的随包资源分开。
-`pull` 收外层插件实例（`game`），因为身份、用户锁、配置在插件上；runtime 只管自己的
-数据与规则。**星铁不调外壳的 `_register()`**——那个写方舟的 `gacha.db`。
+`load` 收 AstrBot 给插件的数据目录（`hsr.db` / `gacha.db` 落在那里）；名册与卡池从插件
+目录的 `resources/<游戏>/` 读，可写的运行状态与只读的随包资源分开。
 
-本轮 `games["arknights"]` 暂时指向插件自身（它已持有方舟那批字段），星铁跑通后再把方舟
-抽成同样形状的 runtime —— 那时才知道这个协议该装什么。
+`pull` 的 `game` 是外壳：身份、用户锁、配置在插件上，runtime 只管自己的数据与规则。
+两者的约定是 **`rt.shell`**——`initialize()` 装载前把外壳塞进每个 runtime 的 `shell`，
+指令体一律走 `rt.shell._identity()` / `rt.shell._lock_for()`；`pull` 里的 `game` 参数只是
+给协议留一个同形的入口（并让「拿假外壳顶替插件」的测试走通），再绑一次。
+
+**方舟也是同一个形状**（`games/arknights/runtime.py` 的 `ArknightsRuntime`）：`main.py`
+不再有 `self.store` / `self.snapshot` 这些字段，只有 `self.games` 一本注册表。
+`initialize()` 遍历它逐个 `await game.load(data_dir)`，所以塞一个只实现协议六样的假游戏
+进去也能装、能抽（`tests/test_smoke_init.py` 有一条用例专门守这件事）。
+
+**星铁不调外壳的 `_register()`**——那个写方舟的 `gacha.db`；它用 `rt.register(event)`。
 
 ## 七、验证
 

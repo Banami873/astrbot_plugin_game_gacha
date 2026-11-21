@@ -83,8 +83,8 @@
 | 引擎 | engine | 纯逻辑的抽卡概率计算，不碰数据库、不碰渲染 |
 | 渲染 | render | 把抽卡结果画成图片 |
 | 内核 | core | 与游戏无关的件：概率数学、池骨架、通用表与事务、抽数经济。不许 import `games/`，也不许出现某个游戏的语义 |
-| 游戏模块 | games/<game> | 一个游戏的规则、数据、文案与存档表。加游戏只新增目录（自己的 store 表与 service），内核不动。现有 `arknights/`（`gacha.db`）与 `hsr/`（`hsr.db`），两个库互不相干 |
-| 运行时 | runtime | 一个游戏的入口对象，放在 `GameGachaPlugin.games[<game_id>]`。六样协议见 `docs/features/hsr-gacha/SPEC.md` 第六节；星铁的实现是 `games/hsr/service.py` 的 `HsrRuntime` |
+| 游戏模块 | games/<game> | 一个游戏的规则、数据、文案与存档表。加游戏只新增目录（自己的 store 表与 runtime），内核不动。现有 `arknights/`（`gacha.db`）与 `hsr/`（`hsr.db`），两个库互不相干 |
+| 运行时 | runtime | 一个游戏的入口对象，放在 `GameGachaPlugin.games[<game_id>]`，持数据、规则表、存档与 `shell`。六样协议见 `docs/features/hsr-gacha/SPEC.md` 第六节。方舟是 `games/arknights/runtime.py` 的 `ArknightsRuntime`，星铁是 `games/hsr/service.py` 的 `HsrRuntime`；外壳只认这本注册表 |
 | 快照 | snapshot | 随插件发布的内置数据副本。单独说「快照」时指卡池骨架 `gacha_table.json`；另外两份是干员字典与名单快照 |
 | 干员字典 | character roster | 随包的干员表：id、中文名、英文名、星级、职业、阵营、限定标记、所属基础池（`resources/snapshot/characters.json`）。英文名/职业/阵营只给渲染用，不参与抽卡 |
 | 功能目录 | feature | `docs/features/<feature-slug>/`，一个功能一个目录 |
