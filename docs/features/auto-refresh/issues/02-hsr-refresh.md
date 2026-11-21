@@ -1,6 +1,6 @@
 # 02 — 星铁 refresh 库与站点映射体检
 
-Status: ready-for-agent
+Status: done
 
 **目标**：`tools/build_hsr_data.py` 与 `tools/build_hsr_render_assets.py` 的主体移入
 `games/hsr/refresh.py`，工具变薄壳；新增卡池全量比对刷新、站点 JS 入口哈希体检与
@@ -29,6 +29,16 @@ Status: ready-for-agent
 - 体检单测：mock 首页，URL 列表哈希变化 → 触发重建分支；`portraits.SPLASH_MAP`
   在刷新后真的变了。
 
-## 实际结果
+## 实际结果（2026-11-21）
 
-（待执行）
+- 迁移完成：`games/hsr/refresh.py`（~850 行）承载两份脚本主体 + `refresh_pools`
+  （全量即检查，`fetched_at` 外逐字段比对，结构不合格拒绝写盘）+ `check_site` /
+  `site_fingerprint` / `rebuild_site_maps`（首页 JS 入口列表哈希 → 漂移才递归重建，
+  重建后同步刷新 `portraits.SPLASH_MAP` / `LC_MAP` / `SINGLE_OFFSET`）+
+  `async checkpoint(rt)`（两件事都进 `to_thread`）。
+- `HsrRuntime`：`load()` 记下 `data_dir`；新增 `_reload_data()`（重读三份资源，失败上抛）
+  与协议第七样 `refresh()`（惰性导入转发）。
+- 细节定案：星铁 state 独立文件 `hsr_refresh_state.json`（两游戏共用一个 data_dir，
+  文件名不能撞）；`check_structure` 与 `--offline` 共用同一校验。
+- 验证：新增 `test_refresh_hsr.py` 15 条全绿；hsr 五个套件 + 架构守卫 94 条全绿；
+  `build_hsr_data.py --offline` 输出与 v0.3 一致（89 人 / 172 锥 / 301 池）。

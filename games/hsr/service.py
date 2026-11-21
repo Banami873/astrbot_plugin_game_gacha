@@ -76,6 +76,8 @@ class HsrRuntime:
         self.pools: tuple[pool_module.Pool, ...] = ()
         self.rules: engine.Rules | None = None
         self.error = ""
+        # `load()` 记下的 AstrBot 数据目录（放 hsr.db 与刷新 state）；定时刷新用它。
+        self.data_dir: Path | None = None
         # 外壳（插件）在装载前绑上来：身份与每用户锁都是跨游戏的，归它管。
         self.shell = None
         # 出图状态由 `setup_renderer` 填；默认关，测试与降级路径都不依赖渲染层。
@@ -106,6 +108,7 @@ class HsrRuntime:
         try:
             store = Store(Path(data_dir) / DB_NAME)
             store.ensure_schema()
+            self.data_dir = Path(data_dir)
             roster = roster_module.load_roster(self.resource_dir / "roster.json")
             pools = pool_module.load_pools(self.resource_dir / "pools.json")
             rules = engine.Rules.from_payload(
@@ -143,6 +146,36 @@ class HsrRuntime:
         render_glue.setup_renderer(self, data_dir)
 
     # ---- 协议 ------------------------------------------------------------
+
+    def _reload_data(self) -> None:
+        """热重载数据面（名册、卡池、概率参数）。`hsr.db` 与渲染器不动。
+
+        供定时刷新在写盘成功后调用（`games/hsr/refresh.py::refresh_pools`）。失败往上
+        抛——刷新层接住后保留旧数据并报告，本方法自己不做半吊子回滚。
+        """
+        roster = roster_module.load_roster(self.resource_dir / "roster.json")
+        pools = pool_module.load_pools(self.resource_dir / "pools.json")
+        rules = engine.Rules.from_payload(
+            json.loads(
+                (self.resource_dir / "pool_rules.json").read_text(encoding="utf-8")
+            )
+        )
+        if not pools:
+            raise ValueError("卡池快照里没有可用的角色活动跃迁")
+        self.roster = roster
+        self.pools = tuple(pools)
+        self.rules = rules
+        logger.info(f"{_LOG} 星铁数据已热重载：卡池 {len(self.pools)} 期")
+
+    async def refresh(self) -> str:
+        """协议第七样：每天定时由外壳调度器调用，检查卡池与站点映射有没有更新。
+
+        实现与报告格式见 `games/hsr/refresh.py::checkpoint`；本方法只负责转发，
+        让「调度器认协议」而不是「调度器认识星铁」。
+        """
+        from . import refresh as refresh_module
+
+        return await refresh_module.checkpoint(self)
 
     def active_pools(self, now: int) -> Sequence[pool_module.Pool]:
         """现在能抽的池：限时池看窗口，群星与联动是常开的。"""
