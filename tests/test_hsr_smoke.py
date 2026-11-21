@@ -116,7 +116,7 @@ def test_hsr_ten_pull(plugin):
 
 def test_arknights_still_works_alongside(plugin):
     """方舟那条路一条没变：`/十连` 仍然扣 gacha.db 的抽数。"""
-    text = _collect(plugin.cmd_pull_ten, StubEvent("十连"))
+    text = _collect(plugin.cmd_pull_ten, StubEvent("十连 常驻"))
     assert "10 抽" in text
     assert plugin.ark.store.get_user(UID, PLATFORM)["tickets"] == 30 - 10
     assert sum(plugin.ark.store.inventory_of(UID, PLATFORM).values()) == 10

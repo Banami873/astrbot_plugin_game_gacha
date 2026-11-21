@@ -92,10 +92,15 @@ DEFAULT_GUARANTEE5_COUNT = 10
 # 抽卡指令里「没指定池」时的取值理由，文案层据此决定说什么。
 CHOICE_OK = ""
 CHOICE_NONE_ACTIVE = "none_active"
+CHOICE_NO_LIMITED = "no_limited"
 CHOICE_NUMERIC = "numeric"
 CHOICE_NO_CATEGORY = "no_category"
 CHOICE_AMBIGUOUS = "ambiguous"
 CHOICE_NO_MATCH = "no_match"
+
+# 「限定」这个词在玩家嘴里包括联动池——两者都是「限定干员、不进常驻」的池子。
+# 写成关键词时两类一起搜（先限定后联动），不带任何词时**只认**限定类，见 `choose_pool`。
+LIMITED_FAMILY: tuple[str, ...] = ("限定", "联动")
 
 
 def load_category_map(rules_path: Path | str) -> dict[str, tuple[str, ...]]:
@@ -740,16 +745,42 @@ def _prefix_matches(pools: Sequence[Pool], prefix: str) -> list[Pool]:
     return [p for p in pools if any(prefix in n for n in names(p))]
 
 
+def _scoped(live: Sequence[Pool], category: str) -> list[Pool]:
+    """某类别能选的池。`限定` 是唯一的例外：它把联动池也算进来。
+
+    「限定」在群里既指限定寻访也指联动寻访——两者都是限定干员、都不进常驻。其余类别
+    严格按 `category` 过滤；没有类别就是全部。
+    """
+    if category == "限定":
+        return [p for p in live if p.category in LIMITED_FAMILY]
+    if not category:
+        return list(live)
+    return [p for p in live if p.category == category]
+
+
+def _preferred_category(scoped: Sequence[Pool]) -> list[Pool]:
+    """`限定` 作用域里同时开着限定与联动时，优先限定；没有限定才看联动。
+
+    玩家说「限定」时想的是当期那个限定池，联动有自己的一页指令（`/十连 联动`）。
+    """
+    limited = [p for p in scoped if p.category == "限定"]
+    return limited or list(scoped)
+
+
 def choose_pool(
     snapshot: Snapshot,
     now: int,
     tokens: Sequence[str] = (),
     known_categories: Sequence[str] = CATEGORY_ORDER,
 ) -> PoolChoice:
-    """按 `/单抽 [类别] [池名前缀]` 的参数定池（R-12）。
+    """按 `/单抽 [类别] [池名]` 的参数定池（R-12）。
 
     保证：参数合法时返回唯一池；多义、类目不存在、匹配不到、输入是纯数字时返回
     对应 `reason`，绝不替用户随便挑一个——抽错池比让用户多打两个字麻烦得多。
+
+    **不带任何词抽当期限定**：限定池没开时返回 `no_limited`，不再退化成「最新的池子」。
+    退化的后果是玩家发 `/十连` 抽出常驻干员，还以为限定开了；宁可让他看到一句
+    「现在没有限定池」再自己选类别。
     """
     live = snapshot.active(now)
     if not live:
@@ -758,21 +789,31 @@ def choose_pool(
     words = [token.strip() for token in tokens if token and token.strip()]
     if not words:
         limited = [p for p in live if p.category == "限定"]
-        return PoolChoice(pool=_latest(limited) if limited else _latest(live))
+        if not limited:
+            # 不退化：把现在开着什么列出来，让玩家自己带类别重发。
+            return PoolChoice(
+                reason=CHOICE_NO_LIMITED, candidates=tuple(live), query="限定"
+            )
+        return PoolChoice(pool=_latest(limited))
 
     if all(word.isdigit() for word in words):
         return PoolChoice(reason=CHOICE_NUMERIC, query="".join(words))
 
     category = words[0] if words[0] in known_categories else ""
     prefix = "".join(words[1:]) if category else "".join(words)
-    scoped = [p for p in live if not category or p.category == category]
+    scoped = _scoped(live, category)
     if category and not scoped:
-        return PoolChoice(reason=CHOICE_NO_CATEGORY, query=category)
+        return PoolChoice(
+            reason=CHOICE_NO_CATEGORY, query=category, candidates=tuple(live)
+        )
     if not prefix:
         if len(scoped) == 1:
             return PoolChoice(pool=scoped[0])
+        narrowed = _preferred_category(scoped) if category == "限定" else scoped
+        if len(narrowed) == 1:
+            return PoolChoice(pool=narrowed[0])
         return PoolChoice(
-            reason=CHOICE_AMBIGUOUS, candidates=tuple(scoped), query=category
+            reason=CHOICE_AMBIGUOUS, candidates=tuple(narrowed), query=category
         )
 
     matched = _prefix_matches(scoped, prefix)

@@ -166,7 +166,7 @@ class TestRenderFallbackInPull:
         self._enable(plugin, Broken())
         from test_isolation import FakeEvent, run
 
-        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连")))
+        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连 常驻")))
         assert "【寻访结果" in text
         assert "[图片]" not in text
         # 事务已经提交：抽数照扣，水位照写。
@@ -187,7 +187,7 @@ class TestRenderFallbackInPull:
 
         from test_isolation import FakeEvent, run
 
-        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连")))
+        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连 常驻")))
         assert "[图片]" in text
         # 图之外只补一行水位，不重复列抽到了谁。
         assert "剩余 20 抽" in text
@@ -199,6 +199,6 @@ class TestRenderFallbackInPull:
         plugin.ark.renderer = object()
         from test_isolation import FakeEvent, run
 
-        text = run(plugin.cmd_pull_single(FakeEvent(message="单抽")))
+        text = run(plugin.cmd_pull_single(FakeEvent(message="单抽 常驻")))
         assert "[图片]" not in text
         assert "【寻访结果】" in text

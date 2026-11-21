@@ -383,7 +383,8 @@ class TestChoosePool:
         )
         assert pools_mod.choose_pool(snapshot, NOW).pool.pool_id == "L"
 
-    def test_default_takes_latest_when_no_limited(self, pools_mod):
+    def test_default_refuses_to_degrade_when_no_limited(self, pools_mod):
+        """不带词只认限定。限定没开就报错——退化成「最新的池子」会让玩家以为限定开了。"""
         snapshot = _snapshot(
             pools_mod,
             [
@@ -391,7 +392,37 @@ class TestChoosePool:
                 _pool(gachaPoolId="B", endTime=NOW + 5 * DAY),
             ],
         )
-        assert pools_mod.choose_pool(snapshot, NOW).pool.pool_id == "B"
+        choice = pools_mod.choose_pool(snapshot, NOW)
+        assert choice.pool is None
+        assert choice.reason == pools_mod.CHOICE_NO_LIMITED
+        # 候选仍是全部在开的池，文案据此告诉玩家现在有什么
+        assert {p.pool_id for p in choice.candidates} == {"A", "B"}
+
+    def test_limited_keyword_also_covers_linkage(self, pools_mod):
+        """「限定」在玩家嘴里包括联动：只开着联动时，/十连 限定 抽的就是它。"""
+        snapshot = _snapshot(
+            pools_mod,
+            [_pool(gachaPoolId="K", gachaRuleType="LINKAGE", gachaPoolName="命运")],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW, ["限定"]).pool.pool_id == "K"
+
+    def test_limited_keyword_prefers_limited_over_linkage(self, pools_mod):
+        snapshot = _snapshot(
+            pools_mod,
+            [
+                _pool(gachaPoolId="L", gachaRuleType="LIMITED", gachaPoolName="庆典"),
+                _pool(gachaPoolId="K", gachaRuleType="LINKAGE", gachaPoolName="命运"),
+            ],
+        )
+        assert pools_mod.choose_pool(snapshot, NOW, ["限定"]).pool.pool_id == "L"
+        assert pools_mod.choose_pool(snapshot, NOW, ["联动"]).pool.pool_id == "K"
+
+    def test_linkage_keyword_refuses_when_none_is_open(self, pools_mod):
+        """联动没开就报错，不去抽常驻——这是本轮的硬要求。"""
+        snapshot = _snapshot(pools_mod, [_pool(gachaPoolId="N", gachaRuleType="DOUBLE")])
+        choice = pools_mod.choose_pool(snapshot, NOW, ["联动"])
+        assert choice.reason == pools_mod.CHOICE_NO_CATEGORY
+        assert [p.pool_id for p in choice.candidates] == ["N"]
 
     def test_numeric_input_is_refused(self, pools_mod):
         snapshot = _snapshot(pools_mod, [_pool()])

@@ -99,7 +99,7 @@ def test_initialize_builds_the_full_schema(plugin):
 
 def test_ten_pull_charges_and_stores(plugin):
     """`/十连`：扣十抽、仓库多十件。这条断言的就是「抽卡真的跑完了一遍」。"""
-    event = StubEvent("十连")
+    event = StubEvent("十连 常驻")
     plugin.ark._register(event)  # 建档并发新人礼，否则 before 无行可读
     before = plugin.ark.store.get_user("10001", "qq_official")["tickets"]
     text = _collect(plugin.cmd_pull_ten, event)

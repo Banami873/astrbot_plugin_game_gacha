@@ -293,14 +293,14 @@ def plugin(pkg, store, real_roster, pools_pkg, pool, make_ark_plugin):
 class TestPullCommands:
 
     def test_ten_pull_deducts_ten_tickets(self, plugin, store):
-        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连")))
+        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连 常驻")))
         assert "10 抽：" in text
         assert "剩余 20 抽" in text
         assert store.get_user("10001", "qq")["tickets"] == 20
         assert sum(store.inventory_of("10001", "qq").values()) == 10
 
     def test_single_pull_records_pity(self, plugin, store):
-        text = run(plugin.cmd_pull_single(FakeEvent(message="单抽")))
+        text = run(plugin.cmd_pull_single(FakeEvent(message="单抽 常驻")))
         assert "剩余 29 抽" in text
         state = store.read_pull_state(
             "10001", "qq", pool_id="NORM_TEST", group_key="standard"
@@ -311,7 +311,7 @@ class TestPullCommands:
         economy_mod.ensure_user(store, "10001", "qq")
         economy_mod.adjust(store, "10001", "qq", -27)  # 3 抽
 
-        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连")))
+        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连 常驻")))
 
         assert "需要 10 抽，你还有 3 抽" in text
         assert store.get_user("10001", "qq")["tickets"] == 3
@@ -325,6 +325,14 @@ class TestPullCommands:
         text = run(plugin.cmd_pull_single(FakeEvent(message="单抽 3")))
         assert "编号" in text
         assert store.get_user("10001", "qq")["tickets"] == 30
+
+    def test_bare_command_does_not_fall_back_to_standard(self, plugin, store):
+        """限定没开时 `/十连` 必须报错：退化成常驻会让玩家以为限定开了。"""
+        text = run(plugin.cmd_pull_ten(FakeEvent(message="十连")))
+        assert "没有限定池" in text
+        assert "不会自动改抽常驻" in text
+        assert store.get_user("10001", "qq")["tickets"] == 30
+        assert store.inventory_of("10001", "qq") == {}
 
     def test_ambiguous_category_lists_candidates(self, plugin, store, pools_pkg):
         plugin.ark.snapshot = FakeSnapshot(
@@ -351,7 +359,7 @@ class TestPullCommands:
 
     def test_no_active_pool(self, plugin, store):
         plugin.ark.snapshot = FakeSnapshot([])
-        text = run(plugin.cmd_pull_single(FakeEvent(message="单抽")))
+        text = run(plugin.cmd_pull_single(FakeEvent(message="单抽 常驻")))
         assert "没有进行中的卡池" in text
         assert store.get_user("10001", "qq")["tickets"] == 30
 
@@ -365,8 +373,8 @@ class TestPullCommands:
 
         async def race():
             return await asyncio.gather(
-                collect(FakeEvent(message="单抽")),
-                collect(FakeEvent(message="单抽")),
+                collect(FakeEvent(message="单抽 常驻")),
+                collect(FakeEvent(message="单抽 常驻")),
             )
 
         texts = ["\n".join(chunks) for chunks in asyncio.run(race())]

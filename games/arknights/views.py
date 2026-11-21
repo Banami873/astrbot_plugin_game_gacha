@@ -623,15 +623,30 @@ def render_pool_problem(
             "本插件不使用卡池编号——池子结束后编号会顺延，抽错池就是这么来的。\n"
             "请用池名指定，例如：/单抽 限定 海渊"
         )
-    if reason == "no_category":
-        return f"当前没有「{query}」类别的进行中卡池，/卡池查询 看看现在有什么。"
-
-    if not candidates:
-        return "没有匹配到进行中的卡池。"
 
     listing = "\n".join(
         f"· {pool.display_name}（{pool.remaining_text(now)}）" for pool in candidates[:8]
     )
+    if reason == "no_limited":
+        # 不带词 = 抽限定。限定没开就停在这里，绝不退化成「最新的池子」。
+        tail = f"当前进行中：\n{listing}\n" if listing else ""
+        return (
+            "现在没有限定池在开，也不会自动改抽常驻。\n"
+            f"{tail}"
+            "要抽别的带上类别：/十连 常驻 · /十连 限时 · /十连 中坚 · /十连 联动"
+        )
+    if reason == "no_category":
+        # 「限定」把联动也算在内，得说清楚为什么两类都没有——否则玩家会以为联动被漏了。
+        head = (
+            "当前没有限定池在开，联动池也没开（写「限定」时联动也算在内）。"
+            if query == "限定"
+            else f"当前没有「{query}」类别的进行中卡池。"
+        )
+        tail = f"当前进行中：\n{listing}" if listing else "/卡池查询 看看现在有什么。"
+        return f"{head}\n{tail}"
+
+    if not candidates:
+        return "没有匹配到进行中的卡池。"
     if reason == "no_match":
         return f"没有名称含「{query}」的进行中卡池。\n当前进行中：\n{listing}"
     return f"「{query}」匹配到 {len(candidates)} 个卡池，请补几个字再试：\n{listing}"
