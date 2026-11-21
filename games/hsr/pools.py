@@ -250,20 +250,40 @@ def _resolve(hits: Sequence[Pool], scope: str, query: str) -> PoolChoice:
     return PoolChoice(chosen, tuple(hits), "", scope, query)
 
 
+def _choose_by_name(usable: Sequence[Pool], name: str) -> PoolChoice:
+    """没有关键词、只写了一个名字：**限定优先，其次全池**。
+
+    两半各有用处：
+    - 前半句让 `/星铁十连 阿哈` 稳稳落在本期新角色上。同名的不止一处——光锥「当第一声
+      「阿哈」响起」里也有这两个字——若一上来就全池找，会被判成歧义反问玩家要哪张。
+    - 后半句让 `/星铁十连 Saber`、`/星铁十连 银狼` 这种限定里根本没有的名字照样能用，
+      不必为了抽一张联动卡先记住「联动」这个词。
+    """
+    default = SCOPES[DEFAULT_SCOPE]
+    hits = _match(tuple(pool for pool in usable if default.covers(pool)), name)
+    if hits:
+        return _resolve(hits, default.label, name)
+    hits = _match(usable, name)
+    if not hits:
+        return PoolChoice(None, usable, "unknown", "", name)
+    return _resolve(hits, "", name)
+
+
 def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
     """挑一个池：`[/星铁十连] [作用域] [池名 / 合集名 / UP 名]`。
 
-    规则一句话：**无前缀一律限定；写了关键词就只在该范围内按名字找；范围空了就报错**。
-    三步：
+    规则一句话：**不写词等价于「限定」；写了关键词就只在该范围内按名字找；范围空了
+    就报错**。四步：
 
     1. 第一个词是完全相等的池型关键词（`限定` / `复刻` / `角色` / `光锥` / `联动` /
        `联动光锥` / `常驻` / `群星`）时，它就是作用域，剩下的都算名字；名字只在**这个
        作用域里**找，「角色」这种泛指关键词覆盖该类的全部池（新池、复刻、联动）。
-    2. 没有关键词时作用域一律取 `限定`——不管后面跟没跟名字。玩家打 `/星铁十连 阿哈`
-       要的是这一期的新角色；名字在限定里对不上就报错，不溜到光锥或联动去兜底。想抽
-       别的类别，关键词写出来（`/星铁十连 联动 Saber`）。
-    3. 作用域里一张池都没有 → `no_scope`，绝不改抽别的类别；带名字但没匹配上 →
-       `unknown`，列出该范围内的候选。
+    2. 没有关键词、也没有名字 → 作用域取 `限定`，即 `/星铁十连` ≡ `/星铁十连 限定`。
+    3. 没有关键词、但有名字 → 限定优先、其次全池（`_choose_by_name`）：`阿哈` 抽限定，
+       `Saber` / `银狼` 也能找到联动与复刻。名字只在**限定的那一次**被约束，不会跑到
+       别的类别去「猜」；限定里没有才放开，是兜底而不是改写作用域。
+    4. 作用域里一张池都没有 → `no_scope`，绝不改抽别的类别；带名字但没匹配上 →
+       `unknown`，列出候选。
     """
     usable = usable_pools(pools, now)
     if not usable:
@@ -276,9 +296,12 @@ def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
     # 「真意之汇•拂晓之前」等价，所以这里只需要把词拼回去。
     name = " ".join(tokens[1:]) if scope is not None else text
 
-    if scope is None:
-        # 无前缀 = 限定。名字也只在限定里找：范围由关键词决定，不由名字猜。
+    if scope is None and not name:
+        # 什么都不写 ≡ 限定。
         scope = SCOPES[DEFAULT_SCOPE]
+
+    if scope is None:
+        return _choose_by_name(usable, name)
 
     scoped = tuple(pool for pool in usable if scope.covers(pool))
     if not scoped:
