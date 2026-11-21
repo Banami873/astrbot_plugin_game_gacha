@@ -27,6 +27,7 @@ from typing import AsyncIterator, Sequence
 from astrbot.api import logger
 
 from ...core import economy
+from ... import font_fill
 from . import engine
 from . import pools as pool_module
 from . import roster as roster_module
@@ -48,6 +49,8 @@ _LOG = "[astrbot_plugin_game_gacha]"
 
 # 随包资源（名册、卡池、概率参数），由 `tools/build_hsr_data.py` 生成或核对。
 RESOURCE_DIR = Path(__file__).resolve().parents[2] / "resources" / "hsr"
+# 字体自动补齐（font_fill.schedule）读的配置。
+FONTS_JSON = RESOURCE_DIR / "ui" / "fonts.json"
 
 DB_NAME = "hsr.db"
 
@@ -144,6 +147,8 @@ class HsrRuntime:
             logger.warning(f"{_LOG} 星铁出图不可用，一律文字：{_RENDER_ERROR}")
             return
         render_glue.setup_renderer(self, data_dir)
+        # 字体补齐是锦上添花：出图关着 / 不联网时它自己会跳过，失败也不影响装载。
+        font_fill.schedule(self)
 
     # ---- 协议 ------------------------------------------------------------
 

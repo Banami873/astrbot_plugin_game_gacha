@@ -4,5 +4,11 @@
   "initial": ["SourceHanSerifCN-Heavy-4.otf"],
   "name_cn": ["SourceHanSerifCN-Heavy-4.otf"],
   "name_en": ["HarmonyOS_Sans_SC_Bold.ttf"]
+ },
+ "sources": {
+  "SourceHanSerifCN-Heavy-4.otf": "https://cdn.jsdelivr.net/gh/adobe-fonts/source-han-serif@release/SubsetOTF/CN/SourceHanSerifCN-Heavy.otf",
+  "SOURCEHANSERIFCN-BOLD.otf": "https://cdn.jsdelivr.net/gh/adobe-fonts/source-han-serif@release/SubsetOTF/CN/SourceHanSerifCN-Bold.otf",
+  "HarmonyOS_Sans_SC_Bold.ttf": "https://cdn.jsdelivr.net/gh/LuRenDing2020/HarmonyOSFonts@main/HarmonyOS_Sans_SC_Bold.ttf",
+  "HYQiHei-65S.ttf": ""
  }
 }

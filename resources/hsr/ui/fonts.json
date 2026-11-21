@@ -10,5 +10,11 @@
   "neue": "StarRailNeue-Regular.woff2",
   "path_glyph": "hsr-icon.ttf",
   "star": "hsr-icon.ttf"
+ },
+ "sources": {
+  "hsr-icon.ttf": "https://hsr.wishsimulator.app/fonts/hsr-icon.ttf",
+  "StarRailNeue-Regular.woff2": "https://hsr.wishsimulator.app/fonts/StarRailNeue-Regular.woff2",
+  "HYQiHei-65S.ttf": "",
+  "HYRunYuan-65W.ttf": ""
  }
 }

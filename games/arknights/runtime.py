@@ -23,6 +23,7 @@ from astrbot.api import logger
 
 from ...core import economy
 from ...core import pity as pity_module
+from ... import font_fill
 from . import banners as banner_module
 from . import commands as ark_commands
 from . import limited as limited_module
@@ -49,6 +50,8 @@ BANNER_SNAPSHOT_PATH = SNAPSHOT_DIR / "banners.json"
 RULES_PATH = RESOURCE_DIR / "pool_rules.json"
 PITY_RULES_PATH = RESOURCE_DIR / "pity_groups.json"
 LIMITS_PATH = RESOURCE_DIR / "limits.json"
+# 字体自动补齐（font_fill.schedule）读的配置。缺文件时按 sources 里填的地址下载。
+FONTS_JSON = RESOURCE_DIR / "fonts" / "fonts.json"
 
 
 class ArknightsRuntime:
@@ -133,6 +136,8 @@ class ArknightsRuntime:
         self._load_roster()
         self._load_discounts()
         render_glue.setup_renderer(self, data_dir)
+        # 字体补齐是锦上添花：出图关着 / 不联网时它自己会跳过，失败也不影响装载。
+        font_fill.schedule(self)
 
     def _load_rules(self) -> None:
         self.category_map = pool_module.load_category_map(RULES_PATH)
