@@ -1,10 +1,404 @@
 {
-  "fetched_at": "2026-11-20 23:31:06",
+  "fetched_at": "2026-11-21 08:51:13",
   "source": "biligame-wiki",
   "pools": [
     {
-      "pool_id": "067-1",
+      "pool_id": "cone-068-2-3",
+      "kind": "light_cone",
+      "name": "真意之汇•拂晓之前",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1796184000,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "23010",
+          "name": "拂晓之前"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-068-2-2",
+      "kind": "light_cone",
+      "name": "真意之汇•比阳光更明亮的",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1796184000,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "23015",
+          "name": "比阳光更明亮的"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-068-2-1",
+      "kind": "light_cone",
+      "name": "真意之汇•行于流逝的岸",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1796184000,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "23024",
+          "name": "行于流逝的岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-068-2-3",
+      "kind": "character",
+      "name": "景元",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1796184000,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "1204",
+          "name": "景元"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-068-2-2",
+      "kind": "character",
+      "name": "丹恒•饮月",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1796184000,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "1213",
+          "name": "丹恒•饮月"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-068-2-1",
+      "kind": "character",
+      "name": "黄泉",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1796184000,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "1308",
+          "name": "黄泉"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-067-2-3",
+      "kind": "light_cone",
+      "name": "真意之汇•当她决定看见",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1796183940,
+      "up5": [
+        {
+          "id": "23054",
+          "name": "当她决定看见"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-067-2-2",
+      "kind": "light_cone",
+      "name": "真意之汇•花花世界迷人眼",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1796183940,
+      "up5": [
+        {
+          "id": "23053",
+          "name": "花花世界迷人眼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-067-2-1",
+      "kind": "light_cone",
+      "name": "真意之汇•欢迎来到银河城",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1796183940,
+      "up5": [
+        {
+          "id": "23057",
+          "name": "欢迎来到银河城"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-067-1",
+      "kind": "light_cone",
+      "name": "流光定影",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1797922800,
+      "up5": [
+        {
+          "id": "23065",
+          "name": "当第一声「阿哈」响起"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-067-2-3",
+      "kind": "character",
+      "name": "爻光",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1796183940,
+      "up5": [
+        {
+          "id": "1502",
+          "name": "爻光"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-067-2-2",
+      "kind": "character",
+      "name": "火花",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1796183940,
+      "up5": [
+        {
+          "id": "1501",
+          "name": "火花"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-067-2-1",
+      "kind": "character",
+      "name": "银狼LV.999",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1794362400,
+      "end_time": 1796183940,
+      "up5": [
+        {
+          "id": "1506",
+          "name": "银狼LV.999"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-067-1",
+      "kind": "character",
       "name": "愚戏众星",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1794362400,
       "end_time": 1797922800,
       "up5": [
@@ -29,8 +423,42 @@
       ]
     },
     {
-      "pool_id": "066-1",
+      "pool_id": "cone-066-1",
+      "kind": "light_cone",
+      "name": "溯回忆象",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1792555200,
+      "end_time": 1794294000,
+      "up5": [
+        {
+          "id": "23059",
+          "name": "灼尽炼狱的新骸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-066-1",
+      "kind": "character",
       "name": "我身即刃",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1792555200,
       "end_time": 1794294000,
       "up5": [
@@ -55,8 +483,72 @@
       ]
     },
     {
-      "pool_id": "065-2",
+      "pool_id": "cone-065-2",
+      "kind": "light_cone",
+      "name": "溯回忆象",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1790560800,
+      "end_time": 1792555140,
+      "up5": [
+        {
+          "id": "23058",
+          "name": "邂逅于下一个花季"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-065-1",
+      "kind": "light_cone",
+      "name": "流光定影",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1790560800,
+      "end_time": 1794294000,
+      "up5": [
+        {
+          "id": "23055",
+          "name": "献给明日的色彩"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-065-2",
+      "kind": "character",
       "name": "韶艾裁英",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1790560800,
       "end_time": 1792555140,
       "up5": [
@@ -81,8 +573,12 @@
       ]
     },
     {
-      "pool_id": "065-1",
+      "pool_id": "char-065-1",
+      "kind": "character",
       "name": "沧海萃珠",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1790560800,
       "end_time": 1794294000,
       "up5": [
@@ -107,8 +603,72 @@
       ]
     },
     {
-      "pool_id": "064-2",
+      "pool_id": "cone-064-2",
+      "kind": "light_cone",
+      "name": "一场谎言的终幕",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1789185600,
+      "end_time": 1790539140,
+      "up5": [
+        {
+          "id": "23056",
+          "name": "一场谎言的终幕"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-064-1",
+      "kind": "light_cone",
+      "name": "向浪花掷下盛夏",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1789185600,
+      "end_time": 1790539140,
+      "up5": [
+        {
+          "id": "23064",
+          "name": "向浪花掷下盛夏"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-064-2",
+      "kind": "character",
       "name": "长夜狩影",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1789185600,
       "end_time": 1790539140,
       "up5": [
@@ -133,8 +693,12 @@
       ]
     },
     {
-      "pool_id": "064-1",
+      "pool_id": "char-064-1",
+      "kind": "character",
       "name": "激浪跃金",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1789185600,
       "end_time": 1790539140,
       "up5": [
@@ -159,8 +723,72 @@
       ]
     },
     {
-      "pool_id": "063-2",
+      "pool_id": "cone-063-2",
+      "kind": "light_cone",
+      "name": "愿虹光永驻天空",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1787709600,
+      "end_time": 1789185540,
+      "up5": [
+        {
+          "id": "23042",
+          "name": "愿虹光永驻天空"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        },
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21066",
+          "name": "放个短假"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-063-1",
+      "kind": "light_cone",
+      "name": "你将起身歌唱",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1787709600,
+      "end_time": 1789185540,
+      "up5": [
+        {
+          "id": "23063",
+          "name": "你将起身歌唱"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        },
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21066",
+          "name": "放个短假"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-063-2",
+      "kind": "character",
       "name": "虹隽晨昏",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1787709600,
       "end_time": 1789185540,
       "up5": [
@@ -185,8 +813,12 @@
       ]
     },
     {
-      "pool_id": "063-1",
+      "pool_id": "char-063-1",
+      "kind": "character",
       "name": "晴音和鸣",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1787709600,
       "end_time": 1789185540,
       "up5": [
@@ -211,8 +843,392 @@
       ]
     },
     {
-      "pool_id": "060-1",
+      "pool_id": "cone-062-1-3",
+      "kind": "light_cone",
+      "name": "真意之汇•命运从未公平",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1785902400,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "23023",
+          "name": "命运从未公平"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-062-1-2",
+      "kind": "light_cone",
+      "name": "真意之汇•生命当付之一炬",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1785902400,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "23041",
+          "name": "生命当付之一炬"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-062-1-1",
+      "kind": "light_cone",
+      "name": "真意之汇•金血铭刻的时代",
+      "series": "真意之汇",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1785902400,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "23048",
+          "name": "金血铭刻的时代"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-062-1-3",
+      "kind": "character",
+      "name": "砂金",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1785902400,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "1304",
+          "name": "砂金"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-062-1-2",
+      "kind": "character",
+      "name": "那刻夏",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1785902400,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "1405",
+          "name": "那刻夏"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-062-1-1",
+      "kind": "character",
+      "name": "刻律德菈",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1785902400,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "1412",
+          "name": "刻律德菈"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-collab-061-2",
+      "kind": "collab_light_cone",
+      "name": "神代金扉",
+      "series": "",
+      "featured": false,
+      "permanent": true,
+      "start_time": 1784865600,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "23062",
+          "name": "所见即我"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-collab-061-1",
+      "kind": "collab_light_cone",
+      "name": "万华骄芒",
+      "series": "",
+      "featured": false,
+      "permanent": true,
+      "start_time": 1784865600,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "23061",
+          "name": "星火悄然闪耀"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-collab-061-2",
+      "kind": "collab_character",
+      "name": "原初开辟之星",
+      "series": "",
+      "featured": true,
+      "permanent": true,
+      "start_time": 1784865600,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "1509",
+          "name": "吉尔伽美什"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-collab-061-1",
+      "kind": "collab_character",
+      "name": "魔石赤染流光",
+      "series": "",
+      "featured": true,
+      "permanent": true,
+      "start_time": 1784865600,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "1508",
+          "name": "远坂凛"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-060-2-3",
+      "kind": "light_cone",
+      "name": "致长夜的星光",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1785902340,
+      "up5": [
+        {
+          "id": "23049",
+          "name": "致长夜的星光"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-060-2-2",
+      "kind": "light_cone",
+      "name": "纵然山河万程",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1785902340,
+      "up5": [
+        {
+          "id": "23051",
+          "name": "纵然山河万程"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-060-2-1",
+      "kind": "light_cone",
+      "name": "花花世界迷人眼",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1785902340,
+      "up5": [
+        {
+          "id": "23053",
+          "name": "花花世界迷人眼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-060-1",
+      "kind": "light_cone",
+      "name": "当一颗星照亮夜空",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1787641200,
+      "up5": [
+        {
+          "id": "23060",
+          "name": "当一颗星照亮夜空"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-060-2-3",
+      "kind": "character",
+      "name": "长夜月",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1785902340,
+      "up5": [
+        {
+          "id": "1413",
+          "name": "长夜月"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1223",
+          "name": "貊泽"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1103",
+          "name": "希露瓦"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-060-2-2",
+      "kind": "character",
+      "name": "丹恒•腾荒",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1785902340,
+      "up5": [
+        {
+          "id": "1414",
+          "name": "丹恒•腾荒"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1223",
+          "name": "貊泽"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1103",
+          "name": "希露瓦"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-060-2-1",
+      "kind": "character",
+      "name": "火花",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1784080800,
+      "end_time": 1785902340,
+      "up5": [
+        {
+          "id": "1501",
+          "name": "火花"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1223",
+          "name": "貊泽"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1103",
+          "name": "希露瓦"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-060-1",
+      "kind": "character",
       "name": "拓星启明",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1784080800,
       "end_time": 1787641200,
       "up5": [
@@ -237,8 +1253,72 @@
       ]
     },
     {
-      "pool_id": "059-2",
+      "pool_id": "cone-059-2",
+      "kind": "light_cone",
+      "name": "溯回忆象",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1782273600,
+      "end_time": 1784012400,
+      "up5": [
+        {
+          "id": "23044",
+          "name": "黎明恰如此燃烧"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-059-1",
+      "kind": "light_cone",
+      "name": "溯回忆象",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1782273600,
+      "end_time": 1784012400,
+      "up5": [
+        {
+          "id": "23052",
+          "name": "爱如此刻永恒"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-059-2",
+      "kind": "character",
       "name": "永劫燔阳",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1782273600,
       "end_time": 1784012400,
       "up5": [
@@ -263,8 +1343,12 @@
       ]
     },
     {
-      "pool_id": "059-1",
+      "pool_id": "char-059-1",
+      "kind": "character",
       "name": "涟漪回环",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1782273600,
       "end_time": 1784012400,
       "up5": [
@@ -289,8 +1373,72 @@
       ]
     },
     {
-      "pool_id": "058-2",
+      "pool_id": "cone-058-2",
+      "kind": "light_cone",
+      "name": "当她决定看见",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1780279200,
+      "end_time": 1782273540,
+      "up5": [
+        {
+          "id": "23054",
+          "name": "当她决定看见"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-058-1",
+      "kind": "light_cone",
+      "name": "灼尽炼狱的新骸",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1780279200,
+      "end_time": 1782273540,
+      "up5": [
+        {
+          "id": "23059",
+          "name": "灼尽炼狱的新骸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-058-2",
+      "kind": "character",
       "name": "光映千翎",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1780279200,
       "end_time": 1782273540,
       "up5": [
@@ -315,8 +1463,12 @@
       ]
     },
     {
-      "pool_id": "058-1",
+      "pool_id": "char-058-1",
+      "kind": "character",
       "name": "我身即刃",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1780279200,
       "end_time": 1782273540,
       "up5": [
@@ -341,8 +1493,222 @@
       ]
     },
     {
-      "pool_id": "057-1",
+      "pool_id": "cone-057-2-3",
+      "kind": "light_cone",
+      "name": "我将，巡征追猎",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "23031",
+          "name": "我将，巡征追猎"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-057-2-2",
+      "kind": "light_cone",
+      "name": "回到大地的飞行",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "23034",
+          "name": "回到大地的飞行"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-057-2-1",
+      "kind": "light_cone",
+      "name": "如果时间是一朵花",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "23038",
+          "name": "如果时间是一朵花"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-057-1",
+      "kind": "light_cone",
+      "name": "邂逅于下一个花季",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "23058",
+          "name": "邂逅于下一个花季"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-057-2-3",
+      "kind": "character",
+      "name": "铭心之萃•飞霄",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "1220",
+          "name": "飞霄"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1301",
+          "name": "加拉赫"
+        },
+        {
+          "id": "1214",
+          "name": "雪衣"
+        },
+        {
+          "id": "1109",
+          "name": "虎克"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-057-2-2",
+      "kind": "character",
+      "name": "铭心之萃•星期日",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "1313",
+          "name": "星期日"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1301",
+          "name": "加拉赫"
+        },
+        {
+          "id": "1214",
+          "name": "雪衣"
+        },
+        {
+          "id": "1109",
+          "name": "虎克"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-057-2-1",
+      "kind": "character",
+      "name": "铭心之萃•缇宝",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1778644800,
+      "end_time": 1780257540,
+      "up5": [
+        {
+          "id": "1403",
+          "name": "缇宝"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1301",
+          "name": "加拉赫"
+        },
+        {
+          "id": "1214",
+          "name": "雪衣"
+        },
+        {
+          "id": "1109",
+          "name": "虎克"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-057-1",
+      "kind": "character",
       "name": "韶艾裁英",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1778644800,
       "end_time": 1780257540,
       "up5": [
@@ -367,8 +1733,144 @@
       ]
     },
     {
-      "pool_id": "056-1",
+      "pool_id": "cone-056-2-3",
+      "kind": "light_cone",
+      "name": "梦应归于何处",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "23025",
+          "name": "梦应归于何处"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-056-2-2",
+      "kind": "light_cone",
+      "name": "让告别，更美一些",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "23040",
+          "name": "让告别，更美一些"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-056-2-1",
+      "kind": "light_cone",
+      "name": "勿忘她的火焰",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "23050",
+          "name": "勿忘她的火焰"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-056-1",
+      "kind": "light_cone",
+      "name": "欢迎来到银河城",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "23057",
+          "name": "欢迎来到银河城"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-056-2-3",
+      "kind": "character",
+      "name": "铭心之萃•流萤",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "1310",
+          "name": "流萤"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-056-2-2",
+      "kind": "character",
+      "name": "铭心之萃•遐蝶",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "1407",
+          "name": "遐蝶"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-056-2-1",
+      "kind": "character",
+      "name": "铭心之萃•大丽花",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1776823200,
+      "end_time": 1778644740,
+      "up5": [
+        {
+          "id": "1321",
+          "name": "大丽花"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-056-1",
+      "kind": "character",
       "name": "无敌玩家",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1776823200,
       "end_time": 1778644740,
       "up5": [
@@ -393,8 +1895,42 @@
       ]
     },
     {
-      "pool_id": "055-1",
+      "pool_id": "cone-055-1",
+      "kind": "light_cone",
+      "name": "驶向第二次生命",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1775620800,
+      "end_time": 1776754800,
+      "up5": [
+        {
+          "id": "23027",
+          "name": "驶向第二次生命"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-055-1",
+      "kind": "character",
       "name": "扬尘孤星",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1775620800,
       "end_time": 1776754800,
       "up5": [
@@ -419,8 +1955,72 @@
       ]
     },
     {
-      "pool_id": "054-2",
+      "pool_id": "cone-054-2",
+      "kind": "light_cone",
+      "name": "愿虹光永驻天空",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1774404000,
+      "end_time": 1775620740,
+      "up5": [
+        {
+          "id": "23042",
+          "name": "愿虹光永驻天空"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-054-1",
+      "kind": "light_cone",
+      "name": "一场谎言的终幕",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1774404000,
+      "end_time": 1776754800,
+      "up5": [
+        {
+          "id": "23056",
+          "name": "一场谎言的终幕"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-054-2",
+      "kind": "character",
       "name": "虹隽晨昏",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1774404000,
       "end_time": 1775620740,
       "up5": [
@@ -445,8 +2045,12 @@
       ]
     },
     {
-      "pool_id": "054-1",
+      "pool_id": "char-054-1",
+      "kind": "character",
       "name": "长夜狩影",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1774404000,
       "end_time": 1776754800,
       "up5": [
@@ -471,8 +2075,222 @@
       ]
     },
     {
-      "pool_id": "053-1",
+      "pool_id": "cone-053-2-3",
+      "kind": "light_cone",
+      "name": "游戏尘寰",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "23021",
+          "name": "游戏尘寰"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-053-2-2",
+      "kind": "light_cone",
+      "name": "忍法帖•缭乱破魔",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "23033",
+          "name": "忍法帖•缭乱破魔"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-053-2-1",
+      "kind": "light_cone",
+      "name": "金血铭刻的时代",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "23048",
+          "name": "金血铭刻的时代"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-053-1",
+      "kind": "light_cone",
+      "name": "花花世界迷人眼",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "23053",
+          "name": "花花世界迷人眼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-053-2-3",
+      "kind": "character",
+      "name": "铭心之萃•花火",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "1306",
+          "name": "花火"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1201",
+          "name": "青雀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-053-2-2",
+      "kind": "character",
+      "name": "铭心之萃•乱破",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "1317",
+          "name": "乱破"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1201",
+          "name": "青雀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-053-2-1",
+      "kind": "character",
+      "name": "铭心之萃•刻律德菈",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1772510400,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "1412",
+          "name": "刻律德菈"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1201",
+          "name": "青雀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-053-1",
+      "kind": "character",
       "name": "狂欢企划",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1772510400,
       "end_time": 1774335600,
       "up5": [
@@ -497,8 +2315,222 @@
       ]
     },
     {
-      "pool_id": "052-1",
+      "pool_id": "cone-052-2-3",
+      "kind": "light_cone",
+      "name": "重塑时光之忆",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1772510340,
+      "up5": [
+        {
+          "id": "23022",
+          "name": "重塑时光之忆"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-052-2-2",
+      "kind": "light_cone",
+      "name": "海洋为何而歌",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1772510340,
+      "up5": [
+        {
+          "id": "23047",
+          "name": "海洋为何而歌"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-052-2-1",
+      "kind": "light_cone",
+      "name": "致长夜的星光",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1772510340,
+      "up5": [
+        {
+          "id": "23049",
+          "name": "致长夜的星光"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-052-1",
+      "kind": "light_cone",
+      "name": "当她决定看见",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1774335600,
+      "up5": [
+        {
+          "id": "23054",
+          "name": "当她决定看见"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-052-2-3",
+      "kind": "character",
+      "name": "铭心之萃•黑天鹅",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1772510340,
+      "up5": [
+        {
+          "id": "1307",
+          "name": "黑天鹅"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1201",
+          "name": "青雀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-052-2-2",
+      "kind": "character",
+      "name": "铭心之萃•海瑟音",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1772510340,
+      "up5": [
+        {
+          "id": "1410",
+          "name": "海瑟音"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1201",
+          "name": "青雀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-052-2-1",
+      "kind": "character",
+      "name": "铭心之萃•长夜月",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1770948000,
+      "end_time": 1772510340,
+      "up5": [
+        {
+          "id": "1413",
+          "name": "长夜月"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1201",
+          "name": "青雀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-052-1",
+      "kind": "character",
       "name": "光映千翎",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1770948000,
       "end_time": 1774335600,
       "up5": [
@@ -523,8 +2555,72 @@
       ]
     },
     {
-      "pool_id": "051-2",
+      "pool_id": "cone-051-2",
+      "kind": "light_cone",
+      "name": "回到大地的飞行",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1769572800,
+      "end_time": 1770879600,
+      "up5": [
+        {
+          "id": "23034",
+          "name": "回到大地的飞行"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-051-1",
+      "kind": "light_cone",
+      "name": "将光阴织成黄金",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1769572800,
+      "end_time": 1770879600,
+      "up5": [
+        {
+          "id": "23036",
+          "name": "将光阴织成黄金"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-051-2",
+      "kind": "character",
       "name": "向星举目",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1769572800,
       "end_time": 1770879600,
       "up5": [
@@ -549,8 +2645,12 @@
       ]
     },
     {
-      "pool_id": "051-1",
+      "pool_id": "char-051-1",
+      "kind": "character",
       "name": "裁酌天命",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1769572800,
       "end_time": 1770879600,
       "up5": [
@@ -575,8 +2675,72 @@
       ]
     },
     {
-      "pool_id": "050-2",
+      "pool_id": "cone-050-2",
+      "kind": "light_cone",
+      "name": "唯有香如故",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1767758400,
+      "end_time": 1769572740,
+      "up5": [
+        {
+          "id": "23032",
+          "name": "唯有香如故"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-050-1",
+      "kind": "light_cone",
+      "name": "长路终有归途",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1767758400,
+      "end_time": 1769572740,
+      "up5": [
+        {
+          "id": "23035",
+          "name": "长路终有归途"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-050-2",
+      "kind": "character",
       "name": "卧香沉水",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1767758400,
       "end_time": 1769572740,
       "up5": [
@@ -601,8 +2765,12 @@
       ]
     },
     {
-      "pool_id": "050-1",
+      "pool_id": "char-050-1",
+      "kind": "character",
       "name": "归路迢迢",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1767758400,
       "end_time": 1769572740,
       "up5": [
@@ -627,8 +2795,72 @@
       ]
     },
     {
-      "pool_id": "049-2",
+      "pool_id": "cone-049-2",
+      "kind": "light_cone",
+      "name": "梦应归于何处",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1765936800,
+      "end_time": 1767758340,
+      "up5": [
+        {
+          "id": "23025",
+          "name": "梦应归于何处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-049-1",
+      "kind": "light_cone",
+      "name": "勿忘她的火焰",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1765936800,
+      "end_time": 1767758340,
+      "up5": [
+        {
+          "id": "23050",
+          "name": "勿忘她的火焰"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-049-2",
+      "kind": "character",
       "name": "盈茧炽盛",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1765936800,
       "end_time": 1767758340,
       "up5": [
@@ -653,8 +2885,12 @@
       ]
     },
     {
-      "pool_id": "049-1",
+      "pool_id": "char-049-1",
+      "kind": "character",
       "name": "烛中翩影",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1765936800,
       "end_time": 1767758340,
       "up5": [
@@ -679,8 +2915,246 @@
       ]
     },
     {
-      "pool_id": "046-1",
+      "pool_id": "cone-048-1-3",
+      "kind": "light_cone",
+      "name": "血火啊，燃烧前路",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1764129600,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "23039",
+          "name": "血火啊，燃烧前路"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-048-1-2",
+      "kind": "light_cone",
+      "name": "谎言在风中飘扬",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1764129600,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "23043",
+          "name": "谎言在风中飘扬"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-048-1-1",
+      "kind": "light_cone",
+      "name": "黎明恰如此燃烧",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1764129600,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "23044",
+          "name": "黎明恰如此燃烧"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-048-1-3",
+      "kind": "character",
+      "name": "万敌",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1764129600,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "1404",
+          "name": "万敌"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-048-1-2",
+      "kind": "character",
+      "name": "赛飞儿",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1764129600,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "1406",
+          "name": "赛飞儿"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-048-1-1",
+      "kind": "character",
+      "name": "白厄",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1764129600,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "1408",
+          "name": "白厄"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-047-2-3",
+      "kind": "light_cone",
+      "name": "如果时间是一朵花",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1764129540,
+      "up5": [
+        {
+          "id": "23038",
+          "name": "如果时间是一朵花"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-047-2-2",
+      "kind": "light_cone",
+      "name": "让告别，更美一些",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1764129540,
+      "up5": [
+        {
+          "id": "23040",
+          "name": "让告别，更美一些"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-047-2-1",
+      "kind": "light_cone",
+      "name": "愿虹光永驻天空",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1764129540,
+      "up5": [
+        {
+          "id": "23042",
+          "name": "愿虹光永驻天空"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-046-1",
+      "kind": "light_cone",
+      "name": "爱如此刻永恒",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1765868400,
+      "up5": [
+        {
+          "id": "23052",
+          "name": "爱如此刻永恒"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        },
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-047-2-3",
+      "kind": "character",
+      "name": "缇宝",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1764129540,
+      "up5": [
+        {
+          "id": "1403",
+          "name": "缇宝"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-047-2-2",
+      "kind": "character",
+      "name": "遐蝶",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1764129540,
+      "up5": [
+        {
+          "id": "1407",
+          "name": "遐蝶"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-047-2-1",
+      "kind": "character",
+      "name": "风堇",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1762308000,
+      "end_time": 1764129540,
+      "up5": [
+        {
+          "id": "1409",
+          "name": "风堇"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-046-1",
+      "kind": "character",
       "name": "涟漪回环",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1762308000,
       "end_time": 1765868400,
       "up5": [
@@ -705,8 +3179,72 @@
       ]
     },
     {
-      "pool_id": "045-2",
+      "pool_id": "cone-045-2",
+      "kind": "light_cone",
+      "name": "生命当付之一炬",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1760500800,
+      "end_time": 1762239600,
+      "up5": [
+        {
+          "id": "23041",
+          "name": "生命当付之一炬"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        },
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-045-1",
+      "kind": "light_cone",
+      "name": "纵然山河万程",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1760500800,
+      "end_time": 1762239600,
+      "up5": [
+        {
+          "id": "23051",
+          "name": "纵然山河万程"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        },
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-045-2",
+      "kind": "character",
       "name": "胚中万物",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1760500800,
       "end_time": 1762239600,
       "up5": [
@@ -731,8 +3269,12 @@
       ]
     },
     {
-      "pool_id": "045-1",
+      "pool_id": "char-045-1",
+      "kind": "character",
       "name": "八荒诛邪",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1760500800,
       "end_time": 1762239600,
       "up5": [
@@ -757,8 +3299,72 @@
       ]
     },
     {
-      "pool_id": "044-2",
+      "pool_id": "cone-044-2",
+      "kind": "light_cone",
+      "name": "向着不可追问处",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1758679200,
+      "end_time": 1760500740,
+      "up5": [
+        {
+          "id": "23037",
+          "name": "向着不可追问处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-044-1",
+      "kind": "light_cone",
+      "name": "致长夜的星光",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1758679200,
+      "end_time": 1760500740,
+      "up5": [
+        {
+          "id": "23049",
+          "name": "致长夜的星光"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-044-2",
+      "kind": "character",
       "name": "视界来信",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1758679200,
       "end_time": 1760500740,
       "up5": [
@@ -783,8 +3389,12 @@
       ]
     },
     {
-      "pool_id": "044-1",
+      "pool_id": "char-044-1",
+      "kind": "character",
       "name": "无我所忆",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1758679200,
       "end_time": 1760500740,
       "up5": [
@@ -809,8 +3419,72 @@
       ]
     },
     {
-      "pool_id": "043-2",
+      "pool_id": "cone-043-2",
+      "kind": "light_cone",
+      "name": "雨一直下",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1756785600,
+      "end_time": 1758610800,
+      "up5": [
+        {
+          "id": "23007",
+          "name": "雨一直下"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        },
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-043-1",
+      "kind": "light_cone",
+      "name": "金血铭刻的时代",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1756785600,
+      "end_time": 1758610800,
+      "up5": [
+        {
+          "id": "23048",
+          "name": "金血铭刻的时代"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        },
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-043-2",
+      "kind": "character",
       "name": "零号协议",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1756785600,
       "end_time": 1758610800,
       "up5": [
@@ -835,8 +3509,12 @@
       ]
     },
     {
-      "pool_id": "043-1",
+      "pool_id": "char-043-1",
+      "kind": "character",
       "name": "弄潮铁血",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1756785600,
       "end_time": 1758610800,
       "up5": [
@@ -861,8 +3539,72 @@
       ]
     },
     {
-      "pool_id": "042-2",
+      "pool_id": "cone-042-2",
+      "kind": "light_cone",
+      "name": "只需等待",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1755050400,
+      "end_time": 1756785540,
+      "up5": [
+        {
+          "id": "23006",
+          "name": "只需等待"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-042-1",
+      "kind": "light_cone",
+      "name": "海洋为何而歌",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1755050400,
+      "end_time": 1756785540,
+      "up5": [
+        {
+          "id": "23047",
+          "name": "海洋为何而歌"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-042-2",
+      "kind": "character",
       "name": "夜将不眠",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1755050400,
       "end_time": 1756785540,
       "up5": [
@@ -887,8 +3629,12 @@
       ]
     },
     {
-      "pool_id": "042-1",
+      "pool_id": "char-042-1",
+      "kind": "character",
       "name": "绀碧绝音",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1755050400,
       "end_time": 1756785540,
       "up5": [
@@ -913,8 +3659,470 @@
       ]
     },
     {
-      "pool_id": "039-1",
+      "pool_id": "cone-041-1-3",
+      "kind": "light_cone",
+      "name": "到不了的彼岸",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1753243200,
+      "end_time": 1754982000,
+      "up5": [
+        {
+          "id": "23009",
+          "name": "到不了的彼岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-041-1-2",
+      "kind": "light_cone",
+      "name": "此身为剑",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1753243200,
+      "end_time": 1754982000,
+      "up5": [
+        {
+          "id": "23014",
+          "name": "此身为剑"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-041-1-1",
+      "kind": "light_cone",
+      "name": "梦应归于何处",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1753243200,
+      "end_time": 1754982000,
+      "up5": [
+        {
+          "id": "23025",
+          "name": "梦应归于何处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-041-1-3",
+      "kind": "character",
+      "name": "刃",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1753243200,
+      "end_time": 1754982000,
+      "up5": [
+        {
+          "id": "1205",
+          "name": "刃"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1111",
+          "name": "卢卡"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-041-1-2",
+      "kind": "character",
+      "name": "镜流",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1753243200,
+      "end_time": 1754982000,
+      "up5": [
+        {
+          "id": "1212",
+          "name": "镜流"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1111",
+          "name": "卢卡"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-041-1-1",
+      "kind": "character",
+      "name": "流萤",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1753243200,
+      "end_time": 1754982000,
+      "up5": [
+        {
+          "id": "1310",
+          "name": "流萤"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        },
+        {
+          "id": "1111",
+          "name": "卢卡"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-collab-040-2",
+      "kind": "collab_light_cone",
+      "name": "冬木赤影",
+      "series": "",
+      "featured": false,
+      "permanent": true,
+      "start_time": 1752206400,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "23046",
+          "name": "理想燃烧的地狱"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-collab-040-1",
+      "kind": "collab_light_cone",
+      "name": "王的诞生",
+      "series": "",
+      "featured": false,
+      "permanent": true,
+      "start_time": 1752206400,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "23045",
+          "name": "没有回报的加冕"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-collab-040-2",
+      "kind": "collab_character",
+      "name": "此身剑所天成",
+      "series": "",
+      "featured": true,
+      "permanent": true,
+      "start_time": 1752206400,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "1015",
+          "name": "Archer"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "char-collab-040-1",
+      "kind": "collab_character",
+      "name": "圣剑辉烈之誓",
+      "series": "",
+      "featured": true,
+      "permanent": true,
+      "start_time": 1752206400,
+      "end_time": 4102444800,
+      "up5": [
+        {
+          "id": "1014",
+          "name": "Saber"
+        }
+      ],
+      "up4": []
+    },
+    {
+      "pool_id": "cone-039-2-3",
+      "kind": "light_cone",
+      "name": "游戏尘寰",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "23021",
+          "name": "游戏尘寰"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-039-2-2",
+      "kind": "light_cone",
+      "name": "回到大地的飞行",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "23034",
+          "name": "回到大地的飞行"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-039-2-1",
+      "kind": "light_cone",
+      "name": "如果时间是一朵花",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "23038",
+          "name": "如果时间是一朵花"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-039-1",
+      "kind": "light_cone",
+      "name": "黎明恰如此燃烧",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "23044",
+          "name": "黎明恰如此燃烧"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21054",
+          "name": "故事的下一页"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-039-2-3",
+      "kind": "character",
+      "name": "铭心之萃•花火",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "1306",
+          "name": "花火"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1202",
+          "name": "停云"
+        },
+        {
+          "id": "1001",
+          "name": "三月七•存护"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-039-2-2",
+      "kind": "character",
+      "name": "铭心之萃•星期日",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "1313",
+          "name": "星期日"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1202",
+          "name": "停云"
+        },
+        {
+          "id": "1001",
+          "name": "三月七•存护"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-039-2-1",
+      "kind": "character",
+      "name": "铭心之萃•缇宝",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1751421600,
+      "end_time": 1753243140,
+      "up5": [
+        {
+          "id": "1403",
+          "name": "缇宝"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1202",
+          "name": "停云"
+        },
+        {
+          "id": "1001",
+          "name": "三月七•存护"
+        },
+        {
+          "id": "1207",
+          "name": "驭空"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-039-1",
+      "kind": "character",
       "name": "永劫燔阳",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1751421600,
       "end_time": 1753243140,
       "up5": [
@@ -939,8 +4147,72 @@
       ]
     },
     {
-      "pool_id": "038-2",
+      "pool_id": "cone-038-2",
+      "kind": "light_cone",
+      "name": "将光阴织成黄金",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1749614400,
+      "end_time": 1751353200,
+      "up5": [
+        {
+          "id": "23036",
+          "name": "将光阴织成黄金"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-038-1",
+      "kind": "light_cone",
+      "name": "谎言在风中飘扬",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1749614400,
+      "end_time": 1751353200,
+      "up5": [
+        {
+          "id": "23043",
+          "name": "谎言在风中飘扬"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-038-2",
+      "kind": "character",
       "name": "裁酌天命",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1749614400,
       "end_time": 1751353200,
       "up5": [
@@ -965,8 +4237,12 @@
       ]
     },
     {
-      "pool_id": "038-1",
+      "pool_id": "char-038-1",
+      "kind": "character",
       "name": "捷足盗天",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1749614400,
       "end_time": 1751353200,
       "up5": [
@@ -991,8 +4267,72 @@
       ]
     },
     {
-      "pool_id": "037-2",
+      "pool_id": "cone-037-2",
+      "kind": "light_cone",
+      "name": "向着不可追问处",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1747792800,
+      "end_time": 1749614340,
+      "up5": [
+        {
+          "id": "23037",
+          "name": "向着不可追问处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-037-1",
+      "kind": "light_cone",
+      "name": "愿虹光永驻天空",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1747792800,
+      "end_time": 1749614340,
+      "up5": [
+        {
+          "id": "23042",
+          "name": "愿虹光永驻天空"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        },
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-037-2",
+      "kind": "character",
       "name": "视界来信",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1747792800,
       "end_time": 1749614340,
       "up5": [
@@ -1017,8 +4357,12 @@
       ]
     },
     {
-      "pool_id": "037-1",
+      "pool_id": "char-037-1",
+      "kind": "character",
       "name": "虹隽晨昏",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1747792800,
       "end_time": 1749614340,
       "up5": [
@@ -1043,8 +4387,72 @@
       ]
     },
     {
-      "pool_id": "036-2",
+      "pool_id": "cone-036-2",
+      "kind": "light_cone",
+      "name": "纯粹思维的洗礼",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1745985600,
+      "end_time": 1747724400,
+      "up5": [
+        {
+          "id": "23020",
+          "name": "纯粹思维的洗礼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-036-1",
+      "kind": "light_cone",
+      "name": "生命当付之一炬",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1745985600,
+      "end_time": 1747724400,
+      "up5": [
+        {
+          "id": "23041",
+          "name": "生命当付之一炬"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-036-2",
+      "kind": "character",
       "name": "万物皆流",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1745985600,
       "end_time": 1747724400,
       "up5": [
@@ -1069,8 +4477,12 @@
       ]
     },
     {
-      "pool_id": "036-1",
+      "pool_id": "char-036-1",
+      "kind": "character",
       "name": "胚中万物",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1745985600,
       "end_time": 1747724400,
       "up5": [
@@ -1095,8 +4507,222 @@
       ]
     },
     {
-      "pool_id": "035-1",
+      "pool_id": "cone-035-2-3",
+      "kind": "light_cone",
+      "name": "行于流逝的岸",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "23024",
+          "name": "行于流逝的岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-035-2-2",
+      "kind": "light_cone",
+      "name": "那无数个春天",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "23029",
+          "name": "那无数个春天"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-035-2-1",
+      "kind": "light_cone",
+      "name": "长路终有归途",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "23035",
+          "name": "长路终有归途"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-035-1",
+      "kind": "light_cone",
+      "name": "让告别，更美一些",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "23040",
+          "name": "让告别，更美一些"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-035-2-3",
+      "kind": "character",
+      "name": "铭心之萃•黄泉",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "1308",
+          "name": "黄泉"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1301",
+          "name": "加拉赫"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-035-2-2",
+      "kind": "character",
+      "name": "铭心之萃•椒丘",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "1218",
+          "name": "椒丘"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1301",
+          "name": "加拉赫"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-035-2-1",
+      "kind": "character",
+      "name": "铭心之萃•忘归人",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1744164000,
+      "end_time": 1745985540,
+      "up5": [
+        {
+          "id": "1225",
+          "name": "忘归人"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1106",
+          "name": "佩拉"
+        },
+        {
+          "id": "1301",
+          "name": "加拉赫"
+        },
+        {
+          "id": "1110",
+          "name": "玲可"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-035-1",
+      "kind": "character",
       "name": "冥途生花",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1744164000,
       "end_time": 1745985540,
       "up5": [
@@ -1121,8 +4747,72 @@
       ]
     },
     {
-      "pool_id": "034-2",
+      "pool_id": "cone-034-2",
+      "kind": "light_cone",
+      "name": "惊魂夜",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1742356800,
+      "end_time": 1744095600,
+      "up5": [
+        {
+          "id": "23017",
+          "name": "惊魂夜"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-034-1",
+      "kind": "light_cone",
+      "name": "血火啊，燃烧前路",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1742356800,
+      "end_time": 1744095600,
+      "up5": [
+        {
+          "id": "23039",
+          "name": "血火啊，燃烧前路"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-034-2",
+      "kind": "character",
       "name": "令奉贞凶",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1742356800,
       "end_time": 1744095600,
       "up5": [
@@ -1147,8 +4837,12 @@
       ]
     },
     {
-      "pool_id": "034-1",
+      "pool_id": "char-034-1",
+      "kind": "character",
       "name": "血炬狮心",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1742356800,
       "end_time": 1744095600,
       "up5": [
@@ -1173,8 +4867,72 @@
       ]
     },
     {
-      "pool_id": "033-2",
+      "pool_id": "cone-033-2",
+      "kind": "light_cone",
+      "name": "落日时起舞",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1740535200,
+      "end_time": 1742356740,
+      "up5": [
+        {
+          "id": "23030",
+          "name": "落日时起舞"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-033-1",
+      "kind": "light_cone",
+      "name": "如果时间是一朵花",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1740535200,
+      "end_time": 1742356740,
+      "up5": [
+        {
+          "id": "23038",
+          "name": "如果时间是一朵花"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-033-2",
+      "kind": "character",
       "name": "掷山破云",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1740535200,
       "end_time": 1742356740,
       "up5": [
@@ -1199,8 +4957,12 @@
       ]
     },
     {
-      "pool_id": "033-1",
+      "pool_id": "char-033-1",
+      "kind": "character",
       "name": "径复原初",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1740535200,
       "end_time": 1742356740,
       "up5": [
@@ -1225,8 +4987,222 @@
       ]
     },
     {
-      "pool_id": "032-1",
+      "pool_id": "cone-032-2-3",
+      "kind": "light_cone",
+      "name": "雨一直下",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "23007",
+          "name": "雨一直下"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-032-2-2",
+      "kind": "light_cone",
+      "name": "夜色流光溢彩",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "23026",
+          "name": "夜色流光溢彩"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-032-2-1",
+      "kind": "light_cone",
+      "name": "驶向第二次生命",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "23027",
+          "name": "驶向第二次生命"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-032-1",
+      "kind": "light_cone",
+      "name": "将光阴织成黄金",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "23036",
+          "name": "将光阴织成黄金"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21051",
+          "name": "天才们的问候"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-032-2-3",
+      "kind": "character",
+      "name": "铭心之萃•银狼",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "1006",
+          "name": "银狼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1202",
+          "name": "停云"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1206",
+          "name": "素裳"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-032-2-2",
+      "kind": "character",
+      "name": "铭心之萃•知更鸟",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "1309",
+          "name": "知更鸟"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1202",
+          "name": "停云"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1206",
+          "name": "素裳"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-032-2-1",
+      "kind": "character",
+      "name": "铭心之萃•波提欧",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1738728000,
+      "end_time": 1740466800,
+      "up5": [
+        {
+          "id": "1315",
+          "name": "波提欧"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1202",
+          "name": "停云"
+        },
+        {
+          "id": "1215",
+          "name": "寒鸦"
+        },
+        {
+          "id": "1206",
+          "name": "素裳"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-032-1",
+      "kind": "character",
       "name": "裁酌天命",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1738728000,
       "end_time": 1740466800,
       "up5": [
@@ -1251,8 +5227,222 @@
       ]
     },
     {
-      "pool_id": "031-1",
+      "pool_id": "cone-031-2-3",
+      "kind": "light_cone",
+      "name": "偏偏希望无价",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "23028",
+          "name": "偏偏希望无价"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-031-2-2",
+      "kind": "light_cone",
+      "name": "我将，巡征追猎",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "23031",
+          "name": "我将，巡征追猎"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-031-2-1",
+      "kind": "light_cone",
+      "name": "唯有香如故",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "23032",
+          "name": "唯有香如故"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-031-1",
+      "kind": "light_cone",
+      "name": "向着不可追问处",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "23037",
+          "name": "向着不可追问处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-031-2-3",
+      "kind": "character",
+      "name": "铭心之萃•翡翠",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "1314",
+          "name": "翡翠"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1105",
+          "name": "娜塔莎"
+        },
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1223",
+          "name": "貊泽"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-031-2-2",
+      "kind": "character",
+      "name": "铭心之萃•飞霄",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "1220",
+          "name": "飞霄"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1105",
+          "name": "娜塔莎"
+        },
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1223",
+          "name": "貊泽"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-031-2-1",
+      "kind": "character",
+      "name": "铭心之萃•灵砂",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1736906400,
+      "end_time": 1738727940,
+      "up5": [
+        {
+          "id": "1222",
+          "name": "灵砂"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1105",
+          "name": "娜塔莎"
+        },
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1223",
+          "name": "貊泽"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-031-1",
+      "kind": "character",
       "name": "视界来信",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1736906400,
       "end_time": 1738727940,
       "up5": [
@@ -1277,8 +5467,72 @@
       ]
     },
     {
-      "pool_id": "030-2",
+      "pool_id": "cone-030-2",
+      "kind": "light_cone",
+      "name": "梦应归于何处",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1735099200,
+      "end_time": 1736838000,
+      "up5": [
+        {
+          "id": "23025",
+          "name": "梦应归于何处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-030-1",
+      "kind": "light_cone",
+      "name": "长路终有归途",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1735099200,
+      "end_time": 1736838000,
+      "up5": [
+        {
+          "id": "23035",
+          "name": "长路终有归途"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-030-2",
+      "kind": "character",
       "name": "盈茧炽盛",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1735099200,
       "end_time": 1736838000,
       "up5": [
@@ -1303,8 +5557,12 @@
       ]
     },
     {
-      "pool_id": "030-1",
+      "pool_id": "char-030-1",
+      "kind": "character",
       "name": "归路迢迢",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1735099200,
       "end_time": 1736838000,
       "up5": [
@@ -1329,8 +5587,72 @@
       ]
     },
     {
-      "pool_id": "029-2",
+      "pool_id": "cone-029-2",
+      "kind": "light_cone",
+      "name": "拂晓之前",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1733277600,
+      "end_time": 1735099140,
+      "up5": [
+        {
+          "id": "23010",
+          "name": "拂晓之前"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        },
+        {
+          "id": "21010",
+          "name": "论剑"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-029-1",
+      "kind": "light_cone",
+      "name": "回到大地的飞行",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1733277600,
+      "end_time": 1735099140,
+      "up5": [
+        {
+          "id": "23034",
+          "name": "回到大地的飞行"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        },
+        {
+          "id": "21010",
+          "name": "论剑"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-029-2",
+      "kind": "character",
       "name": "天戈麾斥",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1733277600,
       "end_time": 1735099140,
       "up5": [
@@ -1355,8 +5677,12 @@
       ]
     },
     {
-      "pool_id": "029-1",
+      "pool_id": "char-029-1",
+      "kind": "character",
       "name": "向星举目",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1733277600,
       "end_time": 1735099140,
       "up5": [
@@ -1381,8 +5707,72 @@
       ]
     },
     {
-      "pool_id": "028-2",
+      "pool_id": "cone-028-2",
+      "kind": "light_cone",
+      "name": "命运从未公平",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1731470400,
+      "end_time": 1733209200,
+      "up5": [
+        {
+          "id": "23023",
+          "name": "命运从未公平"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        },
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-028-1",
+      "kind": "light_cone",
+      "name": "行于流逝的岸",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1731470400,
+      "end_time": 1733209200,
+      "up5": [
+        {
+          "id": "23024",
+          "name": "行于流逝的岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        },
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-028-2",
+      "kind": "character",
       "name": "囚石铸金",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1731470400,
       "end_time": 1733209200,
       "up5": [
@@ -1407,8 +5797,12 @@
       ]
     },
     {
-      "pool_id": "028-1",
+      "pool_id": "char-028-1",
+      "kind": "character",
       "name": "远辞畴昔",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1731470400,
       "end_time": 1733209200,
       "up5": [
@@ -1433,8 +5827,72 @@
       ]
     },
     {
-      "pool_id": "027-2",
+      "pool_id": "cone-027-2",
+      "kind": "light_cone",
+      "name": "比阳光更明亮的",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1729648800,
+      "end_time": 1731470340,
+      "up5": [
+        {
+          "id": "23015",
+          "name": "比阳光更明亮的"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-027-1",
+      "kind": "light_cone",
+      "name": "忍法帖•缭乱破魔",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1729648800,
+      "end_time": 1731470340,
+      "up5": [
+        {
+          "id": "23033",
+          "name": "忍法帖•缭乱破魔"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21048",
+          "name": "梦的蒙太奇"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-027-2",
+      "kind": "character",
       "name": "濯世垂虹",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1729648800,
       "end_time": 1731470340,
       "up5": [
@@ -1459,8 +5917,12 @@
       ]
     },
     {
-      "pool_id": "027-1",
+      "pool_id": "char-027-1",
+      "kind": "character",
       "name": "忍视眈眈",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1729648800,
       "end_time": 1731470340,
       "up5": [
@@ -1485,8 +5947,72 @@
       ]
     },
     {
-      "pool_id": "026-2",
+      "pool_id": "cone-026-2",
+      "kind": "light_cone",
+      "name": "烦恼着，幸福着",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1727841600,
+      "end_time": 1729580400,
+      "up5": [
+        {
+          "id": "23016",
+          "name": "烦恼着，幸福着"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-026-1",
+      "kind": "light_cone",
+      "name": "唯有香如故",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1727841600,
+      "end_time": 1729580400,
+      "up5": [
+        {
+          "id": "23032",
+          "name": "唯有香如故"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21047",
+          "name": "黑夜如影随行"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-026-2",
+      "kind": "character",
       "name": "落日条款",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1727841600,
       "end_time": 1729580400,
       "up5": [
@@ -1511,8 +6037,12 @@
       ]
     },
     {
-      "pool_id": "026-1",
+      "pool_id": "char-026-1",
+      "kind": "character",
       "name": "卧香沉水",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1727841600,
       "end_time": 1729580400,
       "up5": [
@@ -1537,8 +6067,222 @@
       ]
     },
     {
-      "pool_id": "025-1",
+      "pool_id": "cone-025-2-3",
+      "kind": "light_cone",
+      "name": "夜色流光溢彩",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "23026",
+          "name": "夜色流光溢彩"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-025-2-2",
+      "kind": "light_cone",
+      "name": "重塑时光之忆",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "23022",
+          "name": "重塑时光之忆"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-025-2-1",
+      "kind": "light_cone",
+      "name": "只需等待",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "23006",
+          "name": "只需等待"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-025-1",
+      "kind": "light_cone",
+      "name": "我将，巡征追猎",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "23031",
+          "name": "我将，巡征追猎"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-025-2-3",
+      "kind": "character",
+      "name": "铭心之萃•知更鸟",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "1309",
+          "name": "知更鸟"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1223",
+          "name": "貊泽"
+        },
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1111",
+          "name": "卢卡"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-025-2-2",
+      "kind": "character",
+      "name": "铭心之萃•黑天鹅",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "1307",
+          "name": "黑天鹅"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1223",
+          "name": "貊泽"
+        },
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1111",
+          "name": "卢卡"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-025-2-1",
+      "kind": "character",
+      "name": "铭心之萃•卡芙卡",
+      "series": "铭心之萃",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1725933600,
+      "end_time": 1727841540,
+      "up5": [
+        {
+          "id": "1005",
+          "name": "卡芙卡"
+        }
+      ],
+      "up4": [
+        {
+          "id": "1223",
+          "name": "貊泽"
+        },
+        {
+          "id": "1009",
+          "name": "艾丝妲"
+        },
+        {
+          "id": "1111",
+          "name": "卢卡"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-025-1",
+      "kind": "character",
       "name": "飙驭霆击",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1725933600,
       "end_time": 1727841540,
       "up5": [
@@ -1563,8 +6307,72 @@
       ]
     },
     {
-      "pool_id": "024-2",
+      "pool_id": "cone-024-2",
+      "kind": "light_cone",
+      "name": "游戏尘寰",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1724212800,
+      "end_time": 1725865200,
+      "up5": [
+        {
+          "id": "23021",
+          "name": "游戏尘寰"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-024-1",
+      "kind": "light_cone",
+      "name": "那无数个春天",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1724212800,
+      "end_time": 1725865200,
+      "up5": [
+        {
+          "id": "23029",
+          "name": "那无数个春天"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21046",
+          "name": "芳华待灼"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-024-2",
+      "kind": "character",
       "name": "焰锦游鱼",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1724212800,
       "end_time": 1725865200,
       "up5": [
@@ -1589,8 +6397,12 @@
       ]
     },
     {
-      "pool_id": "024-1",
+      "pool_id": "char-024-1",
+      "kind": "character",
       "name": "鼎中捭阖",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1724212800,
       "end_time": 1725865200,
       "up5": [
@@ -1615,8 +6427,72 @@
       ]
     },
     {
-      "pool_id": "023-2",
+      "pool_id": "cone-023-2",
+      "kind": "light_cone",
+      "name": "惊魂夜",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1722391200,
+      "end_time": 1724212740,
+      "up5": [
+        {
+          "id": "23017",
+          "name": "惊魂夜"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-023-1",
+      "kind": "light_cone",
+      "name": "落日时起舞",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1722391200,
+      "end_time": 1724212740,
+      "up5": [
+        {
+          "id": "23030",
+          "name": "落日时起舞"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-023-2",
+      "kind": "character",
       "name": "令奉贞凶",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1722391200,
       "end_time": 1724212740,
       "up5": [
@@ -1641,8 +6517,12 @@
       ]
     },
     {
-      "pool_id": "023-1",
+      "pool_id": "char-023-1",
+      "kind": "character",
       "name": "掷山破云",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1722391200,
       "end_time": 1724212740,
       "up5": [
@@ -1667,8 +6547,72 @@
       ]
     },
     {
-      "pool_id": "022-2",
+      "pool_id": "cone-022-2",
+      "kind": "light_cone",
+      "name": "片刻，留在眼底",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1720584000,
+      "end_time": 1722322800,
+      "up5": [
+        {
+          "id": "23018",
+          "name": "片刻，留在眼底"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-022-1",
+      "kind": "light_cone",
+      "name": "偏偏希望无价",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1720584000,
+      "end_time": 1722322800,
+      "up5": [
+        {
+          "id": "23028",
+          "name": "偏偏希望无价"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21045",
+          "name": "谐乐静默之后"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-022-2",
+      "kind": "character",
       "name": "荆冠芳勋",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1720584000,
       "end_time": 1722322800,
       "up5": [
@@ -1693,8 +6637,12 @@
       ]
     },
     {
-      "pool_id": "022-1",
+      "pool_id": "char-022-1",
+      "kind": "character",
       "name": "质生契运",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1720584000,
       "end_time": 1722322800,
       "up5": [
@@ -1719,8 +6667,72 @@
       ]
     },
     {
-      "pool_id": "021-2",
+      "pool_id": "cone-021-2",
+      "kind": "light_cone",
+      "name": "镜中故我",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1718762400,
+      "end_time": 1720583940,
+      "up5": [
+        {
+          "id": "23019",
+          "name": "镜中故我"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-021-1",
+      "kind": "light_cone",
+      "name": "梦应归于何处",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1718762400,
+      "end_time": 1720583940,
+      "up5": [
+        {
+          "id": "23025",
+          "name": "梦应归于何处"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-021-2",
+      "kind": "character",
       "name": "疏影三迭",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1718762400,
       "end_time": 1720583940,
       "up5": [
@@ -1745,8 +6757,12 @@
       ]
     },
     {
-      "pool_id": "021-1",
+      "pool_id": "char-021-1",
+      "kind": "character",
       "name": "盈茧炽盛",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1718762400,
       "end_time": 1720583940,
       "up5": [
@@ -1771,8 +6787,72 @@
       ]
     },
     {
-      "pool_id": "020-2",
+      "pool_id": "cone-020-2",
+      "kind": "light_cone",
+      "name": "她已闭上双眼",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1716955200,
+      "end_time": 1718694000,
+      "up5": [
+        {
+          "id": "23011",
+          "name": "她已闭上双眼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-020-1",
+      "kind": "light_cone",
+      "name": "驶向第二次生命",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1716955200,
+      "end_time": 1718694000,
+      "up5": [
+        {
+          "id": "23027",
+          "name": "驶向第二次生命"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-020-2",
+      "kind": "character",
       "name": "穷观妙算",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1716955200,
       "end_time": 1718694000,
       "up5": [
@@ -1797,8 +6877,12 @@
       ]
     },
     {
-      "pool_id": "020-1",
+      "pool_id": "char-020-1",
+      "kind": "character",
       "name": "扬尘孤星",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1716955200,
       "end_time": 1718694000,
       "up5": [
@@ -1823,8 +6907,72 @@
       ]
     },
     {
-      "pool_id": "019-2",
+      "pool_id": "cone-019-2",
+      "kind": "light_cone",
+      "name": "烦恼着，幸福着",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1715133600,
+      "end_time": 1716955140,
+      "up5": [
+        {
+          "id": "23016",
+          "name": "烦恼着，幸福着"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-019-1",
+      "kind": "light_cone",
+      "name": "夜色流光溢彩",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1715133600,
+      "end_time": 1716955140,
+      "up5": [
+        {
+          "id": "23026",
+          "name": "夜色流光溢彩"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21044",
+          "name": "无边曼舞"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-019-2",
+      "kind": "character",
       "name": "落日条款",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1715133600,
       "end_time": 1716955140,
       "up5": [
@@ -1849,8 +6997,12 @@
       ]
     },
     {
-      "pool_id": "019-1",
+      "pool_id": "char-019-1",
+      "kind": "character",
       "name": "翼声纯律",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1715133600,
       "end_time": 1716955140,
       "up5": [
@@ -1875,8 +7027,72 @@
       ]
     },
     {
-      "pool_id": "018-2",
+      "pool_id": "cone-018-2",
+      "kind": "light_cone",
+      "name": "此身为剑",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1713326400,
+      "end_time": 1715065200,
+      "up5": [
+        {
+          "id": "23014",
+          "name": "此身为剑"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-018-1",
+      "kind": "light_cone",
+      "name": "命运从未公平",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1713326400,
+      "end_time": 1715065200,
+      "up5": [
+        {
+          "id": "23023",
+          "name": "命运从未公平"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21043",
+          "name": "两个人的演唱会"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-018-2",
+      "kind": "character",
       "name": "月有薄蚀",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1713326400,
       "end_time": 1715065200,
       "up5": [
@@ -1901,8 +7117,12 @@
       ]
     },
     {
-      "pool_id": "018-1",
+      "pool_id": "char-018-1",
+      "kind": "character",
       "name": "囚石铸金",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1713326400,
       "end_time": 1715065200,
       "up5": [
@@ -1927,8 +7147,72 @@
       ]
     },
     {
-      "pool_id": "017-2",
+      "pool_id": "cone-017-2",
+      "kind": "light_cone",
+      "name": "棺的回响",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1711504800,
+      "end_time": 1713326340,
+      "up5": [
+        {
+          "id": "23008",
+          "name": "棺的回响"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-017-1",
+      "kind": "light_cone",
+      "name": "行于流逝的岸",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1711504800,
+      "end_time": 1713326340,
+      "up5": [
+        {
+          "id": "23024",
+          "name": "行于流逝的岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-017-2",
+      "kind": "character",
       "name": "寻索世间",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1711504800,
       "end_time": 1713326340,
       "up5": [
@@ -1953,8 +7237,12 @@
       ]
     },
     {
-      "pool_id": "017-1",
+      "pool_id": "char-017-1",
+      "kind": "character",
       "name": "远辞畴昔",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1711504800,
       "end_time": 1713326340,
       "up5": [
@@ -1979,8 +7267,72 @@
       ]
     },
     {
-      "pool_id": "016-2",
+      "pool_id": "cone-016-2",
+      "kind": "light_cone",
+      "name": "拂晓之前",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1709179200,
+      "end_time": 1711436400,
+      "up5": [
+        {
+          "id": "23010",
+          "name": "拂晓之前"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-016-1",
+      "kind": "light_cone",
+      "name": "游戏尘寰",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1709179200,
+      "end_time": 1711436400,
+      "up5": [
+        {
+          "id": "23021",
+          "name": "游戏尘寰"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-016-2",
+      "kind": "character",
       "name": "天戈麾斥",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1709179200,
       "end_time": 1711436400,
       "up5": [
@@ -2005,8 +7357,12 @@
       ]
     },
     {
-      "pool_id": "016-1",
+      "pool_id": "char-016-1",
+      "kind": "character",
       "name": "焰锦游鱼",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1709179200,
       "end_time": 1711436400,
       "up5": [
@@ -2031,8 +7387,72 @@
       ]
     },
     {
-      "pool_id": "015-2",
+      "pool_id": "cone-015-2",
+      "kind": "light_cone",
+      "name": "比阳光更明亮的",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1707184800,
+      "end_time": 1709179140,
+      "up5": [
+        {
+          "id": "23015",
+          "name": "比阳光更明亮的"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-015-1",
+      "kind": "light_cone",
+      "name": "重塑时光之忆",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1707184800,
+      "end_time": 1709179140,
+      "up5": [
+        {
+          "id": "23022",
+          "name": "重塑时光之忆"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21042",
+          "name": "铭记于心的约定"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-015-2",
+      "kind": "character",
       "name": "濯世垂虹",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1707184800,
       "end_time": 1709179140,
       "up5": [
@@ -2057,8 +7477,12 @@
       ]
     },
     {
-      "pool_id": "015-1",
+      "pool_id": "char-015-1",
+      "kind": "character",
       "name": "镜映婆娑",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1707184800,
       "end_time": 1709179140,
       "up5": [
@@ -2083,8 +7507,72 @@
       ]
     },
     {
-      "pool_id": "014-2",
+      "pool_id": "cone-014-2",
+      "kind": "light_cone",
+      "name": "只需等待",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1705464000,
+      "end_time": 1707116400,
+      "up5": [
+        {
+          "id": "23006",
+          "name": "只需等待"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-014-1",
+      "kind": "light_cone",
+      "name": "纯粹思维的洗礼",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1705464000,
+      "end_time": 1707116400,
+      "up5": [
+        {
+          "id": "23020",
+          "name": "纯粹思维的洗礼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-014-2",
+      "kind": "character",
       "name": "夜将不眠",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1705464000,
       "end_time": 1707116400,
       "up5": [
@@ -2109,8 +7597,12 @@
       ]
     },
     {
-      "pool_id": "014-1",
+      "pool_id": "char-014-1",
+      "kind": "character",
       "name": "万物皆流",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1705464000,
       "end_time": 1707116400,
       "up5": [
@@ -2135,8 +7627,72 @@
       ]
     },
     {
-      "pool_id": "013-2",
+      "pool_id": "cone-013-2",
+      "kind": "light_cone",
+      "name": "到不了的彼岸",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1703642400,
+      "end_time": 1705463940,
+      "up5": [
+        {
+          "id": "23009",
+          "name": "到不了的彼岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-013-1",
+      "kind": "light_cone",
+      "name": "镜中故我",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1703642400,
+      "end_time": 1705463940,
+      "up5": [
+        {
+          "id": "23019",
+          "name": "镜中故我"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-013-2",
+      "kind": "character",
       "name": "业途游魂",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1703642400,
       "end_time": 1705463940,
       "up5": [
@@ -2161,8 +7717,12 @@
       ]
     },
     {
-      "pool_id": "013-1",
+      "pool_id": "char-013-1",
+      "kind": "character",
       "name": "疏影三迭",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1703642400,
       "end_time": 1705463940,
       "up5": [
@@ -2187,8 +7747,72 @@
       ]
     },
     {
-      "pool_id": "012-2",
+      "pool_id": "cone-012-2",
+      "kind": "light_cone",
+      "name": "雨一直下",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1701835200,
+      "end_time": 1703574000,
+      "up5": [
+        {
+          "id": "23007",
+          "name": "雨一直下"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-012-1",
+      "kind": "light_cone",
+      "name": "片刻，留在眼底",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1701835200,
+      "end_time": 1703574000,
+      "up5": [
+        {
+          "id": "23018",
+          "name": "片刻，留在眼底"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-012-2",
+      "kind": "character",
       "name": "零号协议",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1701835200,
       "end_time": 1703574000,
       "up5": [
@@ -2213,8 +7837,12 @@
       ]
     },
     {
-      "pool_id": "012-1",
+      "pool_id": "char-012-1",
+      "kind": "character",
       "name": "荆冠芳勋",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1701835200,
       "end_time": 1703574000,
       "up5": [
@@ -2239,8 +7867,42 @@
       ]
     },
     {
-      "pool_id": "011-1",
+      "pool_id": "cone-011-1",
+      "kind": "light_cone",
+      "name": "惊魂夜",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1700013600,
+      "end_time": 1701835140,
+      "up5": [
+        {
+          "id": "23017",
+          "name": "惊魂夜"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        },
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-011-1",
+      "kind": "character",
       "name": "令奉贞凶",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1700013600,
       "end_time": 1701835140,
       "up5": [
@@ -2265,8 +7927,72 @@
       ]
     },
     {
-      "pool_id": "010-2",
+      "pool_id": "cone-010-2",
+      "kind": "light_cone",
+      "name": "于夜色中",
+      "series": "",
+      "featured": false,
+      "permanent": false,
+      "start_time": 1698379200,
+      "end_time": 1699945200,
+      "up5": [
+        {
+          "id": "23001",
+          "name": "于夜色中"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        }
+      ]
+    },
+    {
+      "pool_id": "cone-010-1",
+      "kind": "light_cone",
+      "name": "烦恼着，幸福着",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1698379200,
+      "end_time": 1699945200,
+      "up5": [
+        {
+          "id": "23016",
+          "name": "烦恼着，幸福着"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-010-2",
+      "kind": "character",
       "name": "蝶立锋锷",
+      "series": "",
+      "featured": false,
+      "permanent": false,
       "start_time": 1698379200,
       "end_time": 1699945200,
       "up5": [
@@ -2291,8 +8017,12 @@
       ]
     },
     {
-      "pool_id": "010-1",
+      "pool_id": "char-010-1",
+      "kind": "character",
       "name": "落日条款",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1698379200,
       "end_time": 1699945200,
       "up5": [
@@ -2317,8 +8047,42 @@
       ]
     },
     {
-      "pool_id": "009-1",
+      "pool_id": "cone-009-1",
+      "kind": "light_cone",
+      "name": "此身为剑",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1696989600,
+      "end_time": 1698379140,
+      "up5": [
+        {
+          "id": "23014",
+          "name": "此身为剑"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-009-1",
+      "kind": "character",
       "name": "月有薄蚀",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1696989600,
       "end_time": 1698379140,
       "up5": [
@@ -2343,8 +8107,42 @@
       ]
     },
     {
-      "pool_id": "008-1",
+      "pool_id": "cone-008-1",
+      "kind": "light_cone",
+      "name": "她已闭上双眼",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1695182400,
+      "end_time": 1696921200,
+      "up5": [
+        {
+          "id": "23011",
+          "name": "她已闭上双眼"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21016",
+          "name": "宇宙市场趋势"
+        },
+        {
+          "id": "21014",
+          "name": "此时恰好"
+        },
+        {
+          "id": "21019",
+          "name": "在蓝天下"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-008-1",
+      "kind": "character",
       "name": "穷观妙算",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1695182400,
       "end_time": 1696921200,
       "up5": [
@@ -2369,8 +8167,42 @@
       ]
     },
     {
-      "pool_id": "007-1",
+      "pool_id": "cone-007-1",
+      "kind": "light_cone",
+      "name": "比阳光更明亮的",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1693360800,
+      "end_time": 1695182340,
+      "up5": [
+        {
+          "id": "23015",
+          "name": "比阳光更明亮的"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        },
+        {
+          "id": "21009",
+          "name": "朗道的选择"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-007-1",
+      "kind": "character",
       "name": "濯世垂虹",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1693360800,
       "end_time": 1695182340,
       "up5": [
@@ -2395,8 +8227,42 @@
       ]
     },
     {
-      "pool_id": "006-1",
+      "pool_id": "cone-006-1",
+      "kind": "light_cone",
+      "name": "只需等待",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1691553600,
+      "end_time": 1693292400,
+      "up5": [
+        {
+          "id": "23006",
+          "name": "只需等待"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21015",
+          "name": "决心如汗珠般闪耀"
+        },
+        {
+          "id": "21008",
+          "name": "猎物的视线"
+        },
+        {
+          "id": "21006",
+          "name": "「我」的诞生"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-006-1",
+      "kind": "character",
       "name": "夜将不眠",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1691553600,
       "end_time": 1693292400,
       "up5": [
@@ -2421,8 +8287,42 @@
       ]
     },
     {
-      "pool_id": "005-1",
+      "pool_id": "cone-005-1",
+      "kind": "light_cone",
+      "name": "到不了的彼岸",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1689732000,
+      "end_time": 1691553540,
+      "up5": [
+        {
+          "id": "23009",
+          "name": "到不了的彼岸"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21012",
+          "name": "秘密誓心"
+        },
+        {
+          "id": "21010",
+          "name": "论剑"
+        },
+        {
+          "id": "21007",
+          "name": "同一种心情"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-005-1",
+      "kind": "character",
       "name": "业途游魂",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1689732000,
       "end_time": 1691553540,
       "up5": [
@@ -2447,8 +8347,42 @@
       ]
     },
     {
-      "pool_id": "004-1",
+      "pool_id": "cone-004-1",
+      "kind": "light_cone",
+      "name": "棺的回响",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1687924800,
+      "end_time": 1689663600,
+      "up5": [
+        {
+          "id": "23008",
+          "name": "棺的回响"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21018",
+          "name": "舞！舞！舞！"
+        },
+        {
+          "id": "21020",
+          "name": "天才们的休憩"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-004-1",
+      "kind": "character",
       "name": "寻索世间",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1687924800,
       "end_time": 1689663600,
       "up5": [
@@ -2473,8 +8407,42 @@
       ]
     },
     {
-      "pool_id": "003-1",
+      "pool_id": "cone-003-1",
+      "kind": "light_cone",
+      "name": "雨一直下",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1686103200,
+      "end_time": 1687924740,
+      "up5": [
+        {
+          "id": "23007",
+          "name": "雨一直下"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21017",
+          "name": "点个关注吧！"
+        },
+        {
+          "id": "21004",
+          "name": "记忆中的模样"
+        },
+        {
+          "id": "21013",
+          "name": "别让世界静下来"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-003-1",
+      "kind": "character",
       "name": "零号协议",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1686103200,
       "end_time": 1687924740,
       "up5": [
@@ -2499,8 +8467,42 @@
       ]
     },
     {
-      "pool_id": "002-1",
+      "pool_id": "cone-002-1",
+      "kind": "light_cone",
+      "name": "拂晓之前",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1684317600,
+      "end_time": 1686034800,
+      "up5": [
+        {
+          "id": "23010",
+          "name": "拂晓之前"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21003",
+          "name": "唯有沉默"
+        },
+        {
+          "id": "21002",
+          "name": "余生的第一天"
+        },
+        {
+          "id": "21011",
+          "name": "与行星相会"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-002-1",
+      "kind": "character",
       "name": "天戈麾斥",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1684317600,
       "end_time": 1686034800,
       "up5": [
@@ -2525,8 +8527,42 @@
       ]
     },
     {
-      "pool_id": "001-1",
+      "pool_id": "cone-001-1",
+      "kind": "light_cone",
+      "name": "于夜色中",
+      "series": "",
+      "featured": true,
+      "permanent": false,
+      "start_time": 1682474400,
+      "end_time": 1684317540,
+      "up5": [
+        {
+          "id": "23001",
+          "name": "于夜色中"
+        }
+      ],
+      "up4": [
+        {
+          "id": "21001",
+          "name": "晚安与睡颜"
+        },
+        {
+          "id": "21005",
+          "name": "鼹鼠党欢迎你"
+        },
+        {
+          "id": "21000",
+          "name": "一场术后对话"
+        }
+      ]
+    },
+    {
+      "pool_id": "char-001-1",
+      "kind": "character",
       "name": "蝶立锋锷",
+      "series": "",
+      "featured": true,
+      "permanent": false,
       "start_time": 1682474400,
       "end_time": 1684317540,
       "up5": [
@@ -2549,6 +8585,18 @@
           "name": "佩拉"
         }
       ]
+    },
+    {
+      "pool_id": "standard",
+      "kind": "standard",
+      "name": "群星跃迁",
+      "series": "",
+      "featured": false,
+      "permanent": true,
+      "start_time": 0,
+      "end_time": 4102444800,
+      "up5": [],
+      "up4": []
     }
   ]
 }
