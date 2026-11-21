@@ -133,17 +133,26 @@ class TestChoosePool:
         choice = hsr_pkg.choose_pool([hsr_pool], FIXED_NOW)
         assert choice.ok and choice.pool is hsr_pool
 
-    def test_single_open_pool_ignores_typo(self, hsr_pkg, hsr_pool):
-        """只有一个池时玩家打错名字也不该抽不了。"""
+    def test_typo_lists_candidates_instead_of_guessing(self, hsr_pkg, hsr_pool):
+        """带名字但没对上就列候选，不因为「只开了一个池」就替他抽。"""
         choice = hsr_pkg.choose_pool([hsr_pool], FIXED_NOW, "愚戏众星x")
-        assert choice.ok and choice.pool is hsr_pool
+        assert not choice.ok and choice.reason == "unknown"
+        assert [pool.pool_id for pool in choice.candidates] == [hsr_pool.pool_id]
+
+    def test_default_requires_a_limited_pool(self, hsr_pkg, hsr_standard_pool, hsr_cone_pool):
+        """不带词只认限定。限定没开就报错，不退化到常驻或光锥。"""
+        choice = hsr_pkg.choose_pool(
+            [hsr_standard_pool, hsr_cone_pool], FIXED_NOW
+        )
+        assert not choice.ok and choice.reason == "no_scope"
+        assert choice.scope == "限定"
 
     def test_closed_pool_is_not_a_candidate(self, hsr_pkg, hsr_pool):
         choice = hsr_pkg.choose_pool([hsr_pool], hsr_pool.end_time)
         assert not choice.ok and choice.reason == "none"
 
     def test_two_pools_require_a_name(self, hsr_pkg, hsr_pool):
-        """两张都不是「新 UP」时不替玩家选，把两张都列出来。"""
+        """两张都归「角色」时不替玩家选，把两张都列出来。"""
         one = hsr_pkg.Pool(
             pool_id="A",
             open_time=hsr_pool.open_time,
@@ -160,7 +169,7 @@ class TestChoosePool:
             up5=hsr_pool.up5,
             up4=hsr_pool.up4,
         )
-        choice = hsr_pkg.choose_pool([one, two], FIXED_NOW)
+        choice = hsr_pkg.choose_pool([one, two], FIXED_NOW, "角色")
         assert not choice.ok and choice.reason == "ambiguous"
         assert len(choice.candidates) == 2
 
@@ -187,6 +196,31 @@ class TestChoosePool:
         )
         choice = hsr_pkg.choose_pool([hsr_pool, other], FIXED_NOW, "不存在的池")
         assert not choice.ok and choice.reason == "unknown"
+
+    def test_name_never_escapes_its_scope(self, hsr_pkg, hsr_pool, hsr_cone_pool):
+        """`复刻 阿哈` 只在复刻池里找：阿哈是限定的 UP，不能因为全局能对上就抽它。"""
+        rerun = hsr_pkg.Pool(
+            pool_id="char-067-2-1",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="复刻测试",
+            up5=(hsr_pkg.Item(item_id="1900", name="别的人", rarity=5),),
+            up4=hsr_pool.up4,
+            featured=False,
+        )
+        featured = hsr_pkg.Pool(
+            pool_id="char-067-1",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="新池测试",
+            up5=hsr_pool.up5,
+            up4=hsr_pool.up4,
+            featured=True,
+        )
+        choice = hsr_pkg.choose_pool([rerun, featured, hsr_cone_pool], FIXED_NOW, "复刻 阿哈")
+        assert not choice.ok
+        assert choice.reason == "unknown"
+        assert [pool.pool_id for pool in choice.candidates] == ["char-067-2-1"]
 
 
 # ---- 抽卡 ----------------------------------------------------------------

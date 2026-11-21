@@ -7,8 +7,9 @@
 
 - **存档是自己的**：星铁写 `hsr.db`，方舟写 `gacha.db`。所以建档、扣抽数、签到都不能
   借用外壳的 `_register`——那个写的是方舟的库。
-- **默认抽角色活动跃迁**：不带池名时只在角色活动跃迁里挑；常驻与联动是长期开放的，
-  得写池名或池型（`/星铁十连 群星跃迁`）。`choose_pool` 拿不到唯一答案时回候选，不猜。
+- **不带词就抽限定**：`/星铁十连` 等于「抽本期新角色」。限定池没开时回一句明确的
+  提示，**不**退化到常驻或复刻；要抽别的类别，第一个词写 `复刻` / `光锥` / `联动` /
+  `常驻`，后面接池名、合集名或 UP 名。`choose_pool` 的四种失败原因见 SPEC 第四节。
 - **水位按池型分桶**：角色 / 光锥 / 联动角色 / 联动光锥 / 常驻各一条，互不影响。
 - **抽卡前先看余额**：余额不够连随机数都不摇，结果一条都不产生；真正的防线仍是
   `commit_pulls` 事务里的 `tickets >= cost`——两次读之间余额可能被别的进程改掉。
@@ -170,12 +171,9 @@ class HsrRuntime:
         query = _query_of(event)
         choice = pool_module.choose_pool(self.pools, now, query)
         if not choice.ok:
-            if choice.reason == "none":
-                yield event.plain_result(views.render_no_pool(now) + notice)
-            else:
-                yield event.plain_result(
-                    views.render_pool_ambiguous(choice.candidates, now, query) + notice
-                )
+            yield event.plain_result(
+                views.render_choice_problem(choice, now) + notice
+            )
             return
 
         pool = choice.pool

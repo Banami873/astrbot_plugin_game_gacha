@@ -37,23 +37,47 @@ KINDS = (
 CONE_KINDS = frozenset({KIND_LIGHT_CONE, KIND_COLLAB_LIGHT_CONE})
 CHARACTER_KINDS = frozenset({KIND_CHARACTER, KIND_COLLAB_CHARACTER})
 
-# 不带池名时抽哪一类。只认角色活动跃迁：群星与联动是常开的，若也参与「唯一在开」的
-# 判定，每次 `/星铁十连` 都会变成「请带池名」。
-DEFAULT_KINDS = (KIND_CHARACTER,)
 
-# 池型关键词。玩家写 `/星铁十连 光锥` 与写池名是同一个意思；只认完全相等，不做模糊匹配，
-# 免得「联动」这种词把某个池名里恰好带这两个字的池也吸进来。
-TYPE_ALIASES: dict[str, tuple[str, ...]] = {
-    "角色": (KIND_CHARACTER,),
-    "光锥": (KIND_LIGHT_CONE,),
-    "常驻": (KIND_STANDARD,),
-    "群星": (KIND_STANDARD,),
+@dataclass(frozen=True)
+class Scope:
+    """选池作用域：一组池型，外加可选的「是不是新 UP」。
+
+    `featured` 为 None 表示不看这个标记（「角色」「光锥」这类泛指），True / False 则把
+    范围收到「当期新池」或「复刻池」——这两者在数据里只有 `featured` 一个区别。
+    """
+
+    label: str
+    kinds: frozenset[str]
+    hint: str = ""
+    featured: bool | None = None
+
+    def covers(self, pool: "Pool") -> bool:
+        if pool.kind not in self.kinds:
+            return False
+        return self.featured is None or pool.featured is self.featured
+
+
+# 池型关键词。玩家写 `/星铁十连 光锥` 与写池名是同一个意思；只认**完全相等**（且必须在
+# 最前面），不做模糊匹配，免得「联动」这种词把某个池名里恰好带这两个字的池也吸进来。
+SCOPES: dict[str, Scope] = {
+    "限定": Scope("限定", frozenset({KIND_CHARACTER}), "当期的新角色跃迁", featured=True),
+    "复刻": Scope("复刻", frozenset({KIND_CHARACTER}), "复刻的角色跃迁", featured=False),
+    "角色": Scope("角色", CHARACTER_KINDS, "角色活动跃迁"),
+    "光锥": Scope("光锥", CONE_KINDS, "光锥活动跃迁"),
     # 「联动」默认指联动角色池——群里问「抽联动」十次有九次是要角色；
-    # 要抽联动光锥写全「联动光锥」。
-    "联动": (KIND_COLLAB_CHARACTER,),
-    "联动角色": (KIND_COLLAB_CHARACTER,),
-    "联动光锥": (KIND_COLLAB_LIGHT_CONE,),
+    # 要抽联动光锥写全「联动光锥」，或者先写「光锥」再写光锥名。
+    "联动": Scope("联动", frozenset({KIND_COLLAB_CHARACTER}), "联动角色跃迁"),
+    "联动角色": Scope("联动角色", frozenset({KIND_COLLAB_CHARACTER}), "联动角色跃迁"),
+    "联动光锥": Scope(
+        "联动光锥", frozenset({KIND_COLLAB_LIGHT_CONE}), "光锥联动跃迁"
+    ),
+    "常驻": Scope("常驻", frozenset({KIND_STANDARD}), "群星跃迁"),
+    "群星": Scope("群星", frozenset({KIND_STANDARD}), "群星跃迁"),
 }
+
+# 不带任何词时抽什么：**当期限定**。限定池没开就报错，不退化到常驻或复刻——
+# 玩家发 `/星铁十连` 的意思永远是「抽这一期的新角色」，不是「随便抽一个」。
+DEFAULT_SCOPE = "限定"
 
 
 @dataclass(frozen=True)
@@ -70,8 +94,8 @@ class Pool(PoolBase):
     series: str = ""
     up5: tuple[Item, ...] = ()
     up4: tuple[Item, ...] = ()
-    # 「新角色 / 新光锥」那一张（wiki 的卡池类型 1）。同一期常并排开着新池与复刻，
-    # 不带池名时默认抽它——这是唯一一处「替玩家选」，规则写在帮助里。
+    # 「新角色 / 新光锥」那一张（wiki 的卡池类型 1）。`限定` 作用域就是它；同一作用域里
+    # 有多张时也优先它——这是本插件唯一「替玩家选」的地方，规则写在帮助里。
     featured: bool = False
     permanent: bool = False
 
@@ -148,14 +172,24 @@ def usable_pools(pools: Sequence[Pool], now: int) -> tuple[Pool, ...]:
 class PoolChoice:
     """「这一抽该用哪个池」的判定结果。
 
-    `reason` 只有三种非空值：`none`（没有可抽的角色活动跃迁）、`ambiguous`（多个候选且
-    没对上名字）、`unknown`（给了名字但不在候选里）。`candidates` 是给用户看的候选，
-    不含已结束的限时池。
+    `reason` 非空时 `pool` 为 None，四种取值：
+
+    | reason | 什么时候 | 文案要说的话 |
+    |---|---|---|
+    | `none` | 一张池都没开 | 数据没更新，或真的一张都没有 |
+    | `no_scope` | 要的那一类池没开 | 「现在没有限定池」，**不**改抽别的类别 |
+    | `unknown` | 给了名字，但该范围内没匹配上 | 列出该范围内的候选 |
+    | `ambiguous` | 匹配到多张且没有唯一「新 UP」 | 列出候选，让玩家补字 |
+
+    `scope` / `query` 只给文案用：前者是作用域的对外叫法（「复刻」），后者是玩家写的
+    那段名字。`candidates` 不含已结束的限时池。
     """
 
     pool: Pool | None
     candidates: tuple[Pool, ...] = ()
     reason: str = ""
+    scope: str = ""
+    query: str = ""
 
     @property
     def ok(self) -> bool:
@@ -172,7 +206,11 @@ def _norm(text: str) -> str:
 
 
 def _match(pools: Sequence[Pool], text: str) -> tuple[Pool, ...]:
-    """按池名、合集名、UP 名、池型关键词依次找。返回全部命中，由调用方判断是否唯一。"""
+    """按池名、合集名、5★ UP 名依次找。返回全部命中，由调用方判断是否唯一。
+
+    三层是「先具体后概括」：池名最具体；合集名一次带出拆开的三张；UP 名是玩家最常
+    记得的那个词（「Saber」「火花」）。
+    """
     needle = _norm(text)
     if not needle:
         return ()
@@ -182,15 +220,9 @@ def _match(pools: Sequence[Pool], text: str) -> tuple[Pool, ...]:
     hits = tuple(pool for pool in pools if pool.series and needle in _norm(pool.series))
     if hits:
         return hits
-    hits = tuple(
+    return tuple(
         pool for pool in pools if any(needle in _norm(item.name) for item in pool.up5)
     )
-    if hits:
-        return hits
-    kinds = TYPE_ALIASES.get(text)
-    if kinds:
-        return tuple(pool for pool in pools if pool.kind in kinds)
-    return ()
 
 
 def _preferred(hits: Sequence[Pool]) -> Pool | None:
@@ -201,32 +233,55 @@ def _preferred(hits: Sequence[Pool]) -> Pool | None:
     return featured[0] if len(featured) == 1 else None
 
 
-def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
-    """挑一个池：带了名字就按名字找，没带就找角色活动跃迁，找不到唯一答案不猜。
+def _resolve(hits: Sequence[Pool], scope: str, query: str) -> PoolChoice:
+    """在命中集合里定一张：唯一、或唯一「新 UP」就定，否则把候选交回去。"""
+    chosen = _preferred(hits)
+    if chosen is None:
+        return PoolChoice(None, tuple(hits), "ambiguous", scope, query)
+    return PoolChoice(chosen, tuple(hits), "", scope, query)
 
-    两处「替玩家定下来」，都只是因为答案唯一：
-    1. 只有一个池在开时不看 `query`——玩家把池名打错一个字，也不该因此抽不了卡；
-    2. 同类池开了好几张时，若有且只有一张「新 UP」池，就抽它。同一期并排开着新池与
-       三张复刻是常态，每次都要求写名字太吵。
+
+def choose_pool(pools: Sequence[Pool], now: int, query: str = "") -> PoolChoice:
+    """挑一个池：`[/星铁十连] [作用域] [池名 / 合集名 / UP 名]`。
+
+    规则一句话：**不带词抽当期限定，带词就在那个作用域里找，范围空了就报错**。
+    四步：
+
+    1. 第一个词是完全相等的池型关键词（`限定` / `复刻` / `角色` / `光锥` / `联动` /
+       `联动光锥` / `常驻` / `群星`）时，它就是作用域，剩下的都算名字。
+    2. 没有关键词、也没有名字 → 作用域取 `限定`（当期新角色那一张）。
+    3. 没有关键词、但有名字 → 在**全部**在开池里按名字找（池名 / 合集名 / UP 名）。
+    4. 作用域里一张池都没有 → `no_scope`，绝不改抽别的类别；带名字但没匹配上 →
+       `unknown`，列出该范围内的候选。
     """
     usable = usable_pools(pools, now)
-    if len(usable) == 1:
-        return PoolChoice(usable[0], usable)
-    text = (query or "").strip()
-    if text:
-        hits = _match(usable, text)
-        chosen = _preferred(hits)
-        if chosen is not None:
-            return PoolChoice(chosen, usable)
-        if hits:
-            return PoolChoice(None, hits, "ambiguous")
-        fallback = tuple(pool for pool in usable if pool.kind in DEFAULT_KINDS) or usable
-        return PoolChoice(None, fallback, "unknown" if fallback else "none")
+    if not usable:
+        return PoolChoice(None, (), "none")
 
-    defaults = tuple(pool for pool in usable if pool.kind in DEFAULT_KINDS)
-    if not defaults:
-        return PoolChoice(None, usable, "none")
-    chosen = _preferred(defaults)
-    if chosen is not None:
-        return PoolChoice(chosen, usable)
-    return PoolChoice(None, defaults, "ambiguous")
+    text = (query or "").strip()
+    tokens = text.split()
+    scope = SCOPES.get(tokens[0]) if tokens else None
+    # 关键词后面那段才算名字。「真意之汇 拂晓之前」这种带空格的全名，`_norm` 之后与
+    # 「真意之汇•拂晓之前」等价，所以这里只需要把词拼回去。
+    name = " ".join(tokens[1:]) if scope is not None else text
+
+    if scope is None and not name:
+        scope = SCOPES[DEFAULT_SCOPE]
+
+    if scope is None:
+        hits = _match(usable, name)
+        if not hits:
+            return PoolChoice(None, usable, "unknown", "", name)
+        return _resolve(hits, "", name)
+
+    scoped = tuple(pool for pool in usable if scope.covers(pool))
+    if not scoped:
+        # 关键词点名的那一类没开。**这里不退化**——「限定」没开就说没有，不去抽常驻。
+        return PoolChoice(None, usable, "no_scope", scope.label)
+    if not name:
+        return _resolve(scoped, scope.label, "")
+
+    hits = _match(scoped, name)
+    if not hits:
+        return PoolChoice(None, scoped, "unknown", scope.label, name)
+    return _resolve(hits, scope.label, name)

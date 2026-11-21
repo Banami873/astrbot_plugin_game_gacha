@@ -25,6 +25,7 @@ from .pools import (
     KIND_COLLAB_LIGHT_CONE,
     KIND_LIGHT_CONE,
     KIND_STANDARD,
+    SCOPES,
     Pool,
 )
 
@@ -67,8 +68,8 @@ class CommandDoc:
 COMMANDS: tuple[CommandDoc, ...] = (
     CommandDoc("星铁帮助", "/星铁帮助", "看这份说明"),
     CommandDoc("星铁签到", "/星铁签到", "每天领一次抽数"),
-    CommandDoc("星铁单抽", "/星铁单抽 [池名或池型]", "抽 1 次，不带名字抽角色池"),
-    CommandDoc("星铁十连", "/星铁十连 [池名或池型]", "抽 10 次，不带名字抽角色池"),
+    CommandDoc("星铁单抽", "/星铁单抽 [类别] [池名]", "抽 1 次，不带词抽当期限定"),
+    CommandDoc("星铁十连", "/星铁十连 [类别] [池名]", "抽 10 次，不带词抽当期限定"),
     CommandDoc("星铁卡池", "/星铁卡池", "看在开的角色、光锥、联动与常驻池"),
     CommandDoc(
         "星铁抽数修改",
@@ -214,28 +215,100 @@ def render_pool(pools: Sequence[Pool], now: int) -> str:
 
 
 def render_no_pool(now: int) -> str:
-    """一期角色活动跃迁都没开。带上当前时间，方便判断是数据没更新还是真没开。"""
+    """一张池都没开。带上当前时间，方便判断是数据没更新还是真没开。"""
     return (
-        "【星穹铁道 · 角色活动跃迁】\n"
-        f"现在（{_stamp(now)}）没有进行中的角色活动跃迁。\n"
-        "常驻与联动是长期开放的，带池名就能抽：/星铁十连 群星跃迁\n"
+        "【星穹铁道 · 跃迁】\n"
+        f"现在（{_stamp(now)}）一张卡池都没有在开。\n"
         "卡池数据是随包快照，新一期要管理员跑 tools/build_hsr_data.py 更新。"
     )
 
 
-def render_pool_ambiguous(pools: Sequence[Pool], now: int, query: str = "") -> str:
+def _scope_hint(label: str) -> str:
+    """作用域的一句解释，用于「这一类没开」的文案。"""
+    for scope in SCOPES.values():
+        if scope.label == label and scope.hint:
+            return scope.hint
+    return ""
+
+
+def render_no_scope(scope: str, now: int) -> str:
+    """点名的那一类池没开。**不退化**：说清没有，再给等价写法。"""
+    hint = _scope_hint(scope)
+    what = f"{scope}池" + (f"（{hint}）" if hint else "")
+    return "\n".join(
+        [
+            f"【星穹铁道 · {scope or '跃迁'}】",
+            f"现在（{_stamp(now)}）没有在开的{what}。",
+            "不会自动改抽常驻或别的池。换个类别或带池名再试：",
+            "· /星铁十连 限定　· /星铁十连 复刻 名字",
+            "· /星铁十连 光锥 名字　· /星铁十连 联动 名字　· /星铁十连 常驻",
+            "/星铁卡池 看现在有哪些。",
+        ]
+    )
+
+
+def _pool_lines(pools: Sequence[Pool], now: int) -> list[str]:
+    """候选池的精简列表：一行一张，带剩余时间，够玩家照着抄名字。
+
+    常开池不报剩余天数（那是 2 万多天，看着像数据坏了），直接写「长期开放」。
+    """
+    return [
+        f"· {pool.name}（{'长期开放' if pool.permanent else remaining_text(pool.end_time, now)}）"
+        for pool in pools
+    ]
+
+
+def render_no_match(
+    scope: str, query: str, pools: Sequence[Pool], now: int
+) -> str:
+    """给了名字但该范围内没对上。列出该范围的候选，不跨类别找。"""
+    where = f"{scope}池里" if scope else "在开的池里"
+    lines = [f"{where}没有对得上「{query}」的名字。"]
+    if not pools:
+        return "\n".join(lines + ["/星铁卡池 看现在有哪些。"])
+    lines.append("这一类的候选：" if scope else "现在在开的：")
+    lines += _pool_lines(pools[:8], now)
+    if len(pools) > 8:
+        lines.append(f"……还有 {len(pools) - 8} 个，/星铁卡池 看全部。")
+    lines.append(f"例如：/星铁十连 {pool_query_hint(scope, pools[0].name)}")
+    return "\n".join(lines)
+
+
+def pool_query_hint(scope: str, name: str) -> str:
+    """给一句能直接照抄的指令参数（`光锥 流光定影` / `复刻 火花`）。"""
+    return f"{scope} {name}" if scope else name
+
+
+def render_pool_ambiguous(
+    pools: Sequence[Pool], now: int, query: str = "", scope: str = ""
+) -> str:
     """多个候选，不替玩家猜。列出候选，并给一条能直接照抄的指令。"""
-    lines = [f"现在有 {len(pools)} 个池可选，请带池名：", ""]
+    head = f"{scope}池有 {len(pools)} 个可选，请带池名：" if scope else (
+        f"现在有 {len(pools)} 个池可选，请带池名："
+    )
+    lines = [head, ""]
     for index, pool in enumerate(pools):
         if index:
             lines.append("")
         lines += _pool_block(pool, now)
-    example = pools[0].name if pools else ""
-    hint = f"例如：/星铁十连 {example}"
+    hint = f"例如：/星铁十连 {pool_query_hint(scope, pools[0].name)}" if pools else ""
     if query:
-        hint = f"「{query}」没对上任何一个池；也可以直接写池型（光锥 / 常驻 / 联动）。" + hint
+        hint = f"「{query}」对上了多个池，补几个字。" + hint
     lines += ["", hint]
     return "\n".join(lines)
+
+
+def render_choice_problem(choice, now: int) -> str:
+    """选池没定下来时的统一出口。四种原因各给一条可执行的下一步。"""
+    if choice.reason == "none":
+        return render_no_pool(now)
+    if choice.reason == "no_scope":
+        return render_no_scope(choice.scope, now)
+    if choice.reason == "unknown":
+        return render_no_match(choice.scope, choice.query, choice.candidates, now)
+    return render_pool_ambiguous(
+        choice.candidates, now, choice.query, choice.scope
+    )
 
 
 # ---- 签到与改抽数 --------------------------------------------------------
@@ -295,10 +368,12 @@ def render_help(*, signin_reward: int = 10, newbie_bonus: int = 30) -> str:
         "· 4★ 一律每 10 抽必出；水位只在同类型池之间继承",
         "",
         "■ 抽哪个池",
-        "· 不带池名时抽「角色活动跃迁」",
-        "· 常驻 / 光锥 / 联动要带池名或池型，如：",
-        "  /星铁十连 群星跃迁    /星铁十连 光锥    /星铁十连 联动",
-        "· 同时开多张同类型池时会要求写池名，先用 /星铁卡池 看名字",
+        "· 不带词：抽当期限定（本期新角色）。限定没开就报错，不会改抽常驻或复刻",
+        "· 第一个词写类别，就只在这一类里找：",
+        "  限定 / 复刻 / 角色 / 光锥 / 联动 / 联动光锥 / 常驻（群星同理）",
+        "· 类别后面写池名、合集名或 UP 名，例如：",
+        "  /星铁十连 复刻 火花    /星铁十连 光锥 流光定影    /星铁十连 联动 Saber",
+        "· 只写名字也行（/星铁十连 愚戏众星）；对不上或对上多张会列出候选",
         "",
         "明日方舟的指令仍是不带前缀那几条，也可加 /方舟 前缀使用。",
     ]
