@@ -33,7 +33,7 @@ from .games.hsr.service import HsrRuntime
 
 
 PLUGIN_NAME = "astrbot_plugin_game_gacha"
-PLUGIN_VERSION = "0.3.1"
+PLUGIN_VERSION = "0.3.2"
 
 
 class GameGachaPlugin(Star):
