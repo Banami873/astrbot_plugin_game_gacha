@@ -5,7 +5,7 @@
 这个形状，不解释星级叫什么、有几档。
 
 抽卡内核只认「星级」和「候选 id 列表」，不知道自己抽到的人叫什么——名字来自这份
-字典。字典随包（`resources/snapshot/characters.json`），由 `tools/build_data.py`
+字典。字典随包（`resources/ark/snapshot/characters.json`），由 `tools/build_data.py`
 从官方 `character_table.json` 与 PRTS 干员一览裁剪而来。
 
 为什么单独一份而不是塞进卡池快照：干员与卡池是两个独立变化的维度，官方表里也没有
@@ -28,7 +28,7 @@ MIN_RARITY = 3
 MAX_RARITY = 6
 
 # 四种基础池。名字与 `tools/build_data.py` 里的 `CHANNEL_BY_METHOD` 一一对应，
-# 也是 `resources/pool_rules.json` 中 `channels_by_category` 使用的键。
+# 也是 `resources/ark/pool_rules.json` 中 `channels_by_category` 使用的键。
 CHANNEL_STANDARD = "standard"
 CHANNEL_LIMITED = "limited"
 CHANNEL_CLASSIC = "classic"

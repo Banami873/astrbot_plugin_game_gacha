@@ -3,7 +3,7 @@
 `core/engine.py` 只管纯数学（算权重、抽一档、推计数），不知道 2/8/50/40 是什么；
 方舟的那一组数字、以及「哪个星级里有哪些人能抽」在这里组装。
 
-水位**按组**存（R-04），组键由 `core/pity.py` 从 `resources/pity_groups.json` 翻译，
+水位**按组**存（R-04），组键由 `core/pity.py` 从 `resources/ark/pity_groups.json` 翻译，
 本模块不判断「这是不是限定池」——它只接收调用方算好的 `group_key`。
 
 已接：水位分组、新池前 10 抽必出 5★、UP 名额与份额（R-11）、限定池的 6★ 范围与

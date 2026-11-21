@@ -243,7 +243,7 @@ def _parse_day(text: str) -> int:
 
 
 def load_discounts(path: Path | str) -> DiscountBoard:
-    """读 `resources/limits.json`。
+    """读 `resources/ark/limits.json`。
 
     单条坏数据只丢这一条：一名干员的日期写坏，不该让整张 200 档表消失。文件缺失或不是
     合法 JSON 时返回空表，兑换指令会明说「200 档不可用」而不是崩掉。

@@ -373,7 +373,7 @@ class TestUpWeight:
     ):
         pool, banner = self._pick(real_snapshot, real_banners, "LIMITED", up6_count=2)
         assert banner.up5, "限定池应当也有 5★ UP，否则这条用例只测到一半"
-        share = pools_pkg.load_up_share(plugin_dir / "resources" / "pool_rules.json").for_pool(pool)
+        share = pools_pkg.load_up_share(plugin_dir / "resources" / "ark" / "pool_rules.json").for_pool(pool)
 
         six_total = six_up = 0
         rng = random.Random(11)
@@ -399,7 +399,7 @@ class TestUpWeight:
     ):
         """联合行动（官方 `NORMAL`）的 6★ 只有名单上那几名，份额 1.0。"""
         pool, banner = self._pick(real_snapshot, real_banners, "NORMAL", up6_count=4)
-        share = pools_pkg.load_up_share(plugin_dir / "resources" / "pool_rules.json").for_pool(pool)
+        share = pools_pkg.load_up_share(plugin_dir / "resources" / "ark" / "pool_rules.json").for_pool(pool)
 
         pulled = set()
         rng = random.Random(12)

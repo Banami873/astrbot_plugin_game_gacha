@@ -32,10 +32,10 @@ from typing import Any, Mapping, Sequence
 CST = timezone(timedelta(hours=8))
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
-CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
-BANNER_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
-RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
+SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "ark" / "snapshot" / "gacha_table.json"
+CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "ark" / "snapshot" / "characters.json"
+BANNER_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "ark" / "snapshot" / "banners.json"
+RULES_PATH = PLUGIN_DIR / "resources" / "ark" / "pool_rules.json"
 
 SOURCE_BASE = (
     "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/"

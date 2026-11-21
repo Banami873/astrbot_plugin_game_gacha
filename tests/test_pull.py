@@ -274,13 +274,13 @@ def plugin(pkg, store, real_roster, pools_pkg, pool, make_ark_plugin):
         ),
         # 水位分组读真实配置：测试池是 NORMAL，组键应为 standard，与生产一致。
         pity_groups=pity_mod.load_pity_groups(
-            PLUGIN_DIR / "resources" / "pity_groups.json"
+            PLUGIN_DIR / "resources" / "ark" / "pity_groups.json"
         ),
         # 名单与 UP 份额：测试池没有 banner，等价于「UP 名单未获取」的运行方式，
         # 抽卡结果仍要能出来，只是少了 UP 加成（R-14 降级链第 4 条）。
         banners=pkg("games.arknights.banners").BannerBook({}),
         up_rules=pools_pkg.load_up_share(
-            PLUGIN_DIR / "resources" / "pool_rules.json"
+            PLUGIN_DIR / "resources" / "ark" / "pool_rules.json"
         ),
         # 限定索引同理：测试池都是常驻/限时池，`_scope` 会直接返回 None，
         # 但字段必须存在——少了它，哪天用例换成限定池就会变成 AttributeError。

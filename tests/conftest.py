@@ -253,26 +253,26 @@ def selfcheck_mod() -> ModuleType:
 def real_banners(banners_mod):
     """仓库里那份名单快照（池名与 UP 干员）。"""
     return banners_mod.load_banners(
-        PLUGIN_DIR / "resources" / "snapshot" / "banners.json"
+        PLUGIN_DIR / "resources" / "ark" / "snapshot" / "banners.json"
     )
 
 
 @pytest.fixture(scope="session")
 def real_discounts(limited_mod):
     """仓库里那份往期限定降价表（200 档用）。"""
-    return limited_mod.load_discounts(PLUGIN_DIR / "resources" / "limits.json")
+    return limited_mod.load_discounts(PLUGIN_DIR / "resources" / "ark" / "limits.json")
 
 
 @pytest.fixture(scope="session")
 def real_roster(characters_mod):
     """仓库里那份干员快照。抽卡用例需要一个真实规模的字典，再造一份假的没意义。"""
-    return characters_mod.load_roster(PLUGIN_DIR / "resources" / "snapshot" / "characters.json")
+    return characters_mod.load_roster(PLUGIN_DIR / "resources" / "ark" / "snapshot" / "characters.json")
 
 
 @pytest.fixture(scope="session")
 def real_snapshot(pools_pkg):
     """仓库里那份卡池快照，按默认分类映射解析。"""
     return pools_pkg.load_snapshot(
-        PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json",
+        PLUGIN_DIR / "resources" / "ark" / "snapshot" / "gacha_table.json",
         pools_pkg.FALLBACK_CATEGORY_MAP,
     )

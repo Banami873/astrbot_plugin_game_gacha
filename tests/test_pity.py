@@ -27,7 +27,7 @@ def _pool(pools_pkg, *, pool_id="NORM_1", rule_type="NORMAL", end_time=NOW + DAY
 @pytest.fixture()
 def groups(pity_mod, plugin_dir):
     """随包的真实配置。组键的正确与否全在这份 JSON 里。"""
-    return pity_mod.load_pity_groups(plugin_dir / "resources" / "pity_groups.json")
+    return pity_mod.load_pity_groups(plugin_dir / "resources" / "ark" / "pity_groups.json")
 
 
 class TestGroupKey:

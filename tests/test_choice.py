@@ -319,7 +319,7 @@ def choice_plugin(pkg, store, real_roster, pools_pkg, plugin_dir, make_ark_plugi
         pity_groups=pkg("core.pity").PityGroups(),
         select_rules=pools_pkg.SelectRules(),
         reward_rules=pools_pkg.LimitedRewardRules(),
-        pick_rules=pools_pkg.load_pick_rules(plugin_dir / "resources" / "pool_rules.json"),
+        pick_rules=pools_pkg.load_pick_rules(plugin_dir / "resources" / "ark" / "pool_rules.json"),
         _load_error="",
         _roster_error="",
         _choices={},

@@ -284,7 +284,7 @@ class TestSelectRulesConfig:
     """配置：阈值写成 [300, 150] 或带 0 的，直接关掉这个池型的选调。"""
 
     def test_real_config_registers_three_standard_pool_types(self, pools_pkg, plugin_dir):
-        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "ark" / "pool_rules.json")
         for rule_type in ("DOUBLE", "CLASSIC", "CLASSIC_DOUBLE"):
             thresholds = rules.thresholds_for(
                 SimpleNamespace(rule_type=rule_type, pool_id="x")
@@ -314,7 +314,7 @@ class TestSelectRulesConfig:
 
     def test_real_config_registers_single_as_consecutive(self, pools_pkg, plugin_dir):
         """SINGLE 只走连续口径：它没登记在累计表里，所以 300 档那套不会误用它。"""
-        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "ark" / "pool_rules.json")
         single = SimpleNamespace(rule_type="SINGLE", pool_id="x")
         assert rules.consecutive_thresholds_for(single) == (150,)
         assert rules.thresholds_for(single) == ()
@@ -549,28 +549,28 @@ class TestSelectBookWiring:
         return banners_mod.BannerBook({pool_id: banners_mod.Banner(pool_id=pool_id, name="测试池", up6=up6)})
 
     def test_cumulative_table_means_cumulative_kind(self, pkg, pools_pkg, select_mod, banners_mod, plugin_dir):
-        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = _pool(pools_pkg, pool_id="DOUBLE_TEST", rule_type="DOUBLE")
         book = self._book(pkg, rules, self._banners(banners_mod, pool.pool_id), pool)
         assert book.thresholds == (150, 300)
         assert book.kind == select_mod.KIND_CUMULATIVE
 
     def test_consecutive_table_means_consecutive_kind(self, pkg, pools_pkg, select_mod, banners_mod, plugin_dir):
-        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = _single_pool(pools_pkg)
         book = self._book(pkg, rules, self._banners(banners_mod, pool.pool_id), pool)
         assert book.thresholds == (150,)
         assert book.kind == select_mod.KIND_CONSECUTIVE
 
     def test_missing_banner_disables_the_whole_rule(self, pkg, pools_pkg, banners_mod, plugin_dir):
-        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = _single_pool(pools_pkg)
         book = self._book(pkg, rules, banners_mod.BannerBook({}), pool)
         assert book.enabled is False
         assert book.up6 == (), "名单缺失时不该带着名单继续锁人"
 
     def test_pool_type_with_no_table_has_no_select(self, pkg, pools_pkg, banners_mod, plugin_dir):
-        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_select_rules(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = _pool(pools_pkg, pool_id="LIMITED_TEST", rule_type="LIMITED", category="限定")
         book = self._book(pkg, rules, self._banners(banners_mod, pool.pool_id), pool)
         assert book.enabled is False

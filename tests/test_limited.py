@@ -303,7 +303,7 @@ class TestDrawRespectsScope:
         }
         allowed = standard_six | scope.available
         share = pools_pkg.load_up_share(
-            plugin_dir / "resources" / "pool_rules.json"
+            plugin_dir / "resources" / "ark" / "pool_rules.json"
         ).for_pool(pool)
         targets = ark_engine_mod.UpTargets(
             six=banner.up6,
@@ -375,7 +375,7 @@ class TestWellRules:
     """配置层：井阈值与契约速率都按池型登记，未登记即没有。"""
 
     def test_packaged_file_registers_limited_only(self, pools_pkg, plugin_dir):
-        rules = pools_pkg.load_limited_rewards(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_pkg.load_limited_rewards(plugin_dir / "resources" / "ark" / "pool_rules.json")
         limited = _limited_pool(pools_pkg)
         normal = pools_pkg.Pool(
             pool_id="NORM",

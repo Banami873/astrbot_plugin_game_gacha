@@ -44,7 +44,7 @@ RULE_DISPLAY_NAMES: dict[str, str] = {
 # 官方前缀，不改池名本体；补过之后仍按原名可搜（见 `_prefix_matches`）。
 RULE_NAME_PREFIX: dict[str, str] = {"FESCLASSIC": "中坚"}
 
-# 与 resources/pool_rules.json 的 categories 段同构；配置文件缺失或损坏时用它兜底，
+# 与 resources/ark/pool_rules.json 的 categories 段同构；配置文件缺失或损坏时用它兜底，
 # 免得整个插件因为一个 JSON 读不出来就查不到池。
 #
 # 注意 `DOUBLE` 与 `NORMAL` 的位置是反直觉的：官方 DOUBLE 是常驻标准寻访（双 6★ UP，

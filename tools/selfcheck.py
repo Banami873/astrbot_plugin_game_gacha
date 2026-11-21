@@ -28,8 +28,8 @@ from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 MAIN_PATH = PLUGIN_DIR / "main.py"
-SNAPSHOT_DIR = PLUGIN_DIR / "resources" / "snapshot"
-RULES_PATH = PLUGIN_DIR / "resources" / "pool_rules.json"
+SNAPSHOT_DIR = PLUGIN_DIR / "resources" / "ark" / "snapshot"
+RULES_PATH = PLUGIN_DIR / "resources" / "ark" / "pool_rules.json"
 HSR_DIR = PLUGIN_DIR / "resources" / "hsr"
 
 # 每个游戏的指令清单。加一个游戏 = 这里加一行，`main.py` 注册它的指令。

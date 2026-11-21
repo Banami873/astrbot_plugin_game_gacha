@@ -40,7 +40,8 @@ _LOG = "[astrbot_plugin_game_gacha]"
 DB_NAME = "gacha.db"
 
 PLUGIN_DIR = Path(__file__).resolve().parents[2]
-RESOURCE_DIR = PLUGIN_DIR / "resources"
+# 方舟资源收在 resources/ark/ 下（与 hsr 同层），不再散在 resources 根目录。
+RESOURCE_DIR = PLUGIN_DIR / "resources" / "ark"
 SNAPSHOT_DIR = RESOURCE_DIR / "snapshot"
 SNAPSHOT_PATH = SNAPSHOT_DIR / "gacha_table.json"
 CHAR_SNAPSHOT_PATH = SNAPSHOT_DIR / "characters.json"

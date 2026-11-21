@@ -139,7 +139,7 @@ class TestSnapshotIo:
 class TestRealSnapshotMatchesScript:
     def test_committed_snapshot_is_normalized(self, build_data_mod, plugin_dir):
         """仓库里的快照必须是本脚本的产物，否则 --offline 会改动它。"""
-        path = plugin_dir / "resources" / "snapshot" / "gacha_table.json"
+        path = plugin_dir / "resources" / "ark" / "snapshot" / "gacha_table.json"
         committed = build_data_mod.read_snapshot(path)
         rebuilt = build_data_mod.trim(committed)
         assert committed["pools"] == rebuilt["pools"]

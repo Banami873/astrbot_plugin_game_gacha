@@ -208,3 +208,21 @@ __marimo__/
 
 # 本机 agent 的工作记录（记忆、临时笔记），不入库
 .workbuddy/
+
+# ---- 插件运行时（出图产物与数据库），不入库
+cache/
+data/
+
+# ---- 字体：不随库分发，运行时下载（计划中）。
+# fonts.json 里的字体链在缺文件时逐级兜底，克隆后出图不会崩、只是没字。
+*.ttf
+*.otf
+*.woff2
+
+# 出图资源的「可再生成」产物：由 tools/build_hsr_render_assets.py 从站点现网
+# 生成、path_icons PNG 由 SVG 重渲染，均不入库；SVG 源与 manifest 保留。
+resources/hsr/ui/*.json
+resources/hsr/ui/*.webp
+resources/hsr/ui/path_icons/*.png
+# 例外：fonts.json 是手工配置（字体链），随库走。
+!resources/hsr/ui/fonts.json

@@ -63,7 +63,7 @@ class TestCategory:
         assert pools_mod.category_of("", pools_mod.FALLBACK_CATEGORY_MAP) == "其他"
 
     def test_category_map_reads_rules_file(self, pools_mod, plugin_dir):
-        mapping = pools_mod.load_category_map(plugin_dir / "resources" / "pool_rules.json")
+        mapping = pools_mod.load_category_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         assert "限定" in mapping
         assert "LIMITED" in mapping["限定"]
 
@@ -97,7 +97,7 @@ class TestUnimplemented:
         assert len(pools) == 1
 
     def test_rules_file_lists_backflow(self, pools_mod, plugin_dir):
-        skipped = pools_mod.load_unimplemented_types(plugin_dir / "resources" / "pool_rules.json")
+        skipped = pools_mod.load_unimplemented_types(plugin_dir / "resources" / "ark" / "pool_rules.json")
         assert "BACKFLOW" in skipped
 
     def test_missing_file_falls_back_to_default(self, pools_mod, tmp_path):
@@ -348,13 +348,13 @@ class TestRealSnapshot:
     """对内置于仓库的快照做冒烟检查：它必须能装上，且含已知的池。"""
 
     def test_snapshot_loads(self, pools_mod, plugin_dir):
-        path = plugin_dir / "resources" / "snapshot" / "gacha_table.json"
+        path = plugin_dir / "resources" / "ark" / "snapshot" / "gacha_table.json"
         snapshot = pools_mod.load_snapshot(path, pools_mod.FALLBACK_CATEGORY_MAP)
         assert len(snapshot.pools) >= 400
         assert snapshot.fetched_at is not None
 
     def test_snapshot_has_limited_pool(self, pools_mod, plugin_dir):
-        path = plugin_dir / "resources" / "snapshot" / "gacha_table.json"
+        path = plugin_dir / "resources" / "ark" / "snapshot" / "gacha_table.json"
         snapshot = pools_mod.load_snapshot(path, pools_mod.FALLBACK_CATEGORY_MAP)
         limited = [p for p in snapshot.pools if p.rule_type == "LIMITED"]
         assert limited, "快照里应该有 LIMITED 池"
@@ -517,34 +517,34 @@ class TestChannelRules:
         )
 
     def test_standard_family_only_gives_standard(self, pools_mod, plugin_dir):
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         for category in ("常驻", "限时"):
             pool = self._pool(pools_mod, category=category)
             assert rules.for_pool(pool) == frozenset({"standard"})
 
     def test_limited_pool_includes_standard_for_off_banner(self, pools_mod, plugin_dir):
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = self._pool(pools_mod, rule_type="LIMITED", category="限定")
         assert rules.for_pool(pool) == frozenset({"limited", "standard"})
 
     def test_linkage_pool_includes_standard_for_low_stars(self, pools_mod, plugin_dir):
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = self._pool(pools_mod, rule_type="LINKAGE", category="联动")
         assert rules.for_pool(pool) == frozenset({"linkage", "standard"})
 
     def test_classic_pool_is_isolated(self, pools_mod, plugin_dir):
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = self._pool(pools_mod, rule_type="CLASSIC", category="中坚")
         assert rules.for_pool(pool) == frozenset({"classic"})
 
     def test_rule_type_override_beats_category(self, pools_mod, plugin_dir):
         # 跨年欢庆归在中坚类，但它是限定复刻池，要额外能出限定干员。
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = self._pool(pools_mod, rule_type="FESCLASSIC", category="中坚")
         assert rules.for_pool(pool) == frozenset({"classic", "limited"})
 
     def test_unknown_category_falls_back_to_standard(self, pools_mod, plugin_dir):
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         pool = self._pool(pools_mod, rule_type="WHATEVER", category="其他")
         assert rules.for_pool(pool) == frozenset({"standard"})
 
@@ -568,6 +568,6 @@ class TestChannelRules:
 
     def test_shipped_rules_cover_every_category(self, pools_mod, plugin_dir):
         """随包的 pool_rules.json 必须给每个类别都配了基础池，否则启动会告警。"""
-        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "pool_rules.json")
-        categories = pools_mod.load_category_map(plugin_dir / "resources" / "pool_rules.json")
+        rules = pools_mod.load_channel_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
+        categories = pools_mod.load_category_map(plugin_dir / "resources" / "ark" / "pool_rules.json")
         assert rules.categories_missing(categories) == ()

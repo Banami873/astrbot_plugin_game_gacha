@@ -27,9 +27,9 @@ from datetime import datetime
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "gacha_table.json"
-CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "snapshot" / "characters.json"
-LIMITS_PATH = PLUGIN_DIR / "resources" / "limits.json"
+SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "ark" / "snapshot" / "gacha_table.json"
+CHAR_SNAPSHOT_PATH = PLUGIN_DIR / "resources" / "ark" / "snapshot" / "characters.json"
+LIMITS_PATH = PLUGIN_DIR / "resources" / "ark" / "limits.json"
 
 DAY = 86400
 

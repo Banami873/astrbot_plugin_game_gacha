@@ -390,7 +390,7 @@ def exchange_plugin(
         limited=limited_mod.build_index(live_snapshot.pools),
         pity_groups=pkg("core.pity").PityGroups(),
         reward_rules=pools_pkg.load_limited_rewards(
-            plugin_dir / "resources" / "pool_rules.json"
+            plugin_dir / "resources" / "ark" / "pool_rules.json"
         ),
         select_rules=pools_pkg.SelectRules(),
         _load_error="",
@@ -538,8 +538,8 @@ class TestLimitsTableIsInSync:
     ):
         """仓库里的 limits.json 必须与现算结果一致——否则说明快照更新后忘了重跑。"""
         payload, problems = build_limits_mod.build_limits(
-            plugin_dir / "resources" / "snapshot" / "gacha_table.json",
-            plugin_dir / "resources" / "snapshot" / "characters.json",
+            plugin_dir / "resources" / "ark" / "snapshot" / "gacha_table.json",
+            plugin_dir / "resources" / "ark" / "snapshot" / "characters.json",
             cst=limited_mod.CST,
             limited=limited_mod,
             char_module=characters_mod,
@@ -547,6 +547,6 @@ class TestLimitsTableIsInSync:
         )
         assert problems == []
         existing = json.loads(
-            (plugin_dir / "resources" / "limits.json").read_text(encoding="utf-8")
+            (plugin_dir / "resources" / "ark" / "limits.json").read_text(encoding="utf-8")
         )
         assert existing["entries"] == payload["entries"]
