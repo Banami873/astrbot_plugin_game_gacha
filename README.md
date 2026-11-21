@@ -63,7 +63,7 @@
   不占抽数、不产契约）；池结束时剩余契约作废。
 - **契约兑换**：`/契约兑换 75` 换当期 5★ UP；`200 <名字>` 换本系列到年限的往期限定 6★；
   `300 <名字>` 换本期 6★（当期 UP + 同系列已解限但未降价的往期）。200 档的降价日是一张
-  显式表（`resources/limits.json`，由 `tools/build_limits.py` 生成：4/5 年估算 + 官方公告
+  显式表（`resources/ark/limits.json`，由 `tools/build_limits.py` 生成：4/5 年估算 + 官方公告
   能确认的观测点修正），估算项在界面标「按估算日期」。兑换不推进水位、不产生新契约。
 - **自选池**：中坚甄选从 12 名 6★ 里选 2 名（各占 6★ 的 25%，其余 10 名各 5%）、24 名 5★ 里
   选 3 名（合计约 50%）；定向甄选从 6 名 6★ 里选 3 名（合计 100%，其余 6★ 不出）、6 名 5★ 里
@@ -85,7 +85,7 @@
 | 官方表 `gacha_table.json` / `character_table.json` | 池 id、池型、起止时刻、概率与保底参数、井与契约参数、限定干员名单、干员星级 | 近期池名是占位串「适合多种场合的强力干员」，`LIMITED` 没有 UP 名单 |
 | PRTS Wiki 的「卡池一览」与「干员一览」 | 真实池名、每池 UP 名单、干员能出现在哪类寻访里 | 没有概率与机械参数 |
 
-快照随包放在 `resources/snapshot/`，重建命令（在 AstrBot 根目录执行）：
+快照随包放在 `resources/ark/snapshot/`，重建命令（在 AstrBot 根目录执行）：
 
 ```bash
 .venv/Scripts/python.exe data/plugins/astrbot_plugin_game_gacha/tools/build_data.py
@@ -156,7 +156,7 @@ commands=9 tables=8 snapshot=ok
 
 - 干员立绘、卡池数据与游戏内 UI 贴图的版权归**上海鹰角网络科技有限公司**所有。
 - 本项目为**同人非商业**用途，用于群内娱乐与抽卡概率演示，与官方无任何关联。
-- UI 贴图（`resources/ui/`）取自游戏资源包随包分发；**立绘不随包**，运行时从 PRTS Wiki
+- UI 贴图（`resources/ark/ui/`）取自游戏资源包随包分发；**立绘不随包**，运行时从 PRTS Wiki
   下载并缓存在插件数据目录，删掉会自动重下。
-- 字体 `HarmonyOS_Sans_SC_Bold.ttf` 版权归华为，许可见 `resources/fonts/LICENSE_HarmonyOS_Sans.txt`。
-- 若版权方要求，删除 `resources/ui/` 与本地缓存即可停止分发这些素材。
+- 字体 `HarmonyOS_Sans_SC_Bold.ttf` 版权归华为，许可见 `resources/ark/fonts/LICENSE_HarmonyOS_Sans.txt`。
+- 若版权方要求，删除 `resources/ark/ui/` 与本地缓存即可停止分发这些素材。

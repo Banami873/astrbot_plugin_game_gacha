@@ -111,7 +111,7 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 | 联动寻访不累计，结束清零 | `linkage:<pool_id>` |
 | 跨年欢庆（中坚）不累计，结束清零 | `fes:<pool_id>`（`FESCLASSIC`，不复用 `classic`） |
 
-分组关系写进 `resources/pity_groups.json`，不硬编码在代码里。
+分组关系写进 `resources/ark/pity_groups.json`，不硬编码在代码里。
 
 `GACHAWITHSPECIFIED6`（卫戍寻访）进 `standard` 组的两条依据：官方公告明写「本次活动【卫戍寻访】
 为【标准寻访】」；其 `gachaPoolId` 前缀为 `NORM_`，是官方自己的分类。全部 460 池中该类型
@@ -287,7 +287,7 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 
 **R-11 限定池权重分配**：UP 6★ 合计占 6★ 的 **70%**（两名各 35%，单人 UP 则独占 70%）；
 剩余 30% 由池内其他 6★ 分配，其中**同类系列最近登场的三名限定干员权重 ×5**。
-不同池型的 UP 占比写进 `resources/pool_rules.json` 的 `up_share_by_rule_type`（键是池型，
+不同池型的 UP 占比写进 `resources/ark/pool_rules.json` 的 `up_share_by_rule_type`（键是池型，
 值 `{"6": …, "5": …}`），没登记的池型落 `default_up_share`：
 
 | 池型 | 6★ 份额 | 5★ 份额 | 说明 |
@@ -326,7 +326,7 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 「不筛、不加权」——多放几个人只是手感偏差，筛错会直接少一档人。
 
 **R-12 池指定与消歧**：`/单抽 [类别] [池名]`，类别取 `限定|常驻|限时|中坚|联动`。
-类别是 `gachaRuleType` 的过滤器，映射写进 `resources/pool_rules.json`：
+类别是 `gachaRuleType` 的过滤器，映射写进 `resources/ark/pool_rules.json`：
 
 | 类别 | 包含的 `gachaRuleType` | 搜池时的范围 |
 |---|---|---|
@@ -388,7 +388,7 @@ issue 01 按名字猜反了，本期按 PRTS 分节归类（见 R-14）后才纠
 **R-12b 不实现的池型**：`BACKFLOW`（归航寻访）与新人寻访同属**本期不实现**——
 它们面向的是特定状态的玩家（回归 / 新手），不是所有人都能抽的池。
 
-处理方式是在**解析阶段整条丢弃**，不是「列表里藏起来」：`resources/pool_rules.json` 的
+处理方式是在**解析阶段整条丢弃**，不是「列表里藏起来」：`resources/ark/pool_rules.json` 的
 `unimplemented_rule_types` 列出要跳过的 `gachaRuleType`，`parse_pools` 见到即丢，
 下游任何路径都不会看到它。这样 `/卡池查询`、池名匹配、抽卡入口不必各自记得排除一次。
 
@@ -514,7 +514,7 @@ issue 01 按名字猜反了，本期按 PRTS 分节归类（见 R-14）后才纠
   `image_renderer.py`」，于是参数表与合成流程**整段照抄**（`composer_config` /
   `image_composer` 的十连与单抽 v3）。除下面一处外不改数值：同一组干员分别由两套实现渲染，
   逐像素比对仅**立绘左右各 9px 的裁切带**不同（即上面那条「不额外内缩」）。
-- **素材**：UI 贴图随包（`resources/ui/`），字体随包（`resources/fonts/`）；**立绘与职业图标
+- **素材**：UI 贴图随包（`resources/ark/ui/`），字体随包（`resources/ark/fonts/`）；**立绘与职业图标
   不进插件包**——体积太大，改在运行时下载并缓存到 `plugin_data/.../cache/`。
   十连半身像取 `https://torappu.prts.wiki/assets/char_portrait/<char_id>_1.png`（180×360，
   按 `char_id` 直连，不做名字匹配）。**这份就是游戏 `skin_table.json` 里
@@ -628,7 +628,7 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 `meta` 以外的每张表都带 `platform` 并进主键——R-16 对每张表都成立，只有 `users` 一行
 写 `platform` 会让其余表的隔离变成靠 SQL 自觉。
 
-**数据文件**（随包；快照在 `resources/snapshot/`，规则文件在 `resources/`）
+**数据文件**（随包；快照在 `resources/ark/snapshot/`，规则文件在 `resources/ark/`）
 
 | 文件 | 内容 | 生成方式 |
 |---|---|---|
@@ -639,7 +639,9 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 | `pool_rules.json` | `categories`（类别 → 池型）、`unimplemented_rule_types`（本期不实现的池型）、`channels_by_category` / `channels_by_rule_type`（池能出哪几类基础池，R-17）、`up_share_by_rule_type` / `default_up_share`（星级内 UP 名额占比，R-11）、`select_by_rule_type`（池型 → 选调档位阈值，R-05，**累计抽数**口径）、`consecutive_select_by_rule_type`（池型 → 选调阈值，R-06，**连续未出 UP 的抽数**口径；两者不共用一份表）、`well_by_rule_type`（池型 → 300 井阈值，R-07）、`contracts_by_rule_type`（池型 → 每抽产几份契约，R-08）、`pick_by_rule_type`（池型 → 自选名额与**每人**份额，R-19）。未登记即没有该机制 | 手写，随规则变化更新 |
 | `pity_groups.json` | `shared`（池型 → 共享组名）、`per_pool`（池型 → 组键前缀）、`default`（未登记池型的落点）。R-04 的分组全部在这里，代码里没有池型字面量 | 手写 |
 | `ui/*.png` | 游戏内 UI 贴图：十连/单抽背景、卡背、星级条、光效、装饰星、SKIP、五角星、NEW、阵营 logo、职业图标（十连用大图白、单抽用带文字版） | 手工取自游戏资源包，随包分发；README 声明版权归鹰角、仅同人非商业 |
+| `fonts/fonts.json` | 字体槽位配置：`default` + `slots`，值是字符串或**有序字体链**。链 = 渲染时逐字符选第一个拥有其字形的字体——哪个字符用哪套字体全由这条链决定，代码不做 CJK/Latin 判断。槽位：`name_cn`（中文名）、`name_en`（英文名）、`initial`（缺立绘占位首字母）；元素表（layout）的 `font_slot` 声明各文字用哪个槽位 | 手写；故意不进 `_conf_schema`（观感手工微调） |
 | `fonts/HarmonyOS_Sans_SC_Bold.ttf` | 渲染用中文字体（待换成游戏内字体，见 R-18） | 随包 |
+| `fonts/HYQiHei-65S.ttf` | 汉仪旗黑 65S，fonts.json 链的首选中文/拉丁字体；缺波兰文与西里尔字母，由链尾 HarmonyOS 逐字符兜底 | 随包 |
 
 **运行时缓存**（`plugin_data/.../cache/`）：官方表与 PRTS 页面的 ETag / 最后抓取时间；
 `cache/half/<char_id>.png` 十连半身像、`cache/art/<char_id>.png` 单抽精一立绘（下载得来，
@@ -690,10 +692,10 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 | `games/arknights/choice.py` | 自选池（R-19）：从 `dynMeta.rarityPickCharDict` 取范围与名额、把「名字或序号」解析成一份锁定名单、按选中者算每人份额 | 纯函数，不读库、不读配置；名额与份额由调用方从 `pool_rules.json` 取好传进来。解析失败返回可选候选，**不替用户猜** |
 | `games/arknights/data.py` | 双源抓取与对齐：池骨架、PRTS 池名与 UP 名单、干员基础池与展示字段 | 只写 `resources/snapshot` 与 `cache` |
 | `games/arknights/render/layout.py` | 参数表：画布、卡片、立绘、星级条、职业图标、光效布局（`LIGHT_LAYOUT`）、单抽元素表，以及由它们算出的矩形 | 纯常量与纯函数，不加载图片、不读文件 |
-| `games/arknights/render/assets.py` | 素材装载：按参数表取 `resources/ui/` 下的贴图与 `resources/fonts/` 字体，带缓存 | 只读随包资源，不触网 |
+| `games/arknights/render/assets.py` | 素材装载：按参数表取 `resources/ark/ui/` 下的贴图与 `resources/ark/fonts/` 字体，带缓存 | 只读随包资源，不触网 |
 | `games/arknights/render/portraits.py` | 立绘下载、验图与缓存（十连半身像 / 单抽精一立绘）；后台全量预热 | 只往 `cache/` 写文件；失败返回 `None`，不抛 |
 | `games/arknights/render/effects.py` | 程序生成的光效与图层：混合模式、着色、卡背渐变、暗角、底部渐变、碎光、拖尾光柱 | 只用像素运算；缺 numpy 时退到 PIL 近似 |
-| `games/arknights/render/text.py` | 中英文字：白填充 + 半透明黑外描边（2 倍宽度描边再覆盖填充） | 字体缺失返回 0，不抛 |
+| `games/arknights/render/text.py` | 中英文字：白填充 + 半透明黑外描边（2 倍宽度描边再覆盖填充）；分段由 `Assets.text_segments` 按字体链切好传入，本模块不做字符类别判断 | 分段为空返回 0，不抛 |
 | `games/arknights/render/draw.py` | 按参数表合成单抽与十连 | 只吃 `CardItem` 列表，不读库、不触网、不决定文案 |
 | `games/arknights/views.py` | 文字结果格式 | 不 import `core`，只吃传入对象 |
 | `games/arknights/help.py` | 指令清单（名字/用法/说明/是否限管理员）与 `/抽卡帮助` 文案 | 清单是唯一真相源：`selfcheck.py` 拿它比对 `main.py` 的注册，双向都不许不一致 |
