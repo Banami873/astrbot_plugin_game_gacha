@@ -42,11 +42,14 @@ def hsr_pools_mod(pkg):
 
 
 @pytest.fixture(scope="session")
-def hsr_rules(hsr_engine_mod):
-    """当前版本的角色活动跃迁参数，与 `resources/hsr/pool_rules.json` 一致。"""
-    return hsr_engine_mod.Rules(
-        standard5=("1003", "1004", "1101", "1104", "1107", "1209", "1211")
+def hsr_rules(hsr_engine_mod, plugin_dir):
+    """真实的 `resources/hsr/pool_rules.json`：测试若手抄参数，改配置时两边会悄悄分叉。"""
+    import json
+
+    payload = json.loads(
+        (plugin_dir / "resources" / "hsr" / "pool_rules.json").read_text(encoding="utf-8")
     )
+    return hsr_engine_mod.Rules.from_payload(payload)
 
 
 @pytest.fixture(scope="session")
@@ -62,7 +65,29 @@ def hsr_pools(hsr_pools_mod, plugin_dir):
 @pytest.fixture(scope="session")
 def hsr_pool(hsr_pools):
     """仓库里真实存在的一期角色活动跃迁（愚戏众星）。历史数据全保留，不会过期消失。"""
-    return next(pool for pool in hsr_pools if pool.pool_id == "067-1")
+    return next(pool for pool in hsr_pools if pool.pool_id == "char-067-1")
+
+
+@pytest.fixture(scope="session")
+def hsr_cone_pool(hsr_pools):
+    """同期的一张光锥活动跃迁（流光定影），5★ 是光锥。"""
+    return next(pool for pool in hsr_pools if pool.pool_id == "cone-067-1")
+
+
+@pytest.fixture(scope="session")
+def hsr_standard_pool(hsr_pools):
+    return next(pool for pool in hsr_pools if pool.pool_id == "standard")
+
+
+@pytest.fixture(scope="session")
+def hsr_collab_pool(hsr_pools):
+    """联动的角色池：长期开放，4★ 没有 UP。"""
+    return next(pool for pool in hsr_pools if pool.pool_id == "char-collab-040-1")
+
+
+@pytest.fixture(scope="session")
+def hsr_collab_cone_pool(hsr_pools):
+    return next(pool for pool in hsr_pools if pool.pool_id == "cone-collab-040-1")
 
 
 class TestStarRate:
@@ -293,13 +318,14 @@ class TestStats:
         rng = random.Random(11)
         state = hsr_engine_mod.Pity()
         gap = 0
+        hard = hsr_rules.params("character").hard5
         for _ in range(5_000):
             item, state = hsr_engine_mod.draw(
                 state, pool=hsr_pool, roster=hsr_roster, rules=hsr_rules, rng=rng
             )
             if item.star == 5:
-                assert gap + 1 <= hsr_rules.hard5
+                assert gap + 1 <= hard
                 gap = 0
             else:
                 gap += 1
-                assert gap < hsr_rules.hard5
+                assert gap < hard

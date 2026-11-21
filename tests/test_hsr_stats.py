@@ -19,7 +19,7 @@ TOTAL = 100_000
 SEED = 20261121
 
 
-def _run(pkg, rounds: int, seed: int):
+def _run(pkg, rounds: int, seed: int, pool_id: str = "char-067-1"):
     """抽 `rounds` 次，返回 (各星级件数, 5★ 里 UP 的件数, 最大 5★ 间隔)。"""
     engine = pkg("games.hsr.engine")
     roster_mod = pkg("games.hsr.roster")
@@ -28,7 +28,7 @@ def _run(pkg, rounds: int, seed: int):
 
     roster = roster_mod.load_roster(service.RESOURCE_DIR / "roster.json")
     pools = pools_mod.load_pools(service.RESOURCE_DIR / "pools.json")
-    pool = next(item for item in pools if item.pool_id == "067-1")
+    pool = next(item for item in pools if item.pool_id == pool_id)
     rules = engine.Rules.from_payload(
         json.loads(
             (service.RESOURCE_DIR / "pool_rules.json").read_text(encoding="utf-8")
@@ -57,7 +57,14 @@ def _run(pkg, rounds: int, seed: int):
 
 @pytest.fixture(scope="module")
 def result(pkg):
+    """角色活动跃迁：0.6% / 90 抽 / 50%。"""
     return _run(pkg, TOTAL, SEED)
+
+
+@pytest.fixture(scope="module")
+def cone_result(pkg):
+    """光锥活动跃迁：0.8% / 80 抽 / 75%。"""
+    return _run(pkg, TOTAL, SEED, "cone-067-1")
 
 
 def test_five_star_rate_in_range(result):
@@ -88,3 +95,22 @@ def test_up_share_of_five_stars(result):
 def test_never_more_than_ninety_pulls_without_five_star(result):
     _, _, biggest_gap = result
     assert biggest_gap <= 90
+
+
+def test_cone_five_star_rate_matches_the_eight_percent_pool(cone_result):
+    counts, _, _ = cone_result
+    rate = counts[5] / TOTAL * 100
+    # 官方的含保底综合概率是 1.87%，容差给到 1.6%~2.2%。
+    assert 1.6 <= rate <= 2.2, f"光锥池 5★ {rate:.3f}% 不在 1.6%~2.2%"
+
+
+def test_cone_four_star_rate_is_higher_than_character_pool(cone_result):
+    counts, _, _ = cone_result
+    rate = counts[4] / TOTAL * 100
+    # 官方 6.6% 基础、含保底约 14.8%；4★ 有 75% UP，不影响总频率。
+    assert 12.0 <= rate <= 17.5, f"光锥池 4★ {rate:.2f}% 不在 12%~17.5%"
+
+
+def test_cone_never_more_than_eighty_pulls_without_five_star(cone_result):
+    _, _, biggest_gap = cone_result
+    assert biggest_gap <= 80

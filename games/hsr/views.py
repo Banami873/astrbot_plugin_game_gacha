@@ -2,6 +2,9 @@
 
 只拼字符串，不读时钟、不查库——所有数字由调用方算好传进来，文案才好在测试里逐字断言。
 
+池型不同，标题与「UP」那几行就不同：群星跃迁没有 UP，光锥池的 5★ 是光锥。这些判断
+集中在 `KIND_LABEL` 与 `render_pulls` 开头，别的函数不必各写一份。
+
 指令清单也在这里（`COMMANDS`）：帮助由它渲染，`tools/selfcheck.py` 拿它核对 `main.py`
 里实际注册的指令。加一条指令 = 这里加一行 + `main.py` 注册同名指令，两边名字必须完全
 一致。方舟那份清单在 `games/arknights/help.py`，两份刻意各留一份：两个游戏互不 import，
@@ -16,13 +19,36 @@ from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
 from .engine import Pulled, count_by_star, distance_to_hard
-from .pools import Pool
+from .pools import (
+    KIND_CHARACTER,
+    KIND_COLLAB_CHARACTER,
+    KIND_COLLAB_LIGHT_CONE,
+    KIND_LIGHT_CONE,
+    KIND_STANDARD,
+    Pool,
+)
 
 CST = timezone(timedelta(hours=8))
 
-TITLE = "【星穹铁道 · 角色活动跃迁】"
 DIVIDER = "━" * 18
 STAR_MARK = "★"
+
+KIND_LABEL = {
+    KIND_CHARACTER: "角色活动跃迁",
+    KIND_LIGHT_CONE: "光锥活动跃迁",
+    KIND_COLLAB_CHARACTER: "角色联动跃迁",
+    KIND_COLLAB_LIGHT_CONE: "光锥联动跃迁",
+    KIND_STANDARD: "群星跃迁",
+}
+
+# 卡池一览里的顺序：先限时活动，再联动，最后常驻。
+KIND_ORDER = (
+    KIND_CHARACTER,
+    KIND_LIGHT_CONE,
+    KIND_COLLAB_CHARACTER,
+    KIND_COLLAB_LIGHT_CONE,
+    KIND_STANDARD,
+)
 
 # 帮助里指令名的对齐宽度（终端显示列数，一个汉字两列）。
 _NAME_WIDTH = 26
@@ -41,9 +67,9 @@ class CommandDoc:
 COMMANDS: tuple[CommandDoc, ...] = (
     CommandDoc("星铁帮助", "/星铁帮助", "看这份说明"),
     CommandDoc("星铁签到", "/星铁签到", "每天领一次抽数"),
-    CommandDoc("星铁单抽", "/星铁单抽 [池名]", "角色活动跃迁抽 1 次"),
-    CommandDoc("星铁十连", "/星铁十连 [池名]", "角色活动跃迁抽 10 次"),
-    CommandDoc("星铁卡池", "/星铁卡池", "看正在开的角色活动跃迁与 UP 名单"),
+    CommandDoc("星铁单抽", "/星铁单抽 [池名或池型]", "抽 1 次，不带名字抽角色池"),
+    CommandDoc("星铁十连", "/星铁十连 [池名或池型]", "抽 10 次，不带名字抽角色池"),
+    CommandDoc("星铁卡池", "/星铁卡池", "看在开的角色、光锥、联动与常驻池"),
     CommandDoc(
         "星铁抽数修改",
         "/星铁抽数修改 <整数> [@成员]",
@@ -64,6 +90,10 @@ def _width(text: str) -> int:
 
 def _pad(text: str, width: int = _NAME_WIDTH) -> str:
     return text + " " * max(1, width - _width(text))
+
+
+def _title(pool: Pool) -> str:
+    return f"【星穹铁道 · {KIND_LABEL.get(pool.kind, '跃迁')}】{pool.name}"
 
 
 # ---- 时间 ----------------------------------------------------------------
@@ -97,7 +127,7 @@ def remaining_text(end_time: int, now: int) -> str:
 
 
 def render_pulls(
-    pool_name: str,
+    pool: Pool,
     pulled: Sequence[Pulled],
     *,
     cost: int,
@@ -108,11 +138,12 @@ def render_pulls(
     """单抽或十连的完整文字结果。
 
     保证：星级按结果升序（低星在前，与游戏内列表一致）；末尾一定带余额与距 5★ 硬保底
-    的抽数；本批出了 5★ 就说明「是不是本期 UP」，歪了则预告下次必中——这一句是玩家
-    判断要不要继续抽的唯一依据，不能省。
-    `pity` 是**抽完之后**的水位，`rules` 提供硬保底阈值。
+    的抽数（硬保底按池型取，光锥池是 80）；本批出了 5★ 就说明「是不是本期 UP」，歪了
+    则预告下次必中——这一句是玩家判断要不要继续抽的唯一依据，不能省。群星跃迁没有 UP，
+    这几行不出现。
+    `pity` 是**抽完之后**的水位，`rules` 按池型给出硬保底阈值。
     """
-    lines = [f"{TITLE}{pool_name}", DIVIDER]
+    lines = [_title(pool), DIVIDER]
     for item in pulled:
         mark = STAR_MARK * max(1, min(5, item.star))
         lines.append(f"{mark} {item.name}")
@@ -124,16 +155,18 @@ def render_pulls(
     )
     lines.append(f"{cost} 抽：{summary}")
 
-    tail = f"剩余 {tickets} 抽 · 距 5★ 硬保底还有 {distance_to_hard(pity, rules)} 抽"
-    lines.append(tail)
+    params = rules.params(pool.kind)
+    hard = distance_to_hard(pity, params)
+    lines.append(f"剩余 {tickets} 抽 · 距 5★ 硬保底还有 {hard} 抽")
 
-    five_stars = [item for item in pulled if item.star == 5]
-    if five_stars:
-        up = [item for item in five_stars if item.is_up]
-        if up:
-            lines.append("本期 UP：" + "、".join(item.name for item in up))
-        else:
-            lines.append("下次 5★ 必出本期 UP")
+    if pool.kind != KIND_STANDARD:
+        five_stars = [item for item in pulled if item.star == 5]
+        if five_stars:
+            up = [item for item in five_stars if item.is_up]
+            if up:
+                lines.append("本期 UP：" + "、".join(item.name for item in up))
+            else:
+                lines.append("下次 5★ 必出本期 UP")
     return "\n".join(lines)
 
 
@@ -146,39 +179,53 @@ def render_insufficient(tickets: int, cost: int) -> str:
 
 
 def _pool_block(pool: Pool, now: int) -> list[str]:
-    """一个池三行：名字、UP 名单、起止与剩余。"""
-    up5 = "、".join(item.name for item in pool.up5) or "（无）"
-    up4 = "、".join(item.name for item in pool.up4) or "（无）"
-    return [
-        pool.name,
-        f"5★ {up5} · 4★ {up4}",
-        f"{window_text(pool.open_time, pool.end_time)}"
-        f"（剩 {remaining_text(pool.end_time, now)}）",
-    ]
+    """一个池三行：名字、UP 名单（或常驻说明）、起止与剩余。"""
+    rows = [f"· {pool.name}"]
+    if pool.kind == KIND_STANDARD:
+        rows.append("5★ 常驻角色与常驻光锥各半 · 4★ 常驻角色与光锥 · 无 UP")
+    else:
+        up5 = "、".join(item.name for item in pool.up5) or "（无）"
+        up4 = "、".join(item.name for item in pool.up4) or "（本期无 UP）"
+        rows.append(f"5★ {up5} · 4★ {up4}")
+    if pool.permanent:
+        rows.append("长期开放")
+    else:
+        rows.append(
+            f"{window_text(pool.open_time, pool.end_time)}"
+            f"（剩 {remaining_text(pool.end_time, now)}）"
+        )
+    return rows
 
 
 def render_pool(pools: Sequence[Pool], now: int) -> str:
-    """正在开的角色活动跃迁。已结束的池不会出现在这里（调用方先过滤）。"""
-    lines = [TITLE.rstrip(), DIVIDER]
-    for index, pool in enumerate(pools):
-        if index:
+    """现在能抽的池，按池型分组。限时池的窗口、常开池的「长期开放」都在块里。"""
+    lines = ["【星穹铁道 · 跃迁一览】", DIVIDER]
+    for kind in KIND_ORDER:
+        group = [pool for pool in pools if pool.kind == kind]
+        if not group:
+            continue
+        if len(lines) > 2:
             lines.append("")
-        lines += _pool_block(pool, now)
+        lines.append(f"◆ {KIND_LABEL[kind]}")
+        for pool in group:
+            lines.append("")
+            lines += _pool_block(pool, now)
     return "\n".join(lines)
 
 
 def render_no_pool(now: int) -> str:
-    """一期都没开。带上当前时间，方便判断是数据没更新还是真没开。"""
+    """一期角色活动跃迁都没开。带上当前时间，方便判断是数据没更新还是真没开。"""
     return (
-        f"{TITLE.rstrip()}\n"
+        "【星穹铁道 · 角色活动跃迁】\n"
         f"现在（{_stamp(now)}）没有进行中的角色活动跃迁。\n"
+        "常驻与联动是长期开放的，带池名就能抽：/星铁十连 群星跃迁\n"
         "卡池数据是随包快照，新一期要管理员跑 tools/build_hsr_data.py 更新。"
     )
 
 
 def render_pool_ambiguous(pools: Sequence[Pool], now: int, query: str = "") -> str:
-    """多个池同时开，不替玩家猜。列出候选，并给一条能直接照抄的指令。"""
-    lines = [f"{TITLE.rstrip()} 现在有 {len(pools)} 个池在开，请带池名：", ""]
+    """多个候选，不替玩家猜。列出候选，并给一条能直接照抄的指令。"""
+    lines = [f"现在有 {len(pools)} 个池可选，请带池名：", ""]
     for index, pool in enumerate(pools):
         if index:
             lines.append("")
@@ -186,7 +233,7 @@ def render_pool_ambiguous(pools: Sequence[Pool], now: int, query: str = "") -> s
     example = pools[0].name if pools else ""
     hint = f"例如：/星铁十连 {example}"
     if query:
-        hint = f"「{query}」没对上任何一个池。" + hint
+        hint = f"「{query}」没对上任何一个池；也可以直接写池型（光锥 / 常驻 / 联动）。" + hint
     lines += ["", hint]
     return "\n".join(lines)
 
@@ -240,15 +287,18 @@ def render_help(*, signin_reward: int = 10, newbie_bonus: int = 30) -> str:
         f"· 首次建档送 {newbie_bonus} 抽；每天 /星铁签到 领 {signin_reward} 抽",
         "· 管理员可用 /星铁抽数修改 增减免成员抽数",
         "",
-        "■ 规则（角色活动跃迁）",
-        "· 5★ 基础 0.6%，第 74 抽起概率陡升，第 90 抽必出",
-        "· 4★ 基础 5.1%，每 10 抽必出 4★ 以上",
-        "· 星级内 50% 是本期 UP；歪了下次同星级必出 UP",
-        "· 水位跟着「角色活动跃迁」走，换池不重置",
-        "· 抽数与仓库与明日方舟分开记，互不影响",
+        "■ 规则",
+        "· 角色活动跃迁：5★ 0.6%，第 74 抽起陡升，第 90 抽必出；50% 是 UP，歪了下次必中",
+        "· 光锥活动跃迁：5★ 0.8%，第 66 抽起陡升，第 80 抽必出；75% 是 UP，同样歪了必中",
+        "· 群星跃迁（常驻）：5★ 0.6%，第 90 抽必出，角色与光锥各半，没有 UP",
+        "· 联动跃迁：规则同活动跃迁，但保底与活动跃迁分开算",
+        "· 4★ 一律每 10 抽必出；水位只在同类型池之间继承",
         "",
-        "■ 带池名",
-        "同时开多个池时会要求带池名，如 /星铁十连 愚戏众星；只有一个池时不用带。",
+        "■ 抽哪个池",
+        "· 不带池名时抽「角色活动跃迁」",
+        "· 常驻 / 光锥 / 联动要带池名或池型，如：",
+        "  /星铁十连 群星跃迁    /星铁十连 光锥    /星铁十连 联动",
+        "· 同时开多张同类型池时会要求写池名，先用 /星铁卡池 看名字",
         "",
         "明日方舟的指令仍是不带前缀那几条，也可加 /方舟 前缀使用。",
     ]

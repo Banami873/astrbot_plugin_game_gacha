@@ -97,7 +97,7 @@ def test_two_databases(plugin):
 
 def test_hsr_ten_pull(plugin):
     """`/星铁十连`：扣十抽、仓库 +10，且方舟那边一行都没多。"""
-    text = _collect(plugin.cmd_hsr_pull_ten, StubEvent("星铁十连"))
+    text = _collect(plugin.cmd_hsr_pull_ten, StubEvent("星铁十连 愚戏众星"))
     assert "角色活动跃迁" in text and "10 抽：" in text
 
     hsr_store = plugin.games["hsr"].store
@@ -128,9 +128,9 @@ def test_arknights_still_works_alongside(plugin):
 def test_hsr_balance_is_enforced(plugin):
     """30 抽刚好三次十连，第四次该被拦住，且不产生结果。"""
     for _ in range(3):
-        _collect(plugin.cmd_hsr_pull_ten, StubEvent("星铁十连"))
+        _collect(plugin.cmd_hsr_pull_ten, StubEvent("星铁十连 愚戏众星"))
 
-    text = _collect(plugin.cmd_hsr_pull_ten, StubEvent("星铁十连"))
+    text = _collect(plugin.cmd_hsr_pull_ten, StubEvent("星铁十连 愚戏众星"))
     assert "抽数不够" in text
 
     hsr_store = plugin.games["hsr"].store

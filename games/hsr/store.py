@@ -4,8 +4,9 @@
 
 - `hsr_pity`：按 `(uid, platform, group_key)` 记 5★/4★ 两条水位与两个大保底标记。
 
-`group_key` 现在只有一个值 `character`——角色活动跃迁的水位在换池时继承、不重置，
-这正是官方规则。光锥活动跃迁将来接进来时是另一个 `group_key`，届时不用改表。
+`group_key` 直接用池型：`character` / `light_cone` / `collab_character` /
+`collab_light_cone` / `standard`。同一类型的不同期池共享一条水位（官方规则：角色池之间
+继承、光锥池之间继承），不同类型互不影响——这一条不用改表结构，只换键。
 
 表名带 `hsr_` 前缀：现在两个游戏各用一个 db 文件（`hsr.db` / `gacha.db`），前缀是给
 「万一以后合到一个库」留的余地，成本一个词。

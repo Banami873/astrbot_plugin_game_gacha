@@ -7,7 +7,9 @@
 
 - **存档是自己的**：星铁写 `hsr.db`，方舟写 `gacha.db`。所以建档、扣抽数、签到都不能
   借用外壳的 `_register`——那个写的是方舟的库。
-- **一个池直接抽，多个池要名字**：`choose_pool` 拿不到唯一答案时回候选，不替玩家猜。
+- **默认抽角色活动跃迁**：不带池名时只在角色活动跃迁里挑；常驻与联动是长期开放的，
+  得写池名或池型（`/星铁十连 群星跃迁`）。`choose_pool` 拿不到唯一答案时回候选，不猜。
+- **水位按池型分桶**：角色 / 光锥 / 联动角色 / 联动光锥 / 常驻各一条，互不影响。
 - **抽卡前先看余额**：余额不够连随机数都不摇，结果一条都不产生；真正的防线仍是
   `commit_pulls` 事务里的 `tickets >= cost`——两次读之间余额可能被别的进程改掉。
 """
@@ -35,9 +37,6 @@ _LOG = "[astrbot_plugin_game_gacha]"
 
 # 随包资源（名册、卡池、概率参数），由 `tools/build_hsr_data.py` 生成或核对。
 RESOURCE_DIR = Path(__file__).resolve().parents[2] / "resources" / "hsr"
-
-# 水位分组。现在只有角色活动跃迁；光锥活动跃迁将来是另一个值，届时表结构不用改。
-GROUP_KEY = "character"
 
 DB_NAME = "hsr.db"
 
@@ -116,16 +115,20 @@ class HsrRuntime:
         self.pools = tuple(pools)
         self.rules = rules
         self.error = ""
+        counts: dict[str, int] = {}
+        for pool in self.pools:
+            counts[pool.kind] = counts.get(pool.kind, 0) + 1
+        detail = "、".join(f"{kind} {n}" for kind, n in sorted(counts.items()))
         logger.info(
-            f"{_LOG} 星铁已装载：卡池 {len(self.pools)} 期，"
+            f"{_LOG} 星铁已装载：卡池 {len(self.pools)} 期（{detail}），"
             f"角色 {len(roster.characters)} 名，光锥 {len(roster.light_cones)} 件"
         )
 
     # ---- 协议 ------------------------------------------------------------
 
     def active_pools(self, now: int) -> Sequence[pool_module.Pool]:
-        """当前在开的角色活动跃迁。"""
-        return pool_module.active_pools(self.pools, now)
+        """现在能抽的池：限时池看窗口，群星与联动是常开的。"""
+        return pool_module.usable_pools(self.pools, now)
 
     def help_text(self) -> str:
         return views.render_help(
@@ -188,7 +191,9 @@ class HsrRuntime:
             if tickets < times:
                 error = views.render_insufficient(tickets, times)
             else:
-                pity = self.store.read_pity(uid, platform, GROUP_KEY)
+                # 水位按池型分桶：角色、光锥、联动角色、联动光锥、常驻各算各的，
+                # 这正是官方「同类型池之间继承、不同类型互不影响」的规则。
+                pity = self.store.read_pity(uid, platform, pool.kind)
                 pulled, after = engine.draw_batch(
                     times,
                     state=pity,
@@ -200,7 +205,7 @@ class HsrRuntime:
                 commit = self.store.commit_pulls(
                     uid,
                     platform,
-                    group_key=GROUP_KEY,
+                    group_key=pool.kind,
                     cost=times,
                     pity=after,
                     item_ids=[item.item_id for item in pulled],
@@ -217,7 +222,7 @@ class HsrRuntime:
             return
         yield event.plain_result(
             views.render_pulls(
-                pool.name,
+                pool,
                 pulled,
                 cost=times,
                 tickets=tickets_after,

@@ -11,8 +11,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import shutil
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -71,6 +70,20 @@ def bound(runtime):
     return runtime
 
 
+def pity_keys(runtime) -> set[str]:
+    """库里实际写了哪几条水位。用「桶名」判断写对了没有，别拿计数器数值猜——
+    十抽里出了 5★ 时计数会归零，等值断言会随运气红。"""
+    conn = sqlite3.connect(runtime.store.db_path)
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT group_key FROM hsr_pity WHERE uid = ? AND platform = ?",
+            (UID, PLATFORM),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {row[0] for row in rows}
+
+
 def _collect(agen) -> str:
     async def run() -> list[str]:
         return [chunk async for chunk in agen]
@@ -97,8 +110,19 @@ def hsr(pkg, tmp_path: Path):
 
 @pytest.fixture()
 def hsr_pool(hsr):
-    """067-1 愚戏众星，当前在开。"""
-    return next(pool for pool in hsr.pools if pool.pool_id == "067-1")
+    """char-067-1 愚戏众星，当前在开。"""
+    return next(pool for pool in hsr.pools if pool.pool_id == "char-067-1")
+
+
+@pytest.fixture()
+def hsr_cone_pool(hsr):
+    """cone-067-1 流光定影：同期开着的单 UP 光锥池。"""
+    return next(pool for pool in hsr.pools if pool.pool_id == "cone-067-1")
+
+
+@pytest.fixture()
+def hsr_standard_pool(hsr):
+    return next(pool for pool in hsr.pools if pool.pool_id == "standard")
 
 
 # ---- 选池 ----------------------------------------------------------------
@@ -119,15 +143,24 @@ class TestChoosePool:
         assert not choice.ok and choice.reason == "none"
 
     def test_two_pools_require_a_name(self, hsr_pkg, hsr_pool):
-        other = hsr_pkg.Pool(
-            pool_id="067-2",
+        """两张都不是「新 UP」时不替玩家选，把两张都列出来。"""
+        one = hsr_pkg.Pool(
+            pool_id="A",
             open_time=hsr_pool.open_time,
             end_time=hsr_pool.end_time,
-            name="二期测试",
+            name="池甲",
             up5=hsr_pool.up5,
             up4=hsr_pool.up4,
         )
-        choice = hsr_pkg.choose_pool([hsr_pool, other], FIXED_NOW)
+        two = hsr_pkg.Pool(
+            pool_id="B",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="池乙",
+            up5=hsr_pool.up5,
+            up4=hsr_pool.up4,
+        )
+        choice = hsr_pkg.choose_pool([one, two], FIXED_NOW)
         assert not choice.ok and choice.reason == "ambiguous"
         assert len(choice.candidates) == 2
 
@@ -164,17 +197,18 @@ class TestPull:
         commands = pkg("games.hsr.commands")
         FakeGame(hsr)
 
-        text = _collect(commands.pull(hsr, StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 愚戏众星"), 10))
 
         assert "角色活动跃迁" in text and "10 抽：" in text
         assert hsr.store.get_user(UID, PLATFORM)["tickets"] == 30 - 10
         assert sum(hsr.store.inventory_of(UID, PLATFORM).values()) == 10
-        # 水位也落了库：十抽之后 5★ 计数是 10（中间没出过 5★ 就是 10）
-        assert hsr.store.read_pity(UID, PLATFORM, GROUP).five_counter == 10
+        # 水位落了库：只写角色桶。计数具体是几由运气决定（中途出 5★ 会归零），
+        # 精确值在 test_hsr_engine 里用固定随机数验，这里只证明「写进去了、没串桶」。
+        assert pity_keys(hsr) == {"character"}
 
     def test_single_pull_writes_one_item(self, pkg, hsr):
         commands = pkg("games.hsr.commands")
-        text = _collect(commands.pull(hsr, StubEvent("星铁单抽"), 1))
+        text = _collect(commands.pull(hsr, StubEvent("星铁单抽 愚戏众星"), 1))
         assert "1 抽：" in text
         assert sum(hsr.store.inventory_of(UID, PLATFORM).values()) == 1
 
@@ -184,7 +218,7 @@ class TestPull:
         hsr.newbie_bonus = 5
         FakeGame(hsr)
 
-        text = _collect(commands.pull(hsr, StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 愚戏众星"), 10))
 
         assert "抽数不够" in text
         assert hsr.store.get_user(UID, PLATFORM)["tickets"] == 5
@@ -192,32 +226,96 @@ class TestPull:
         # 没抽成就不该写水位
         assert hsr.store.read_pity(UID, PLATFORM, GROUP).five_counter == 0
 
-    def test_two_pools_ask_for_a_name(self, pkg, hsr, hsr_pool, tmp_path: Path):
-        """两个池同时开：先说清有哪两个，带上名字再抽才放行。"""
-        service = pkg("games.hsr.service")
-        commands = pkg("games.hsr.commands")
-
-        res = tmp_path / "res"
-        shutil.copytree(hsr.resource_dir, res)
-        payload = json.loads((res / "pools.json").read_text(encoding="utf-8"))
-        extra = dict(payload["pools"][0])
-        extra["pool_id"] = "067-2"
-        extra["name"] = "二期测试"
-        payload["pools"].append(extra)
-        (res / "pools.json").write_text(
-            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    def test_new_pool_wins_when_it_is_the_only_featured(self, hsr_pkg, hsr_pool):
+        """同期并排开着新池与复刻时不要求写名字：只有一张「新 UP」就抽它。"""
+        rerun = hsr_pkg.Pool(
+            pool_id="char-067-2-1",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="复刻测试",
+            up5=hsr_pool.up5,
+            up4=hsr_pool.up4,
         )
+        featured = hsr_pkg.Pool(
+            pool_id="char-067-1",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="新池测试",
+            up5=hsr_pool.up5,
+            up4=hsr_pool.up4,
+            featured=True,
+        )
+        choice = hsr_pkg.choose_pool([rerun, featured], FIXED_NOW)
+        assert choice.ok and choice.pool is featured
 
-        runtime = service.HsrRuntime(resource_dir=res, clock=lambda: FIXED_NOW)
-        asyncio.run(runtime.load(tmp_path / "data"))
-        bound(runtime)
+    def test_two_featured_pools_still_ask(self, hsr_pkg, hsr_pool):
+        """两张都是「新 UP」（不同期撞在一起）时不替玩家选。"""
+        one = hsr_pkg.Pool(
+            pool_id="A",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="池甲",
+            up5=hsr_pool.up5,
+            up4=hsr_pool.up4,
+            featured=True,
+        )
+        two = hsr_pkg.Pool(
+            pool_id="B",
+            open_time=hsr_pool.open_time,
+            end_time=hsr_pool.end_time,
+            name="池乙",
+            up5=hsr_pool.up5,
+            up4=hsr_pool.up4,
+            featured=True,
+        )
+        choice = hsr_pkg.choose_pool([one, two], FIXED_NOW)
+        assert not choice.ok and choice.reason == "ambiguous"
 
-        text = _collect(commands.pull(runtime, StubEvent("星铁十连"), 10))
-        assert "2 个池" in text and "请带池名" in text
-        assert runtime.store.get_user(UID, PLATFORM)["tickets"] == 30
+    def test_type_alias_picks_the_kind(self, hsr_pkg, hsr_pool, hsr_cone_pool):
+        """/星铁十连 光锥 与写池名同义，只在该池型里找。"""
+        choice = hsr_pkg.choose_pool([hsr_pool, hsr_cone_pool], FIXED_NOW, "光锥")
+        assert choice.ok and choice.pool is hsr_cone_pool
 
-        text = _collect(commands.pull(runtime, StubEvent("星铁十连 二期"), 10))
-        assert "二期测试" in text and "10 抽：" in text
+    def test_standard_is_reachable_by_alias(self, hsr_pkg, hsr_pool, hsr_standard_pool):
+        choice = hsr_pkg.choose_pool([hsr_pool, hsr_standard_pool], FIXED_NOW, "常驻")
+        assert choice.ok and choice.pool is hsr_standard_pool
+
+    def test_permanent_pools_never_become_the_default(
+        self, hsr_pkg, hsr_pool, hsr_standard_pool
+    ):
+        """群星与联动是常开的，若算进「唯一在开」就永远是它，角色池反而抽不到。"""
+        choice = hsr_pkg.choose_pool([hsr_pool, hsr_standard_pool], FIXED_NOW)
+        assert choice.ok and choice.pool is hsr_pool
+
+    def test_light_cone_pool_gives_only_light_cones(self, pkg, hsr):
+        """光锥池抽光锥：3★ 位本来就是光锥，5★/4★ 位也不能混进角色。"""
+        commands = pkg("games.hsr.commands")
+        roster_mod = pkg("games.hsr.roster")
+
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 流光定影"), 10))
+
+        assert "光锥活动跃迁" in text and "10 抽：" in text
+        ids = hsr.store.inventory_of(UID, PLATFORM)
+        assert len(ids) > 0
+        assert all(
+            isinstance(hsr.roster.get(item_id), roster_mod.LightCone) for item_id in ids
+        )
+        # 水位只写进光锥桶，角色桶一点没动
+        assert pity_keys(hsr) == {"light_cone"}
+
+    def test_standard_pool_has_no_up(self, pkg, hsr):
+        commands = pkg("games.hsr.commands")
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 群星跃迁"), 10))
+        assert "群星跃迁" in text and "10 抽：" in text
+        assert "本期 UP" not in text and "下次 5★ 必出" not in text
+        assert pity_keys(hsr) == {"standard"}
+
+    def test_collab_pity_is_separate(self, pkg, hsr):
+        commands = pkg("games.hsr.commands")
+        text = _collect(commands.pull(hsr, StubEvent("星铁十连 Saber"), 10))
+        # 用 UP 名点池，落到的是联动角色池；标题里带池型，保底进另一条桶。
+        assert "角色联动跃迁" in text and "圣剑辉烈之誓" in text
+        assert pity_keys(hsr) == {"collab_character"}
 
     def test_not_loaded_says_so(self, pkg, tmp_path: Path):
         service = pkg("games.hsr.service")
@@ -225,7 +323,7 @@ class TestPull:
         runtime = service.HsrRuntime(resource_dir=tmp_path / "nothing")
         asyncio.run(runtime.load(tmp_path))
 
-        text = _collect(commands.pull(bound(runtime), StubEvent("星铁十连"), 10))
+        text = _collect(commands.pull(bound(runtime), StubEvent("星铁十连 愚戏众星"), 10))
         assert "还没装载" in text
 
 
@@ -279,13 +377,13 @@ class TestOtherCommands:
 
 
 class TestViews:
-    def test_single_pull_shows_up_line(self, pkg):
+    def test_single_pull_shows_up_line(self, pkg, hsr_pool):
         views = pkg("games.hsr.views")
         engine = pkg("games.hsr.engine")
         pulled = [engine.Pulled("1511", "星神★阿哈", 5, True)]
 
         text = views.render_pulls(
-            "愚戏众星",
+            hsr_pool,
             pulled,
             cost=1,
             tickets=9,
@@ -298,13 +396,13 @@ class TestViews:
         assert "剩余 9 抽 · 距 5★ 硬保底还有 90 抽" in text
         assert "本期 UP：星神★阿哈" in text
 
-    def test_missing_the_up_promises_next_time(self, pkg):
+    def test_missing_the_up_promises_next_time(self, pkg, hsr_pool):
         views = pkg("games.hsr.views")
         engine = pkg("games.hsr.engine")
         pulled = [engine.Pulled("1003", "姬子", 5, False)]
 
         text = views.render_pulls(
-            "愚戏众星",
+            hsr_pool,
             pulled,
             cost=1,
             tickets=0,
@@ -313,7 +411,7 @@ class TestViews:
         )
         assert "下次 5★ 必出本期 UP" in text
 
-    def test_ten_pull_summary_counts_by_star(self, pkg):
+    def test_ten_pull_summary_counts_by_star(self, pkg, hsr_pool):
         views = pkg("games.hsr.views")
         engine = pkg("games.hsr.engine")
         pulled = (
@@ -323,7 +421,7 @@ class TestViews:
         )
 
         text = views.render_pulls(
-            "愚戏众星",
+            hsr_pool,
             pulled,
             cost=10,
             tickets=20,

@@ -1,15 +1,23 @@
 """星铁的抽卡规则：5★ 与 4★ 两条独立保底、星级内选人、状态推进。
 
 和方舟最大的不同在这里：方舟一条水位管 6★，其余星级按比例瓜分剩余概率；星铁是**两条
-各走各的曲线**——5★ 90 抽硬保底、4★ 每 10 抽必出，且 4★ 的概率不随 5★ 水位变化。
+各走各的曲线**——5★ 有硬保底、4★ 每 10 抽必出，且 4★ 的概率不随 5★ 水位变化。
 所以 `core/engine.py` 的 `weights`（「只有最高星级有软保底」）套不进来，这条曲线在本
 文件里自己算。星级内的分法仍是那个公共句式——UP 拿一份、其余均分——继续用
 `core.engine.member_weights`。
 
-本模块只管算：不读时钟、不碰数据库、随机源由调用方注入，测试才能用固定序列复现。
+四种池型只有两样不同：概率参数（`Params`）与候选来源。于是 `Rules` 按池型给参数：
 
-规则出处：5★ 0.6% 基础、第 74 抽起陡升、第 90 抽必出；4★ 5.1%、第 10 抽必出；
-两者都是「中了 50% 是本期 UP，歪了下次必中」。
+| 池型 | 5★ | 4★ | 硬保底 | UP 份额 | 非 UP 从哪来 |
+|---|---|---|---|---|---|
+| 角色活动跃迁 | 0.6% | 5.1% | 90 / 10 | 50% | 常驻七人 + 其余 4★ 角色 |
+| 光锥活动跃迁 | 0.8% | 6.6% | 80 / 10 | 75% | 常驻七张光锥 + 其余 4★ 光锥 |
+| 联动跃迁 | 同上两行 | | | | 各自独立保底，4★ 没有 UP |
+| 群星跃迁 | 0.6% | 5.1% | 90 / 10 | 无 UP | 角色与光锥各半 |
+
+本模块只管算：不读时钟、不碰数据库、随机源由调用方注入，测试才能用固定序列复现。
+规则出处：`跃迁` 页「跃迁机制」与官方概率公示；软保底起点 74（角色）/ 66（光锥）
+是社区统计值，官方未公示。
 """
 
 from __future__ import annotations
@@ -17,14 +25,27 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
-from ...core.engine import RandomLike, member_weights, pick_member_weighted
-from .pools import Pool
+from ...core.engine import (
+    RandomLike,
+    member_weights,
+    pick_member,
+    pick_member_weighted,
+)
+from .pools import (
+    CONE_KINDS,
+    KIND_CHARACTER,
+    KIND_COLLAB_CHARACTER,
+    KIND_COLLAB_LIGHT_CONE,
+    KIND_LIGHT_CONE,
+    KIND_STANDARD,
+    Pool,
+)
 from .roster import Roster, TOP_STAR
 
 
 @dataclass(frozen=True)
-class Rules:
-    """一整套概率参数。默认值就是当前版本的角色活动跃迁。"""
+class Params:
+    """一个池型的概率参数。默认值就是角色活动跃迁。"""
 
     base5: float = 0.6
     soft5: int = 74
@@ -34,24 +55,91 @@ class Rules:
     soft4: int = 9
     hard4: int = 10
     win4: float = 50.0
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, Any] | None, base: "Params") -> "Params":
+        """读一段参数。缺键时沿用 `base` 的值，不因为少写一个字段就起不来。"""
+        if not isinstance(payload, Mapping):
+            return base
+        return cls(
+            base5=float(payload.get("base5", base.base5)),
+            soft5=int(payload.get("soft5", base.soft5)),
+            hard5=int(payload.get("hard5", base.hard5)),
+            win5=float(payload.get("win5", base.win5)),
+            base4=float(payload.get("base4", base.base4)),
+            soft4=int(payload.get("soft4", base.soft4)),
+            hard4=int(payload.get("hard4", base.hard4)),
+            win4=float(payload.get("win4", base.win4)),
+        )
+
+
+CHARACTER_PARAMS = Params()
+LIGHT_CONE_PARAMS = Params(
+    base5=0.8, soft5=66, hard5=80, win5=75.0, base4=6.6, win4=75.0
+)
+# 群星跃迁没有 UP，`win` 为 0；`member_weights` 在名单为空时本来就会退回等权，
+# 这里写 0 是为了让「这个池型不谈 UP」在数据上也成立。
+STANDARD_PARAMS = Params(win5=0.0, win4=0.0)
+
+
+@dataclass(frozen=True)
+class Rules:
+    """按池型分组的参数，外加两张常驻名录。
+
+    `standard5` 是角色池歪了会出的常驻七人，`standard_cone5` 是光锥池歪了会出的常驻
+    七张；群星跃迁的 5★ 把两边都算上（角色与光锥各半）。
+    """
+
+    character: Params = CHARACTER_PARAMS
+    light_cone: Params = LIGHT_CONE_PARAMS
+    standard: Params = STANDARD_PARAMS
+    collab_character: Params | None = None
+    collab_light_cone: Params | None = None
     standard5: tuple[str, ...] = ()
+    standard_cone5: tuple[str, ...] = ()
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "Rules":
-        """从 `pool_rules.json` 读。缺键时用默认值，不因为少写一个字段就起不来。"""
-        event = payload.get("character_event") or {}
-        default = cls()
+        """从 `pool_rules.json` 读。联动段可省，省了就用对应活动池的参数。"""
         return cls(
-            base5=float(event.get("base5", default.base5)),
-            soft5=int(event.get("soft5", default.soft5)),
-            hard5=int(event.get("hard5", default.hard5)),
-            win5=float(event.get("win5", default.win5)),
-            base4=float(event.get("base4", default.base4)),
-            soft4=int(event.get("soft4", default.soft4)),
-            hard4=int(event.get("hard4", default.hard4)),
-            win4=float(event.get("win4", default.win4)),
+            character=Params.from_payload(
+                payload.get("character_event"), CHARACTER_PARAMS
+            ),
+            light_cone=Params.from_payload(
+                payload.get("light_cone_event"), LIGHT_CONE_PARAMS
+            ),
+            standard=Params.from_payload(payload.get("standard"), STANDARD_PARAMS),
+            collab_character=(
+                Params.from_payload(payload["collab_character"], CHARACTER_PARAMS)
+                if payload.get("collab_character")
+                else None
+            ),
+            collab_light_cone=(
+                Params.from_payload(payload["collab_light_cone"], LIGHT_CONE_PARAMS)
+                if payload.get("collab_light_cone")
+                else None
+            ),
             standard5=tuple(str(item) for item in payload.get("standard5") or ()),
+            standard_cone5=tuple(
+                str(item) for item in payload.get("standard_cone5") or ()
+            ),
         )
+
+    def params(self, kind: str) -> Params:
+        """这个池型用哪套参数。联动没单独配就跟对应的活动池一致。"""
+        if kind == KIND_LIGHT_CONE:
+            return self.light_cone
+        if kind == KIND_COLLAB_LIGHT_CONE:
+            return self.collab_light_cone or self.light_cone
+        if kind == KIND_COLLAB_CHARACTER:
+            return self.collab_character or self.character
+        if kind == KIND_STANDARD:
+            return self.standard
+        return self.character
+
+    def off5(self, kind: str) -> tuple[str, ...]:
+        """非 UP 的 5★ 候选：光锥池从常驻光锥里歪，角色池从常驻角色里歪。"""
+        return self.standard_cone5 if kind in CONE_KINDS else self.standard5
 
 
 @dataclass(frozen=True)
@@ -83,6 +171,7 @@ def star_rate(nth: int, *, base: float, soft: int, hard: int) -> float:
 
     `soft` 之前恒为基础概率，`soft` 当抽起线性抬升，`hard` 那抽到 100%。
     代进 0.6/74/90：第 73 抽 0.6%、第 74 抽 6.45%、第 89 抽 94.15%、第 90 抽 100%。
+    代进 0.8/66/80：第 65 抽 0.8%、第 66 抽 7.41%、第 79 抽 93.39%、第 80 抽 100%。
     """
     if nth >= hard:
         return 100.0
@@ -94,40 +183,68 @@ def star_rate(nth: int, *, base: float, soft: int, hard: int) -> float:
 def _candidates(
     star: int, pool: Pool, roster: Roster, rules: Rules
 ) -> tuple[list[str], list[str]]:
-    """这一星级能出谁：返回 `(全部候选 id, 其中的 UP id)`。
+    """活动池这一星级能出谁：返回 `(全部候选 id, 其中的 UP id)`。
 
-    5★ 是「本期 UP + 常驻保底池」；4★ 是「本期 UP + 其余 4★ 角色」，其余里包含黑塔
-    这种从不 UP 但能抽到的；3★ 是全部 3★ 光锥，等权。
+    5★ 是「本期 UP + 常驻名录」；4★ 是「本期 UP + 其余同星角色/光锥」，其余里包含黑塔
+    这种从不 UP 但能抽到的；3★ 是全部 3★ 光锥，等权。联动池的 4★ 没有 UP，走的是
+    同一句「up 为空 → 等权」。
     """
     if star == TOP_STAR:
         up = list(pool.up5_ids)
-        others = [cid for cid in rules.standard5 if cid not in up]
+        others = [item_id for item_id in rules.off5(pool.kind) if item_id not in up]
         return up + others, up
     if star == 4:
         up = list(pool.up4_ids)
-        others = [
-            item.item_id
-            for item in roster.characters_of(4)
-            if item.item_id not in up
-        ]
+        pool_items = (
+            roster.cones_of(4) if pool.kind in CONE_KINDS else roster.characters_of(4)
+        )
+        others = [item.item_id for item in pool_items if item.item_id not in up]
         return up + others, up
     return [item.item_id for item in roster.cones_of(3)], []
+
+
+def _pick_standard(
+    star: int, roster: Roster, rules: Rules, rng: RandomLike
+) -> tuple[str, bool]:
+    """群星跃迁的选人：角色与光锥各占一半，类别内等权，没有 UP。
+
+    官方的 5★ 是 0.3% 角色 + 0.3% 光锥，4★ 是 2.55% + 2.55%，所以先掷类别再在类别内
+    均匀取人，等价于给两边各半的份额。
+    """
+    if star == TOP_STAR:
+        characters, cones = list(rules.standard5), list(rules.standard_cone5)
+    elif star == 4:
+        characters = [item.item_id for item in roster.characters_of(4)]
+        cones = [item.item_id for item in roster.cones_of(4)]
+    else:
+        characters, cones = [], [item.item_id for item in roster.cones_of(3)]
+
+    if not characters and not cones:
+        raise ValueError(f"{star}★ 没有候选，名册数据不全")
+    # 顺序：先看有没有角色，再掷硬币。没有角色时直接走光锥，免得白耗一个随机数——
+    # 固定序列的测试才能稳定复现。
+    group = characters if characters and (not cones or rng.random() < 0.5) else cones
+    return pick_member(group, rng), False
 
 
 def _pick(
     star: int, state: Pity, pool: Pool, roster: Roster, rules: Rules, rng: RandomLike
 ) -> tuple[str, bool]:
-    """在落定的星级里选一个人，返回 `(id, 是否 UP)`。
+    """在落定的星级里选一个，返回 `(id, 是否 UP)`。
 
     歪过一次之后 `share` 取 1.0：UP 拿全部份额，等价于「必中」，不用另写一条分支。
     """
+    if pool.kind == KIND_STANDARD:
+        return _pick_standard(star, roster, rules, rng)
+
     candidates, up_ids = _candidates(star, pool, roster, rules)
     if not candidates:
         raise ValueError(f"{star}★ 没有候选，名册或卡池数据不全")
+    params = rules.params(pool.kind)
     if star == TOP_STAR:
-        share = 1.0 if state.five_guaranteed else rules.win5 / 100.0
+        share = 1.0 if state.five_guaranteed else params.win5 / 100.0
     elif star == 4:
-        share = 1.0 if state.four_guaranteed else rules.win4 / 100.0
+        share = 1.0 if state.four_guaranteed else params.win4 / 100.0
     else:
         share = 0.0
     weights = member_weights(candidates, up_ids, share)
@@ -142,8 +259,13 @@ def draw(
 
     先判 5★ 再判 4★：两个保底同时到期时 5★ 优先，与真游戏一致。
     """
-    five = star_rate(state.five_counter + 1, base=rules.base5, soft=rules.soft5, hard=rules.hard5)
-    four = star_rate(state.four_counter + 1, base=rules.base4, soft=rules.soft4, hard=rules.hard4)
+    params = rules.params(pool.kind)
+    five = star_rate(
+        state.five_counter + 1, base=params.base5, soft=params.soft5, hard=params.hard5
+    )
+    four = star_rate(
+        state.four_counter + 1, base=params.base4, soft=params.soft4, hard=params.hard4
+    )
     roll = rng.random() * 100.0
     if roll < five:
         star = TOP_STAR
@@ -206,9 +328,9 @@ def draw_batch(
     return pulled, state
 
 
-def distance_to_hard(state: Pity, rules: Rules) -> int:
+def distance_to_hard(state: Pity, params: Params) -> int:
     """距离 5★ 硬保底还剩几抽，至少 1。文案用。"""
-    return max(1, rules.hard5 - state.five_counter)
+    return max(1, params.hard5 - state.five_counter)
 
 
 def count_by_star(pulled: Sequence[Pulled]) -> dict[int, int]:
