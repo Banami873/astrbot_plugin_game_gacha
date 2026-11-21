@@ -1,6 +1,6 @@
 # 01 — 方舟 refresh 库与薄壳
 
-Status: ready-for-agent
+Status: done
 
 **目标**：`tools/build_data.py` 与 `tools/build_limits.py` 的主体移入
 `games/arknights/refresh.py`，工具变薄壳；新增 ETag 条件请求与 PRTS 修订时间戳两类快查；
@@ -30,6 +30,15 @@ limits 估算重算可被调用。插件运行时能通过本模块完成「检�
 - 快查单测：304 → 无变化；200 → 有变化且新 ETag 入 state；ETag 缺失 → 视为有变化。
 - state 单测：模拟「检查有变但写盘失败」→ state 不更新。
 
-## 实际结果
+## 实际结果（2026-11-21）
 
-（待执行）
+- 迁移完成：`games/arknights/refresh.py`（~1000 行）承载两份脚本主体 + `fetch_with_etag`
+  + `fetch_prts_revisions` + state 三件（load/save/checkpoint）+ `update_snapshot_files`
+  （`full` / `prts` 两模式：官方表 304 时只重抓 PRTS 三样，骨架不动、干员字典内容变了
+  才重写）+ limits 重算（`build_limits`/`write_limits` 先比后写）。
+- 薄壳导入踩坑已解：`games/arknights/pools.py` 的三级相对导入撑不起顶层 `games` 包，
+  CLI 必须按 AstrBot 装载方式以完整包路径导入（与 selfcheck 同一套两段式）。
+- `PRTS_HEADERS` 改为 `data.BROWSER_HEADERS` 的同一对象——「两份请求头」的坑正式拔掉。
+- 304 语义定案：`fetch_with_etag` 返回 `(True, None)`，「没变就没有新 ETag」。
+- 验证：受影响 131 条 + 新增 `test_refresh_ark.py` 19 条全绿；`build_data.py --offline`
+  幂等（462 池）、`build_limits.py --check` 一致（27 条）、selfcheck 不变。

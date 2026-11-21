@@ -94,15 +94,16 @@ def views_mod() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def build_data_mod() -> ModuleType:
-    return load_module("gacha_under_test_build_data", PLUGIN_DIR / "tools" / "build_data.py")
+    """方舟抓取库。原 `tools/build_data.py` 的主体自 v0.3.1 起移到这里（工具只剩
+    命令行薄壳），测试跟着指向唯一实现。"""
+    return package_module("games.arknights.refresh")
 
 
 @pytest.fixture(scope="session")
 def build_limits_mod() -> ModuleType:
-    """200 档降价表的生成脚本。测试拿它核对仓库里的 `limits.json` 是否过期。"""
-    return load_module(
-        "gacha_under_test_build_limits", PLUGIN_DIR / "tools" / "build_limits.py"
-    )
+    """200 档降价表的生成逻辑。原 `tools/build_limits.py` 的主体已并入抓取库，
+    测试拿它核对仓库里的 `limits.json` 是否过期。"""
+    return package_module("games.arknights.refresh")
 
 
 @pytest.fixture(scope="session")
