@@ -732,9 +732,8 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 | `image_quality` | string | `中` | 单抽精一立绘的缓存画质档位（高 1024px / 中 800px / 低 640px，只降采样、不放大） |
 | `signin_reward` | int | 10 | 每日签到抽数 |
 | `newbie_bonus` | int | 30 | 新人一次性抽数 |
-| `data_refresh_hours` | int | 6 | 官方表检查间隔 |
-| `prts_refresh_hours` | int | 24 | 卡池一览抓取间隔 |
-| `allow_network` | bool | true | 关掉后只用快照，且不下载立绘（缺图一律画占位） |
+| `check_times` | string | `04:00,12:00` | 每日自动检查时刻（方舟官方表 / PRTS / 星铁 / 站点映射，v0.3.1 起；详见 `docs/features/auto-refresh/SPEC.md`） |
+| `allow_network` | bool | true | 关掉后只用快照，且不下载立绘（缺图一律画占位）、不做定时检查 |
 
 ### Validation Rules
 

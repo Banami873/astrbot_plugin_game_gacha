@@ -24,9 +24,19 @@ AstrBot 插件：明日方舟抽卡模拟器，另接第二个游戏星穹铁道
 | `games/arknights/` | 方舟的规则、数据、文案与存档表。`runtime.py`（`ArknightsRuntime`，六样协议 + 装载）、`roster.py`（干员字典）、`pools.py`（池与池型）、`store.py`（方舟五张表）、`engine.py`（抽一次的方舟语义）、`service.py`（规则组装与入账编排）、`commands.py`（指令体）、`maintenance.py`（惰性结算）、`render/`（出图） | 不许把通用数学再写一遍——那是 core 的活；不许 import `games/hsr/` |
 | `games/hsr/` | 星铁的规则、数据、文案与存档表。`roster.py`（角色与光锥）、`pools.py`（四类池型、池名匹配与选池）、`store.py`（`hsr_pity`）、`engine.py`（按池型取参数的两条独立保底）、`service.py`（`HsrRuntime`，六样协议）、`commands.py`（指令体）、`views.py`（文案 + 指令清单） | 同上；不许 import `games/arknights/` |
 | `main.py` | 插件外壳：注册指令、按 `game_id` 装载、转调、每用户锁、生命周期 | 不许有业务逻辑；不许出现任何游戏的字段（`store` / `snapshot` / `roster` …）；`@filter.command` **必须**写在这里 |
+| 顶层 `updater.py` / `font_fill.py` | 外壳级基础设施：定时刷新调度（只认协议，不认游戏）与字体补齐（读各游戏 fonts.json 的 `sources`） | 不许 import `games/`；不认识任何游戏的字段 |
 
-**协议六样**：`game_id` / `display_name` / `load(data_dir)` / `active_pools(now)` /
-`pull(game, event, times)` / `help_text()`。`initialize()` 遍历 `self.games` 逐个
+**自动刷新（v0.3.1，`docs/features/auto-refresh/`）**：外壳每天在 `check_times`
+（默认 `04:00,12:00`）逐游戏调 `refresh()`；抓取与热重载的实现各在
+`games/arknights/refresh.py`（ETag 快查 + PRTS 修订时间戳 + limits 重算）与
+`games/hsr/refresh.py`（全量即检查 + 站点 JS 哈希体检）。`tools/build_data.py`、
+`build_limits.py`、`build_hsr_data.py`、`build_hsr_render_assets.py` 已全部变成薄壳
+CLI，实现只有一份。`refresh_checkpoint` 的 state 只在快照成功落盘后更新；重载失败
+保留旧数据。limits 公告解析流水线未立项（抓什么还没调研）。
+
+**协议七样**：`game_id` / `display_name` / `load(data_dir)` / `active_pools(now)` /
+`pull(game, event, times)` / `help_text()`，以及**可选的** `refresh()`（v0.3.1 起，
+每天由外壳定时调用的检查点，返回一行摘要）。`initialize()` 遍历 `self.games` 逐个
 `await game.load(data_dir)`，装载前把 `shell`（外壳自己）、`signin_reward`、`newbie_bonus`
 塞进去——所以**指令体的第一个参数是运行时**，跨游戏的身份与锁走 `rt.shell._identity()` /
 `rt.shell._lock_for()`。加游戏 = 新目录里写一个同形状的对象 + 注册表加一行，`main.py` 的
