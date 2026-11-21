@@ -87,13 +87,17 @@
 | 运行时 | runtime | 一个游戏的入口对象，放在 `GameGachaPlugin.games[<game_id>]`，持数据、规则表、存档与 `shell`。六样协议见 `docs/features/hsr-gacha/SPEC.md` 第六节。方舟是 `games/arknights/runtime.py` 的 `ArknightsRuntime`，星铁是 `games/hsr/service.py` 的 `HsrRuntime`；外壳只认这本注册表 |
 | 快照 | snapshot | 随插件发布的内置数据副本。单独说「快照」时指卡池骨架 `gacha_table.json`；另外两份是干员字典与名单快照 |
 | 干员字典 | character roster | 随包的干员表：id、中文名、英文名、星级、职业、阵营、限定标记、所属基础池（`resources/snapshot/characters.json`）。英文名/职业/阵营只给渲染用，不参与抽卡 |
+| 池型 | pool kind | 星铁那边跃迁的分类，**同时是水位分桶的键**：`character` / `light_cone` / `collab_character` / `collab_light_cone` / `standard`。方舟的池型经 `pity_groups.json` 映射成 `group_key`，星铁直接用池型本身当 `group_key` | 卡池类型、池子种类 |
+| 常开池 | permanent pool | 没有结束时点的池（星铁群星跃迁，以及 wiki 上结束时间写「长期」的联动池）。数据里 `permanent=true`、`end_time` 写 2100-01-01 而不判空，因为池骨架的判定就是 `open <= now < end` | 永久池、无期限池 |
+| 新 UP 池 | featured pool | 同一期里「新角色 / 新光锥」的那一张（wiki 模板 `卡池类型 == 1`）。不带池名且有且只有一张时抽它——本插件唯一的「替玩家选」 | 新池、首发池 |
 | 功能目录 | feature | `docs/features/<feature-slug>/`，一个功能一个目录 |
 | 任务单 | issue | `docs/features/<feature>/issues/NN-*.md` 下的单条改动 |
 | 垂直切片 | vertical slice | 一条窄但端到端打通的改动路径，不是一个图层 |
 
 ## 已确认的项目事实（不是需求）
 
-- 先做《明日方舟》；星穹铁道已接入「角色活动跃迁」最小可抽（`games/hsr/`，存档独立）
+- 先做《明日方舟》；星穹铁道已接入角色活动 / 光锥活动 / 群星（常驻）/ 联动四类跃迁
+  （`games/hsr/`，存档独立，水位按池型分五个桶）
 - 技术形态参照 AstrBot 插件惯例；运行时数据落 `data/plugin_data/astrbot_plugin_game_gacha/`
 - 参考实现：`data/plugins/astrbot_plugin_arknight_gacha_simulator/`，
   拆解见 `docs/reference/arknight-gacha-simulator.md`

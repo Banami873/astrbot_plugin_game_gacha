@@ -1,6 +1,7 @@
 # AGENTS.md
 
-AstrBot 插件：明日方舟抽卡模拟器（星穹铁道缓一期，本期不实现）。已落地 `/抽卡帮助`、
+AstrBot 插件：明日方舟抽卡模拟器，另接第二个游戏星穹铁道（独立存档 `hsr.db`）。方舟侧
+已落地 `/抽卡帮助`、
 `/卡池查询`、`/抽卡签到`、`/单抽`、`/十连`、`/抽数修改`，水位按池类分组、新池前 10 抽保底、
 池名与 UP 名单（官方骨架 + PRTS 卡池一览）、星级内 UP 份额、限定池 6★ 范围与往期限定 5 倍
 权重、**照游戏内版式的出图**（十连一排压叠竖卡、单抽左文右图，1024×576）、选调（常驻/
@@ -8,7 +9,8 @@ AstrBot 插件：明日方舟抽卡模拟器（星穹铁道缓一期，本期不
 一次、新代每 120 抽循环 + 5★ 选调）、限定池 300 井与寻访数据契约、
 `_conf_schema.json` 7 项配置与 `tools/selfcheck.py` 自检；契约兑换三档（75/200/300）、
 潜能仓库，以及中坚甄选 / 定向甄选的**自选池**（范围与份额取自官方 `dynMeta`）均已接上，
-9 条指令全部可用。
+9 条指令全部可用。星铁侧 6 条 `/星铁*`：角色活动 / 光锥活动 / 群星（常驻）/ 联动（角色与
+光锥两套）四类跃迁，两条独立保底曲线、水位按池型分桶、卡池与名册随包快照。
 
 ## 代码分层（2026-11-20 重构后）
 
@@ -20,7 +22,7 @@ AstrBot 插件：明日方舟抽卡模拟器（星穹铁道缓一期，本期不
 |---|---|---|
 | `core/` | 与游戏无关的件：概率数学（`engine.py`）、池骨架（`pool.py`）、水位分组语义（`pity.py`）、通用表与事务（`store.py`）、抽数经济（`economy.py`） | 不许 import `games/`；不许出现干员 / 寻访 / 契约 / 跃迁 / 光锥这类某一款游戏的语义 |
 | `games/arknights/` | 方舟的规则、数据、文案与存档表。`runtime.py`（`ArknightsRuntime`，六样协议 + 装载）、`roster.py`（干员字典）、`pools.py`（池与池型）、`store.py`（方舟五张表）、`engine.py`（抽一次的方舟语义）、`service.py`（规则组装与入账编排）、`commands.py`（指令体）、`maintenance.py`（惰性结算）、`render/`（出图） | 不许把通用数学再写一遍——那是 core 的活；不许 import `games/hsr/` |
-| `games/hsr/` | 星铁的规则、数据、文案与存档表。`roster.py`（角色与光锥）、`pools.py`（一期跃迁与选池）、`store.py`（`hsr_pity`）、`engine.py`（两条独立保底）、`service.py`（`HsrRuntime`，六样协议）、`commands.py`（指令体）、`views.py`（文案 + 指令清单） | 同上；不许 import `games/arknights/` |
+| `games/hsr/` | 星铁的规则、数据、文案与存档表。`roster.py`（角色与光锥）、`pools.py`（四类池型、池名匹配与选池）、`store.py`（`hsr_pity`）、`engine.py`（按池型取参数的两条独立保底）、`service.py`（`HsrRuntime`，六样协议）、`commands.py`（指令体）、`views.py`（文案 + 指令清单） | 同上；不许 import `games/arknights/` |
 | `main.py` | 插件外壳：注册指令、按 `game_id` 装载、转调、每用户锁、生命周期 | 不许有业务逻辑；不许出现任何游戏的字段（`store` / `snapshot` / `roster` …）；`@filter.command` **必须**写在这里 |
 
 **协议六样**：`game_id` / `display_name` / `load(data_dir)` / `active_pools(now)` /
