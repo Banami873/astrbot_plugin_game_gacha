@@ -325,16 +325,26 @@ p6 = min(1.0, 0.02 + 0.02 × max(0, c − 49))
 `limitParam.limitedCharId` 与起止时间，**不新增资源文件**。系列判不出来时退化为
 「不筛、不加权」——多放几个人只是手感偏差，筛错会直接少一档人。
 
-**R-12 池指定与消歧**：`/单抽 [类别] [池名前缀]`，类别取 `限定|常驻|限时|中坚|联动`。
+**R-12 池指定与消歧**：`/单抽 [类别] [池名]`，类别取 `限定|常驻|限时|中坚|联动`。
 类别是 `gachaRuleType` 的过滤器，映射写进 `resources/pool_rules.json`：
 
-| 类别 | 包含的 `gachaRuleType` |
-|---|---|
-| 限定 | `LIMITED` |
-| 常驻 | `DOUBLE` |
-| 限时 | `NORMAL` `SINGLE` `SPECIAL` `ATTAIN` `GACHAWITHSPECIFIED6` |
-| 中坚 | `CLASSIC` `CLASSIC_DOUBLE` `CLASSIC_ATTAIN` `FESCLASSIC` |
-| 联动 | `LINKAGE` |
+| 类别 | 包含的 `gachaRuleType` | 搜池时的范围 |
+|---|---|---|
+| 限定 | `LIMITED` | `LIMITED` + `LINKAGE`（见下） |
+| 常驻 | `DOUBLE` | 同左 |
+| 限时 | `NORMAL` `SINGLE` `SPECIAL` `ATTAIN` `GACHAWITHSPECIFIED6` | 同左 |
+| 中坚 | `CLASSIC` `CLASSIC_DOUBLE` `CLASSIC_ATTAIN` `FESCLASSIC` | 同左 |
+| 联动 | `LINKAGE` | 同左 |
+
+**不带任何词只抽限定**：`/十连` = 抽最新的限定池。限定池没开时**报错**（`no_limited`，
+文案列出现在开着什么），**不退化**成「最新的池子」——退化的后果是玩家发 `/十连` 抽到
+常驻干员，还以为限定开了。要抽别的必须带类别。
+
+**写「限定」时联动也算**：两类都是「限定干员、不进常驻」，玩家嘴里的「限定」通常两者都
+指。同时开着时**优先限定**（玩家说限定想的还是当期那个池），只有限定没开才看联动。
+`/十连 联动` 则严格只搜联动，没开就报错。
+
+类别之后接池名（前缀优先、无前缀时降级为包含匹配）；类别为空时在全部在开的池里搜。
 
 **`DOUBLE` 与 `NORMAL` 的命名与直觉相反**（issue 05 实测更正）：`DOUBLE` 是**常驻标准寻访**
 （双 6★ UP、每 14 天 04:00 轮换），`NORMAL` 是**联合行动**（16:00 开、池内仅 4 名 6★）。
@@ -757,7 +767,7 @@ PRTS**——PRTS 的老池没有名单，对上的那期给的也只是「范围
 | `.venv/Scripts/python.exe -m pytest .../tests/test_exchange.py -q` | 75 档单人直接兑、多人列候选；200 档只列本系列、排除当期 UP、估算项带标注；300 档排除已降价者（庆典 8 名 = 当期 2 + 往期 6）；契约不足回报「需要 N 份，你有 M 份」且一份不扣；池结束拒绝；重复兑换潜能 +1；兑换不动水位 | 查 R-09 落地口径；`limits.json` 是否过期看 `TestLimitsTableIsInSync` |
 | `.venv/Scripts/python.exe -m pytest .../tests/test_inventory.py -q` | 六星优先、同星级按次数降序；潜能封顶 5；空仓库给提示而不是空表；页码越界回第 1 页并说明；只返回调用者自己的行 | 查 S-10 与 `warehouse.paginate` 的越界口径 |
 | `.venv/Scripts/python.exe -m pytest .../tests/test_choice.py -q` | 范围与名额取自 `dynMeta`（中坚 12+24 / 定向 6+6）；选中者各占该星级 25% / 33.33% / 20%，剩余由范围内其余人分；范围外的 6★ 与 5★ 一次都不出；序号 1…n 与名字都能解析，重复选、超额、缺额、越界序号全部拒绝；未自选时抽卡被拒且不扣抽；已锁定后再提交被拒；两池同开时列候选；会话超时后数字不再被截获 | 查 R-19 / R-19b；范围取错先看 `dynMeta` 的 `rarityPickCharDict` |
-| `.venv/Scripts/python.exe -m pytest ... -q -k pool_select` | 前缀多义时报错并列出候选；纯数字不命中；无参数按「限定优先、否则最晚结束」 | 查 R-12 |
+| `.venv/Scripts/python.exe -m pytest ... -q -k pool_select` | 前缀多义时报错并列出候选；纯数字不命中；**无参数只抽限定，限定没开就报错** | 查 R-12 |
 | `.venv/Scripts/python.exe -m pytest .../tests/test_pools.py -q` | 占位串不收作池名；名字缺失时落成池型规范名（`DOUBLE`=常驻标准寻访）而不是内部 id；「甄选15」补成「中坚甄选15」且不重复补；类别不认识时才回 id；按 PRTS 原名与显示名都能定池 | 查 R-12 的对外池名段 |
 | `.venv/Scripts/python.exe -m pytest ... -k "Banners or BannerBook or Fetcher or UpWeight"` | 分节、嵌套小表、池名合成、新人节剔除解析正确；四级对齐不多义硬塞；请求头能被 `http.client` 接受；限定池 6★ 的 UP 占比 70%±5%，联合行动只出名单内 4 人 | 查 R-11 的份额表与 R-14 的对齐策略 |
 | `.venv/Scripts/python.exe -m pytest .../tests/test_limited.py -q` | 系列归月与 UTC+8 边界、解限期排除、跨系列不串、四池 5 倍名单与官方公告逐字一致、剩余 30% 内权重精确 5 倍、范围只作用于 6★ | 查 R-11 补充段 |

@@ -89,7 +89,7 @@
 | 干员字典 | character roster | 随包的干员表：id、中文名、英文名、星级、职业、阵营、限定标记、所属基础池（`resources/snapshot/characters.json`）。英文名/职业/阵营只给渲染用，不参与抽卡 |
 | 池型 | pool kind | 星铁那边跃迁的分类，**同时是水位分桶的键**：`character` / `light_cone` / `collab_character` / `collab_light_cone` / `standard`。方舟的池型经 `pity_groups.json` 映射成 `group_key`，星铁直接用池型本身当 `group_key` | 卡池类型、池子种类 |
 | 常开池 | permanent pool | 没有结束时点的池（星铁群星跃迁，以及 wiki 上结束时间写「长期」的联动池）。数据里 `permanent=true`、`end_time` 写 2100-01-01 而不判空，因为池骨架的判定就是 `open <= now < end` | 永久池、无期限池 |
-| 新 UP 池 | featured pool | 同一期里「新角色 / 新光锥」的那一张（wiki 模板 `卡池类型 == 1`）。不带池名且有且只有一张时抽它——本插件唯一的「替玩家选」 | 新池、首发池 |
+| 新 UP 池 | featured pool | 同一期里「新角色 / 新光锥」的那一张（wiki 模板 `卡池类型 == 1`）。`限定` 作用域就是它，`光锥` 作用域里有多张时也优先它——这是本插件唯一「替玩家选」的地方 | 新池、首发池 |
 | 功能目录 | feature | `docs/features/<feature-slug>/`，一个功能一个目录 |
 | 任务单 | issue | `docs/features/<feature>/issues/NN-*.md` 下的单条改动 |
 | 垂直切片 | vertical slice | 一条窄但端到端打通的改动路径，不是一个图层 |
