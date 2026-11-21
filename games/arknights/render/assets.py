@@ -1,4 +1,4 @@
-"""素材装载：把 `resources/ui/` 的贴图与 `resources/fonts/` 的字体按需读进来。
+"""素材装载：把 `resources/ark/ui/` 的贴图与 `resources/ark/fonts/` 的字体按需读进来。
 
 只读随包资源，不触网、不写文件。读不到或文件坏了返回 `None`，由绘制层决定「少画
 这一块」还是「画占位」——素材缺失不该让整次出图失败（SPEC R-15）。
@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PIL import Image, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from . import effects, layout
 
@@ -19,19 +19,33 @@ PLUGIN_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_CAMP = "罗德岛"
 FONT_FILE = "HarmonyOS_Sans_SC_Bold.ttf"
 CAMP_MAP_FILE = "camp_logo_map.json"
+# 字体槽位配置：{"default": 字体或字体链, "slots": {"槽位": 字体或字体链}}。
+# 值是字符串（单字体）或**有序列表**（回退链：渲染时逐字符选链中第一个拥有
+# 其字形的字体——哪个字符用哪套字体完全由这条链决定，代码不做字符类别判断）。
+# 相对路径相对 resources/ark/fonts/ 解析，也接受绝对路径；槽位 → default →
+# 内置（FONT_FILE）三级兜底。故意不进 _conf_schema——出图观感的手工微调。
+FONTS_MAP_FILE = "fonts.json"
+_BUILTIN_SLOTS = {
+    "default": [FONT_FILE],  # 兜底 / 未单独配置的槽位
+    "name_cn": [FONT_FILE],  # 干员中文名
+    "name_en": [FONT_FILE],  # 干员英文名
+    "initial": [FONT_FILE],  # 缺立绘时占位首字母
+}
 
 
 class Assets:
     """一次出图共用的素材仓库。图片、字体、程序生成的光效都缓存。"""
 
     def __init__(self, resources_dir: Path | str | None = None):
-        base = Path(resources_dir) if resources_dir else PLUGIN_DIR / "resources"
+        base = Path(resources_dir) if resources_dir else PLUGIN_DIR / "resources" / "ark"
         self.ui_dir = base / "ui"
         self.font_dir = base / "fonts"
         self._images: dict[str, Image.Image | None] = {}
-        self._fonts: dict[int, ImageFont.FreeTypeFont] = {}
+        self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
+        self._glyph_cache: dict[tuple[int, str], bool] = {}
         self._generated: dict[tuple, Image.Image] = {}
         self._camp_map: dict[str, str] | None = None
+        self._font_map: dict | None = None
 
     # ---- 贴图 ------------------------------------------------------------
 
@@ -132,19 +146,115 @@ class Assets:
 
     # ---- 字体 ------------------------------------------------------------
 
-    def font(self, size: int) -> ImageFont.FreeTypeFont | None:
-        """取一个字号的中文字体。字体缺失返回 `None`，由文字层跳过。"""
+    def _load_font_map(self) -> dict:
+        if self._font_map is not None:
+            return self._font_map
+        slots: dict = {}
+        default: str | None = None
+        try:
+            payload = json.loads((self.font_dir / FONTS_MAP_FILE).read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                default = payload.get("default")
+                raw = payload.get("slots")
+                if isinstance(raw, dict):
+                    slots = raw
+        except (OSError, ValueError):
+            pass
+        self._font_map = {"default": default, "slots": slots}
+        return self._font_map
+
+    def font_chain(self, slot: str = "default") -> list[Path]:
+        """按槽位解析字体链：槽位 → default → 内置（FONT_FILE）。
+
+        配置值是字符串（单字体）或有序列表（**回退链**）。相对路径相对
+        `resources/ark/fonts/` 解析，也接受绝对路径；只返回真实存在的文件，
+        保证出图不会因为一个坏配置开天窗。
+        """
+        cfg = self._load_font_map()
+        names: object = cfg["slots"].get(slot, cfg["default"])
+        if names is None:
+            names = _BUILTIN_SLOTS.get(slot) or [FONT_FILE]
+        if isinstance(names, str):
+            names = [names]
+        chain: list[Path] = []
+        for name in names:  # type: ignore[union-attr]
+            if not name:
+                continue
+            p = Path(name).expanduser()
+            if not p.is_absolute():
+                p = self.font_dir / p
+            if p.is_file():
+                chain.append(p)
+        return chain
+
+    def fonts(self, size: int, slot: str = "default") -> list[ImageFont.FreeTypeFont]:
+        """装载槽位整条字体链（按配置顺序）。文件缺失的项自动跳过。"""
         size = max(1, int(size))
-        cached = self._fonts.get(size)
+        cached = self._fonts.get((slot, size))
         if cached is not None:
             return cached
-        try:
-            font = ImageFont.truetype(str(self.font_dir / FONT_FILE), size)
-        except (OSError, ValueError):
-            return None
-        self._fonts[size] = font
-        return font
+        loaded: list[ImageFont.FreeTypeFont] = []
+        for path in self.font_chain(slot):
+            try:
+                loaded.append(ImageFont.truetype(str(path), size))
+            except (OSError, ValueError):
+                continue
+        self._fonts[(slot, size)] = loaded
+        return loaded
 
-    def has_font(self) -> bool:
-        """字体文件在不在。`enable_image=false` 时不必装载，测试也用它判环境。"""
-        return (self.font_dir / FONT_FILE).is_file()
+    def font(self, size: int, slot: str = "default") -> ImageFont.FreeTypeFont | None:
+        """取槽位字体链的**首选**字体（第一个存在的文件）。缺字体返回 `None`。"""
+        chain = self.fonts(size, slot)
+        return chain[0] if chain else None
+
+    def has_font(self, slot: str = "default") -> bool:
+        """槽位字体链是否至少有一个文件。`enable_image=false` 时不必装载。"""
+        return bool(self.font_chain(slot))
+
+    def has_glyph(self, font: ImageFont.FreeTypeFont, ch: str) -> bool:
+        """字体能不能画出这个字符：有墨迹，且不是 `.notdef` 方块或空白。
+
+        有的字体对缺字画空心方块（与私有区占位同形），有的画成空白——
+        两种都得判成「没有这个字形」。结果按 (字体, 字符) 缓存。
+        """
+        key = (id(font), ch)
+        cached = self._glyph_cache.get(key)
+        if cached is not None:
+            return cached
+
+        def pixels(ch: str) -> bytes:
+            image = Image.new("L", (64, 64), 0)
+            ImageDraw.Draw(image).text((2, 2), ch, font=font, fill=255)
+            return image.tobytes()
+
+        tofu = pixels("\ue000")
+        result = pixels(ch) != tofu and any(pixels(ch))
+        self._glyph_cache[key] = result
+        return result
+
+    def text_segments(
+        self, text: str, size: int, slot: str = "default"
+    ) -> list[tuple[str, ImageFont.FreeTypeFont]]:
+        """按槽位的字体链把文本切段：每个字符用链中**第一个拥有其字形**的字体。
+
+        这是字体选择的唯一机制——「哪个字符用哪套字体」完全由 fonts.json 里
+        链的顺序决定，代码不做 CJK/Latin 之类的字符类别判断。全链都缺的字
+        留给链上最后一个字体（由字体覆盖测试保证不发生）。
+        """
+        chain = self.fonts(size, slot)
+        if not chain or not text:
+            return []
+        segments: list[tuple[str, ImageFont.FreeTypeFont]] = []
+        buffer = ""
+        current: ImageFont.FreeTypeFont | None = None
+        for ch in text:
+            font = next((f for f in chain if self.has_glyph(f, ch)), chain[-1])
+            if font is current:
+                buffer += ch
+            else:
+                if buffer:
+                    segments.append((buffer, current))  # type: ignore[arg-type]
+                buffer, current = ch, font
+        if buffer:
+            segments.append((buffer, current))  # type: ignore[arg-type]
+        return segments

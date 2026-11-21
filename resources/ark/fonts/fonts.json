@@ -1,0 +1,8 @@
+{
+ "default": ["SourceHanSerifCN-Heavy-4.otf"],
+ "slots": {
+  "initial": ["SourceHanSerifCN-Heavy-4.otf"],
+  "name_cn": ["SourceHanSerifCN-Heavy-4.otf"],
+  "name_en": ["HarmonyOS_Sans_SC_Bold.ttf"]
+ }
+}

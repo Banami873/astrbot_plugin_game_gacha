@@ -1,0 +1,14 @@
+{
+ "default": "HYQiHei-65S.ttf",
+ "slots": {
+  "caption": "StarRailNeue-Regular.woff2",
+  "heading": "HYQiHei-65S.ttf",
+  "icon": "hsr-icon.ttf",
+  "label": "HYQiHei-65S.ttf",
+  "logo": "hsr-icon.ttf",
+  "name": "HYQiHei-65S.ttf",
+  "neue": "StarRailNeue-Regular.woff2",
+  "path_glyph": "hsr-icon.ttf",
+  "star": "hsr-icon.ttf"
+ }
+}

@@ -96,7 +96,7 @@ STAR_STRIP_STAR_GAP = 2
 STAR_STRIP_TOP = -10
 
 # =============================================================================
-#  3. 素材文件名（相对 resources/ui/）
+#  3. 素材文件名（相对 resources/ark/ui/）
 # =============================================================================
 
 # 卡背：3★ 用低星底，4★ 一档，5★/6★ 共用（6★ 靠光效与渐变区分，与游戏一致）。
@@ -304,6 +304,7 @@ SINGLE_ELEMENTS: dict[str, dict[str, Any]] = {
         "layer": 21,
         "pos": (8, 143),
         "text": "cn",
+        "font_slot": "name_cn",  # 用哪套字体由 fonts.json 的 name_cn 链决定
         "font_size": 59,
         "fill": (255, 255, 255, 255),
         # 半透明黑描边：亮背景上叠出灰轮廓（≈165，与原版一致），暗背景几乎不可见。
@@ -316,6 +317,7 @@ SINGLE_ELEMENTS: dict[str, dict[str, Any]] = {
         "layer": 22,
         "pos": (8, 186),
         "text": "en",
+        "font_slot": "name_en",  # 用哪套字体由 fonts.json 的 name_en 链决定
         "font_size": 25,
         "fill": (255, 255, 255, 255),
         "stroke_fill": (0, 0, 0, 80),

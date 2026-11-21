@@ -276,23 +276,43 @@ class TestFont:
         assets = assets_mod.Assets()
         assert assets.has_font(), "字体没随包，出图会退回 PIL 默认字体（中文全是方块）"
 
-    def test_all_result_text_has_glyphs(self, assets_mod, real_roster):
+    def test_all_result_text_has_glyphs(self, assets_mod, real_roster, pkg):
+        """fonts.json 的每条字体链必须覆盖它要画的全部字符。
+
+        「哪个字符用哪套字体」由配置链决定（逐字符回退），测试不区分
+        中文/拉丁，只要求：对一个槽位要画的每个字符，链上至少有一个
+        字体画得出它——否则图上是空白或方块。
+        """
         assets = assets_mod.Assets()
-        font = assets.font(40)
-        text = {character.name for character in real_roster.characters}
-        text |= {character.name_en for character in real_roster.characters}
-        text |= {character.profession for character in real_roster.characters}
-        text |= {"寻访结果", "剩余", "抽", "距", "硬保底", "还有", "潜能", "满潜", "★"}
-        missing = sorted(
-            {
-                char
-                for chunk in text
-                for char in chunk
-                # 空白不需要字形，`.notdef` 与空白都画成空的，判不出来也不该判。
-                if char.strip() and not self._has_glyph(font, char)
-            }
-        )
-        assert missing == [], f"字体缺这些字：{missing}"
+        layout = pkg("games.arknights.render.layout")
+
+        # 槽位 → 该槽位要画的字符集。槽位名来自 layout 元素表的 font_slot，
+        # 与代码的字符类别判断无关。
+        wanted: dict[str, set[str]] = {}
+        for key, element in layout.SINGLE_ELEMENTS.items():
+            slot = element.get("font_slot")
+            if not slot:
+                continue
+            if element.get("text") == "cn":
+                chars = {c for c_ in real_roster.characters for c in c_.name}
+                chars |= {c for word in ("寻访结果", "剩余", "抽", "距", "硬保底",
+                                          "还有", "潜能", "满潜", "★") for c in word}
+            elif element.get("text") == "en":
+                # 元素表配了 uppercase，画的是大写——按大写查覆盖。
+                chars = {c for c_ in real_roster.characters
+                         for c in (c_.name_en or "").upper()}
+            else:
+                continue
+            wanted.setdefault(slot, set()).update(chars)
+
+        missing: list[str] = []
+        for slot, chars in sorted(wanted.items()):
+            chain = assets.fonts(40, slot)
+            assert chain, f"槽位 {slot} 的字体链是空的"
+            for char in sorted(chars):
+                if char.strip() and not any(assets.has_glyph(f, char) for f in chain):
+                    missing.append(f"{slot}:{char!r}")
+        assert missing == [], f"字体链缺这些字：{missing}"
 
 
 class TestRenderedImages:
@@ -323,13 +343,15 @@ class TestRenderedImages:
         assert drawn == []
 
     def test_single_draws_name_and_english_name(self, renderer, render_mod, monkeypatch):
-        drawn: list[str] = []
+        raw: list = []
         monkeypatch.setattr(
             render_mod.text,
             "draw_text",
-            lambda canvas, xy, value, **kwargs: drawn.append(value),
+            lambda canvas, xy, value, **kwargs: raw.append(value),
         )
         renderer.render_single(_items(render_mod, 1)[0])
+        # draw_text 收到的是按字体切好的段，拼回整句断言。
+        drawn = ["".join(run for run, _ in segments) for segments in raw]
         assert "能天使" in drawn
         assert "EXUSIAI" in drawn
 

@@ -7,7 +7,7 @@
 · 单抽：元素表（`layout.SINGLE_ELEMENTS`）按 layer 降序绘制 → 底部渐变 → 暗角
   → 文字 → SKIP。
 
-所有贴图来自 `resources/ui/`，光效的位置/尺寸/透明度/混合模式全部由 `layout.LIGHT_LAYOUT`
+所有贴图来自 `resources/ark/ui/`，光效的位置/尺寸/透明度/混合模式全部由 `layout.LIGHT_LAYOUT`
 驱动，本文件不写死任何坐标——改版式只动 `layout.py`。
 
 这一层**不读库、不触网、不算概率**：输入是 `CardItem` 与已缓存好的立绘，输出一张 PIL 图。
@@ -230,8 +230,13 @@ class Renderer:
             [left, top, max(left, right - 1), max(top, bottom - 1)],
             fill=(24, 26, 30, 190),
         )
-        font = self.assets.font(max(20, card_w // 2))
         initial = (item.name or "?")[:1]
+        # 占位字也按链回退：链首画不出这个首字母（如西里尔 З）就落到下一个字体。
+        font = next(
+            (f for f in self.assets.fonts(max(20, card_w // 2), "initial")
+             if self.assets.has_glyph(f, initial)),
+            None,
+        )
         if font is not None:
             draw.text(
                 (card_w / 2, card_h / 2),
@@ -688,7 +693,10 @@ class Renderer:
 
         size = max(1, int(element.get("font_size", 32)))
         spacing = float(element.get("letter_spacing", 0.0))
-        total, ascent, descent = text.measure_text(value, size, self.assets.font, spacing)
+        # 槽位名由元素表（layout）声明，链与顺序由 fonts.json 决定；
+        # 代码只负责「逐字符按链回退」这一条通用机制。
+        segments = self.assets.text_segments(value, size, element.get("font_slot", "default"))
+        total, ascent, descent = text.measure_text(segments, size * spacing)
         if total <= 0:
             return
 
@@ -700,13 +708,11 @@ class Renderer:
         text.draw_text(
             canvas,
             (center_x, baseline),
-            value,
-            font_for=self.assets.font,
-            size=size,
+            segments,
             fill=tuple(element.get("fill", (255, 255, 255, 255))),
             stroke_fill=tuple(element.get("stroke_fill", (128, 128, 128, 255))),
             stroke_width=int(element.get("stroke_width", 0)),
-            letter_spacing=spacing,
+            spacing_px=size * spacing,
             halign=element.get("align", "center"),
             opacity=float(element.get("opacity", 1.0)),
         )
