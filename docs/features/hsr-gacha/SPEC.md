@@ -245,6 +245,8 @@ rate(n, base, soft, hard) =
 - 群星池的 `is_up` 恒为假，于是 `five_guaranteed` / `four_guaranteed` 会被写成 true。
   **这一池型从不读它们**（`_pick` 在群星上提前返回），保留写入是为了让「出该星级时按
   是否 UP 置位」只有一条规则。
+- 联动池的 4★ 同理：没有 UP 名单，`four_guaranteed` 会一直是真，但 `member_weights`
+  在名单为空时直接退回等权，份额参数取多少都不生效。
 
 ### 水位分桶
 
